@@ -1,0 +1,135 @@
+/* =====================================================================
+   SIERRAUNLOCK • GLOBAL DESIGN SYSTEM v2
+   v2: bigger readable nav text, nowrap tabs, clean alignment,
+       hamburger below 1180px (no more squashed header), richer cards.
+   ===================================================================== */
+:root{
+  --sl-green:#1EB53A; --sl-green-dark:#0F8A2A;
+  --sl-blue:#0072C6;  --sl-blue-dark:#004E8C;
+  --sl-white:#FFFFFF; --ink:#0A1B2A; --ink-soft:#41566A;
+  --paper:#F6F9FC; --line:#E3EBF2; --danger:#B00020;
+  --grad-brand:linear-gradient(135deg,var(--sl-green-dark) 0%,var(--sl-blue) 100%);
+  --shadow-1:0 4px 14px rgba(10,27,42,.08);
+  --shadow-2:0 14px 34px rgba(10,27,42,.16);
+  --radius-lg:22px;
+  --font-head:"Montserrat",system-ui,sans-serif;
+  --font-body:"Inter",system-ui,sans-serif;
+  --header-h:78px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:var(--font-body);color:var(--ink);background:var(--paper);line-height:1.65;-webkit-font-smoothing:antialiased;font-size:16.5px}
+img{max-width:100%;display:block}
+a{text-decoration:none;color:inherit}
+ul{list-style:none}
+h1,h2,h3,h4{font-family:var(--font-head);line-height:1.2}
+.container{max-width:1200px;margin:0 auto;padding:0 1.2rem}
+
+/* 1 • MOTTO BAR */
+.motto-bar{background:var(--grad-brand);color:#fff;display:flex;justify-content:center;align-items:center;gap:.9rem;padding:.6rem 1rem;font-family:var(--font-head);font-weight:800;font-size:.85rem;letter-spacing:.18em;text-transform:uppercase;text-align:center;flex-wrap:wrap}
+.motto-divider{color:#D9F4E0}
+
+/* 2 • HEADER — logo TOP-LEFT, clean aligned tabs */
+.site-header{position:sticky;top:0;z-index:100;background:#fff;box-shadow:var(--shadow-1)}
+.header-inner{max-width:1280px;margin:0 auto;display:flex;align-items:center;gap:1.1rem;padding:.65rem 1.2rem;min-height:var(--header-h)}
+.brand{display:flex;align-items:center;gap:.6rem;margin-right:auto;flex:none}
+.brand-logo{width:48px;height:48px;object-fit:contain;border-radius:10px}
+.brand-name{font-family:var(--font-head);font-weight:900;font-size:1.25rem;color:var(--sl-green-dark);white-space:nowrap}
+.brand-name span{color:var(--sl-blue)}
+.main-nav{display:flex;gap:1.2rem;align-items:center}
+.nav-link{font-weight:700;font-size:.95rem;color:var(--ink-soft);padding:.4rem 0;position:relative;white-space:nowrap}
+.nav-link:hover{color:var(--sl-green-dark)}
+.nav-link.active{color:var(--sl-blue)}
+.nav-link.active::after{content:"";position:absolute;left:0;right:0;bottom:-4px;height:3px;border-radius:3px;background:var(--grad-brand)}
+.flag-stripe{height:6px;background:linear-gradient(90deg,var(--sl-green) 0 33.3%,#fff 33.3% 66.6%,var(--sl-blue) 66.6% 100%)}
+.nav-toggle{display:none;background:none;border:0;font-size:1.7rem;cursor:pointer;color:var(--sl-blue)}
+
+/* 3 • BUTTONS */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;padding:.75rem 1.5rem;border-radius:999px;font-family:var(--font-head);font-weight:700;font-size:.95rem;border:0;cursor:pointer;transition:transform .25s,box-shadow .25s,background .25s}
+.btn:hover{transform:translateY(-3px)}
+.btn-brand{background:var(--grad-brand);color:#fff;box-shadow:var(--shadow-1)}
+.btn-whatsapp{background:var(--sl-green);color:#fff}
+.header-cta{padding:.55rem 1.15rem;font-size:.82rem;flex:none}
+.btn-outline-light{background:transparent;color:#fff;border:2px solid rgba(255,255,255,.75)}
+.btn-outline-light:hover{background:rgba(255,255,255,.12)}
+.btn-wa{background:#25D366;color:#04341F;font-weight:800;letter-spacing:.06em}
+.btn-fb{background:#1877F2;color:#fff;font-weight:800;letter-spacing:.06em}
+
+/* 4 • HERO */
+.hero{background:radial-gradient(1100px 480px at 85% -10%,rgba(30,181,58,.35),transparent 60%),radial-gradient(900px 420px at 10% 110%,rgba(0,114,198,.45),transparent 60%),linear-gradient(135deg,var(--sl-blue-dark) 0%,#06283F 55%,var(--sl-green-dark) 130%);color:#fff;padding:5.5rem 1.2rem 5rem;text-align:center}
+.hero-kicker{letter-spacing:.35em;text-transform:uppercase;font-weight:700;font-size:.8rem;color:#CFE9FF}
+.hero h1{font-size:clamp(2.1rem,5vw,3.4rem);font-weight:900;margin:1rem 0}
+.rotator{color:#7CF29C}
+.hero-sub{max-width:780px;margin:0 auto 1.8rem;color:rgba(255,255,255,.94);font-size:1.05rem}
+.hero-cta{display:flex;gap:1rem;justify-content:center;flex-wrap:wrap}
+.hero-stats{display:flex;gap:2.2rem;justify-content:center;flex-wrap:wrap;margin-top:2.8rem}
+.stat b{display:block;font-family:var(--font-head);font-size:1.6rem;font-weight:800;color:#7CF29C}
+.stat span{font-size:.82rem;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.88)}
+
+/* 5 • LEGAL STRIP */
+.legal-strip{background:#FDECEA;color:#8C1D18;text-align:center;padding:.9rem 1.2rem;font-size:.95rem;border-top:3px solid var(--danger);border-bottom:3px solid var(--danger)}
+
+/* 6 • SECTIONS & CARDS (with shine sweep) */
+.section{padding:4.5rem 0}
+.section-alt{background:#fff}
+.section-head{text-align:center;margin-bottom:2.6rem;padding:0 1.2rem}
+.section-head h2{font-size:clamp(1.7rem,3vw,2.3rem);font-weight:800}
+.underline{width:90px;height:4px;border-radius:4px;background:var(--grad-brand);margin:.7rem auto 0}
+.section-head p{margin-top:.8rem;color:var(--ink-soft);font-size:1rem}
+.card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:1.4rem}
+.card{background:#fff;border:1px solid var(--line);border-radius:var(--radius-lg);padding:1.7rem;box-shadow:var(--shadow-1);transition:transform .3s,box-shadow .3s,border-color .3s;position:relative;overflow:hidden}
+.card:hover{transform:translateY(-6px);box-shadow:var(--shadow-2);border-color:var(--sl-green)}
+.card .icon{width:58px;height:58px;display:grid;place-items:center;font-size:1.7rem;border-radius:16px;background:linear-gradient(135deg,rgba(30,181,58,.14),rgba(0,114,198,.14))}
+.card h3{margin:1rem 0 .45rem;font-size:1.12rem}
+.card p{color:var(--ink-soft);font-size:.95rem;margin-bottom:.9rem}
+.card .link{color:var(--sl-blue);font-weight:700;font-size:.95rem}
+.card .link:hover{color:var(--sl-green-dark)}
+
+/* 7 • FOUNDERS */
+.founder-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.6rem;max-width:920px;margin:0 auto}
+.founder-card{background:#fff;border:1px solid var(--line);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-1);transition:transform .3s,box-shadow .3s}
+.founder-card:hover{transform:translateY(-6px);box-shadow:var(--shadow-2)}
+.founder-card img{width:100%;height:360px;object-fit:cover;object-position:center top}
+.founder-body{padding:1.4rem}
+.founder-body h3{font-size:1.2rem}
+.role{color:var(--sl-green-dark);font-weight:700;font-size:.88rem;text-transform:uppercase;letter-spacing:.06em;margin:.25rem 0}
+.meta{color:var(--sl-blue);font-weight:600;font-size:.9rem;margin-bottom:.5rem}
+.bio{color:var(--ink-soft);font-size:.95rem}
+
+/* 8 • COMMUNITY */
+.community{background:var(--grad-brand);color:#fff;text-align:center}
+.community h2{font-size:clamp(1.6rem,3vw,2.2rem);font-weight:800}
+.community p{color:rgba(255,255,255,.94);margin:.6rem 0 1.6rem;font-size:1rem}
+.community-btns{display:flex;gap:1rem;justify-content:center;flex-wrap:wrap}
+.community-note{margin-top:1.4rem;font-size:.95rem}
+.community-note a{color:#D9F4E0;text-decoration:underline;font-weight:700}
+
+/* 9 • PAYMENTS */
+.pay-badges{display:flex;gap:.8rem;flex-wrap:wrap;justify-content:center}
+.badge{padding:.65rem 1.2rem;border-radius:999px;border:1px solid var(--line);background:#fff;font-weight:700;font-size:.92rem;box-shadow:var(--shadow-1)}
+
+/* 10 • FOOTER */
+.site-footer{background:var(--ink);color:#B9C8D6}
+.footer-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:2rem;padding-top:3.5rem;padding-bottom:2.5rem}
+.footer-col h4{color:#fff;margin-bottom:.9rem;font-size:1rem;letter-spacing:.06em;text-transform:uppercase}
+.footer-col a{display:block;margin:.45rem 0;font-size:.95rem;color:#B9C8D6}
+.footer-col a:hover{color:#7CF29C}
+.footer-brand .brand-name{color:#fff}
+.footer-brand .brand-name span{color:#7CF29C}
+.footer-about{margin-top:.8rem;font-size:.95rem;color:#B9C8D6}
+.footer-bottom{border-top:1px solid rgba(255,255,255,.12);padding:1.1rem 1.2rem;text-align:center;font-size:.85rem;color:#8FA3B5}
+
+/* 11 • RESPONSIVE — hamburger below 1180px = never squashed */
+@media (max-width:1180px){
+  .nav-toggle{display:block}
+  .header-cta{display:none}
+  .main-nav{position:fixed;top:0;right:0;height:100vh;width:min(78vw,320px);background:#fff;flex-direction:column;align-items:flex-start;padding:5.5rem 1.6rem 2rem;gap:1.15rem;transform:translateX(105%);transition:transform .35s ease;box-shadow:var(--shadow-2);z-index:90}
+  .main-nav.open{transform:translateX(0)}
+  .main-nav .nav-link{font-size:1.05rem}
+}
+@media (max-width:640px){
+  .motto-bar{font-size:.72rem;gap:.5rem}
+  .hero{padding:4rem 1rem}
+  .hero-stats{gap:1.2rem}
+  .founder-card img{height:300px}
+}

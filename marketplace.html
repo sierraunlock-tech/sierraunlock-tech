@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spare Parts Marketplace | SIERRAUNLOCK</title>
+  <link rel="icon" type="image/png" href="assets/images/brand/favicon.png">
+  <link rel="apple-touch-icon" href="assets/images/brand/favicon.png">
+  <meta name="description" content="Buy & sell genuine phone, computer and electronics spare parts in Sierra Leone — new, used-tested and second-hand. Photos, clear brands, zero fraud.">
+  <meta property="og:title" content="Marketplace — SIERRAUNLOCK">
+  <meta property="og:image" content="assets/images/brand/sierraunlock-logo.png">
+  <meta name="theme-color" content="#0072C6">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+  <link rel="stylesheet" href="assets/css/animations.css">
+  <style>
+    .mkt-hero{background:radial-gradient(1100px 480px at 85% -10%,rgba(30,181,58,.35),transparent 60%),radial-gradient(900px 420px at 10% 110%,rgba(0,114,198,.45),transparent 60%),linear-gradient(135deg,var(--sl-blue-dark) 0%,#06283F 55%,var(--sl-green-dark) 130%);color:#fff;padding:5rem 1.2rem 3.8rem;text-align:center}
+    .mkt-hero h1{font-size:clamp(2rem,5vw,3rem);font-weight:900;margin:1rem 0}
+    .mkt-hero p{max-width:780px;margin:0 auto;color:rgba(255,255,255,.92)}
+    .filter-bar{display:flex;flex-wrap:wrap;gap:.6rem;justify-content:center;margin-bottom:1.2rem}
+    .chip{padding:.55rem 1.1rem;border-radius:999px;border:1.5px solid var(--line);background:#fff;font-weight:700;font-size:.82rem;cursor:pointer;transition:all .25s;font-family:var(--font-head)}
+    .chip:hover{border-color:var(--sl-green)}
+    .chip.active{background:var(--grad-brand);color:#fff;border-color:transparent;box-shadow:var(--shadow-1)}
+    .mkt-search{max-width:520px;margin:0 auto 1.4rem;position:relative}
+    .mkt-search .mag{position:absolute;left:1.1rem;top:50%;transform:translateY(-50%)}
+    .mkt-search input{width:100%;padding:.85rem 1.1rem .85rem 2.9rem;border-radius:999px;border:1.5px solid var(--line);background:#fff;font-size:.95rem;font-family:var(--font-body);box-shadow:var(--shadow-1)}
+    .mkt-search input:focus{outline:none;border-color:var(--sl-blue);box-shadow:0 0 0 3px rgba(0,114,198,.15)}
+    .mkt-count{text-align:center;font-size:.85rem;color:var(--ink-soft);margin-bottom:1.6rem}
+    .prod-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1.4rem}
+    .prod-card{background:#fff;border:1px solid var(--line);border-radius:var(--radius-lg);padding:1.5rem;box-shadow:var(--shadow-1);display:flex;flex-direction:column;transition:transform .3s,box-shadow .3s,border-color .3s;animation:prodIn .5s both}
+    .prod-card:hover{transform:translateY(-6px);box-shadow:var(--shadow-2);border-color:var(--sl-blue)}
+    .prod-card.hidden{display:none}
+    @keyframes prodIn{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+    .prod-top{display:flex;justify-content:space-between;align-items:flex-start;gap:.6rem}
+    .prod-icon{width:56px;height:56px;border-radius:14px;background:var(--grad-brand);display:grid;place-items:center;font-size:1.6rem;color:#fff;overflow:hidden;flex:none}
+    .prod-icon img{width:100%;height:100%;object-fit:cover}
+    .cond{font-size:.66rem;font-weight:800;letter-spacing:.06em;padding:.35rem .7rem;border-radius:999px;text-transform:uppercase;white-space:nowrap}
+    .cond-oem{background:#E7F8EC;color:var(--sl-green-dark);border:1px solid var(--sl-green)}
+    .cond-comp{background:#E8F3FC;color:var(--sl-blue-dark);border:1px solid var(--sl-blue)}
+    .cond-used,.cond-second{background:#FFF8E6;color:#92400E;border:1px solid #D97706}
+    .prod-card h3{margin:.9rem 0 .15rem;font-size:1rem}
+    .prod-brand{font-size:.76rem;color:var(--sl-blue);font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+    .prod-card .desc{color:var(--ink-soft);font-size:.88rem;margin:.6rem 0 1rem;flex:1}
+    .prod-foot{display:flex;justify-content:space-between;align-items:center;gap:.6rem}
+    .prod-price{font-family:var(--font-head);font-weight:800;font-size:.9rem;color:var(--ink)}
+    .btn-sm{padding:.5rem 1rem;font-size:.78rem}
+    .trust-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:1.2rem}
+    .rules-panel{max-width:920px;margin:0 auto 2rem;background:#FFF8E6;border:2px solid #D97706;border-radius:var(--radius-lg);padding:1.8rem;box-shadow:var(--shadow-1)}
+    .rules-panel h3{color:#92400E;margin-bottom:.7rem}
+    .rules-panel li{margin:.45rem 0;padding-left:1.6rem;position:relative;color:var(--ink-soft);font-size:.92rem}
+    .rules-panel li::before{content:"⚖️";position:absolute;left:0;font-size:.8rem;top:.15rem}
+    .rules-panel li strong{color:var(--ink)}
+    .form-card{max-width:780px;margin:0 auto;background:#fff;border:1px solid var(--line);border-radius:var(--radius-lg);padding:2rem;box-shadow:var(--shadow-1)}
+    .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+    @media(max-width:640px){.form-grid{grid-template-columns:1fr}}
+    .form-field{display:flex;flex-direction:column;gap:.35rem}
+    .form-field.full{grid-column:1/-1}
+    .form-field label{font-size:.78rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-soft)}
+    .form-field input,.form-field select,.form-field textarea{border:1.5px solid var(--line);border-radius:12px;padding:.7rem .9rem;font-family:var(--font-body);font-size:.95rem;background:var(--paper);width:100%;transition:border-color .25s,box-shadow .25s}
+    .form-field input:focus,.form-field select:focus,.form-field textarea:focus{outline:none;border-color:var(--sl-blue);box-shadow:0 0 0 3px rgba(0,114,198,.15)}
+    .form-note{font-size:.82rem;color:var(--ink-soft);margin-top:.9rem}
+  </style>
+</head>
+<body>
+
+  <div class="motto-bar">
+    <span>IT CAN ONLY BE GOD</span><span class="motto-divider">✦</span><span>LEARN BEFORE YOU EARN</span>
+  </div>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a href="index.html" class="brand" aria-label="SIERRAUNLOCK home">
+        <img src="assets/images/brand/sierraunlock-logo.png" alt="SIERRAUNLOCK logo" class="brand-logo">
+        <span class="brand-name">SIERRA<span>UNLOCK</span></span>
+      </a>
+      <nav class="main-nav" id="mainNav" aria-label="Main navigation">
+        <a class="nav-link" href="index.html">Home</a>
+        <a class="nav-link" href="about.html">About</a>
+        <a class="nav-link" href="services.html">Unlock Services</a>
+        <a class="nav-link" href="repair.html">Repair</a>
+        <a class="nav-link active" href="marketplace.html">Marketplace</a>
+        <a class="nav-link" href="shops.html">Shops &amp; Map</a>
+        <a class="nav-link" href="reseller.html">Resellers</a>
+        <a class="nav-link" href="payments.html">Payments</a>
+        <a class="nav-link" href="faq.html">FAQ</a>
+        <a class="nav-link" href="contact.html">Contact</a>
+      </nav>
+      <a class="btn btn-whatsapp header-cta" href="https://whatsapp.com/channel/0029VbDtNmh1XquQ7GVpp409" target="_blank" rel="noopener">WhatsApp Channel</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu">☰</button>
+    </div>
+    <div class="flag-stripe"></div>
+  </header>
+
+  <main>
+    <section class="mkt-hero">
+      <p class="hero-kicker">Phones • Computers • Electronics Accessories • Second-Hand Welcome</p>
+      <h1>Spare Parts Marketplace</h1>
+      <p>Screens, batteries, ports, HDD/SSD, RAM, laptops, chargers, earphones and all electronics accessories — new, used-tested or second-hand. Every listing shows a real photo, states what it fits, and is admin-approved. <strong>No scams. No fraud.</strong></p>
+    </section>
+
+    <div class="legal-strip">
+      🛡️ <strong>Zero-fraud marketplace.</strong> Real photos, honest conditions, tested parts, serial checks. Want to list your SHOP instead? <a href="shops.html" style="text-decoration:underline;font-weight:800">Add it on the Map page</a>.
+    </div>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>Browse Parts &amp; Devices</h2>
+        <div class="underline"></div>
+        <p>Approved seller listings appear first. Prices are starting points — confirmed on WhatsApp before you pay.</p>
+      </div>
+      <div class="container">
+        <div class="filter-bar" id="filterBar">
+          <button class="chip active" data-cat="all">All</button>
+          <button class="chip" data-cat="screens">📱 Screens</button>
+          <button class="chip" data-cat="batteries">🔋 Batteries</button>
+          <button class="chip" data-cat="phoneparts">🔩 Phone Parts</button>
+          <button class="chip" data-cat="computer">💻 Computer Hardware</button>
+          <button class="chip" data-cat="laptops">🖥️ Laptops</button>
+          <button class="chip" data-cat="accessories">🎧 Accessories</button>
+        </div>
+        <div class="mkt-search">
+          <span class="mag">🔍</span>
+          <input type="search" id="mktSearch" placeholder="Search part, brand or model it fits… e.g. iPhone, SSD, charger" aria-label="Search marketplace">
+        </div>
+        <p class="mkt-count" id="mktCount"></p>
+        <div class="prod-grid" id="prodGrid"></div>
+      </div>
+    </section>
+
+    <section class="section section-alt">
+      <div class="section-head">
+        <h2>The SIERRAUNLOCK Trust Shield</h2>
+        <div class="underline"></div>
+        <p>Six rules that make fraud impossible here.</p>
+      </div>
+      <div class="container trust-grid">
+        <article class="card"><div class="icon">🪪</div><h3>Verified Sellers Only</h3><p>ID-checked and admin-approved before any listing goes live.</p></article>
+        <article class="card"><div class="icon">📸</div><h3>Real Photo Required</h3><p>Every listing shows a real photo of the exact item — no stock images, no lies.</p></article>
+        <article class="card"><div class="icon">📝</div><h3>Described As-Is</h3><p>Part type, brand, what it fits, condition and every defect stated clearly.</p></article>
+        <article class="card"><div class="icon">🧪</div><h3>Tested Before Handover</h3><p>Second-hand and used parts are tested on a real device in front of you.</p></article>
+        <article class="card"><div class="icon">🚫</div><h3>No Stolen Goods</h3><p>Serials/IMEIs checked. Suspicious items refused and reported to police.</p></article>
+        <article class="card"><div class="icon">🧾</div><h3>Receipt on Every Sale</h3><p>Seller name, item, condition and warranty terms — always written down.</p></article>
+      </div>
+    </section>
+
+    <section class="section" id="sell">
+      <div class="section-head">
+        <h2>Seller Corner — Sell Your Parts</h2>
+        <div class="underline"></div>
+        <p>Unlockers, shops &amp; technicians: sell phone, computer AND electronics-accessory parts, new or second-hand. Admin approval publishes your listing with your photo.</p>
+      </div>
+      <div class="container">
+        <div class="rules-panel">
+          <h3>Seller Rules (read before posting)</h3>
+          <ul>
+            <li><strong>Photo of the actual item is mandatory</strong> — compressed automatically and shown on your listing.</li>
+            <li><strong>State exactly what it fits</strong> (e.g. "iPhone 11", "all Tecno Spark series", "HP EliteBook 840 G5").</li>
+            <li><strong>Second-hand items must disclose every defect</strong> and be tested in front of the buyer.</li>
+            <li><strong>Proof of ownership required.</strong> Stolen goods = ban + police report.</li>
+            <li><strong>Misrepresentation = permanent ban</strong> and public notice in our WhatsApp channel.</li>
+          </ul>
+        </div>
+        <form class="form-card" id="sellForm">
+          <div class="form-grid">
+            <div class="form-field"><label for="sName">Seller Name *</label><input id="sName" required placeholder="Your full name"></div>
+            <div class="form-field"><label for="sPhone">Phone / WhatsApp *</label><input id="sPhone" required placeholder="+232 ..."></div>
+            <div class="form-field"><label for="sCat">Part Type *</label>
+              <select id="sCat" required>
+                <option value="">Select part type…</option>
+                <option>Phone Screen</option><option>Phone Battery</option><option>Phone Part</option>
+                <option>Computer Part</option><option>Laptop</option><option>Electronics Accessory</option><option>Other</option>
+              </select>
+            </div>
+            <div class="form-field"><label for="sBrand">Brand *</label><input id="sBrand" required placeholder="e.g. Apple, Samsung, HP, Lenovo…"></div>
+            <div class="form-field full"><label for="sItem">Part / Item Name *</label><input id="sItem" required placeholder="e.g. iPhone 11 screen, 8GB DDR4 RAM, Type-C charger, AirPods…"></div>
+            <div class="form-field full"><label for="sFits">Fits Which Models / Types? *</label><input id="sFits" required placeholder="e.g. iPhone 11 only / all Spark 20 series / universal USB-C"></div>
+            <div class="form-field"><label for="sCond">Condition *</label>
+              <select id="sCond" required>
+                <option value="">Select…</option>
+                <option>OEM New</option><option>Compatible New</option><option>Used — Tested</option><option>Second-Hand</option>
+              </select>
+            </div>
+            <div class="form-field"><label for="sPrice">Asking Price (SLE)</label><input id="sPrice" inputmode="numeric" placeholder="Leave blank = Negotiable"></div>
+            <div class="form-field full"><label for="sDesc">Honest Description (defects included) *</label><textarea id="sDesc" rows="3" required placeholder="e.g. Second-hand iPhone 11 screen, original, small scratch top-left, touch 100% perfect."></textarea></div>
+            <div class="form-field full"><label for="sPhoto">Photo of the Actual Item *</label><input id="sPhoto" type="file" accept="image/*" required></div>
+          </div>
+          <p class="form-note">⚖️ Submitting means you accept the Seller Rules and ID verification. Your photo is compressed on your device and sent with your listing for admin approval. Also attach the same photo in the WhatsApp chat that opens.</p>
+          <div style="margin-top:1.2rem;text-align:center">
+            <button type="submit" class="btn btn-brand"> SUBMIT LISTING FOR APPROVAL</button>
+          </div>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-grid container">
+      <div class="footer-col">
+        <a href="index.html" class="brand footer-brand">
+          <img src="assets/images/brand/sierraunlock-logo.png" alt="SIERRAUNLOCK logo" class="brand-logo">
+          <span class="brand-name">SIERRA<span>UNLOCK</span></span>
+        </a>
+        <p class="footer-about">Sierra Leone's first digital unlocking platform. Unlock • Repair • Connect.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Quick Links</h4>
+        <a href="about.html">About &amp; Founders</a>
+        <a href="services.html">Unlock Services</a>
+        <a href="marketplace.html">Marketplace</a>
+        <a href="shops.html">Shops &amp; Map</a>
+        <a href="reseller.html">Become a Reseller</a>
+        <a href="auth.html">👤 Sign In / Register</a>
+        <a href="admin.html">Admin Dashboard</a>
+      </div>
+      <div class="footer-col">
+        <h4>Contact</h4>
+        <a href="mailto:sierraunlock@gmail.com">sierraunlock@gmail.com</a>
+        <a href="tel:+232754378475">+232 75 437 8475 (Alhassan — Waterloo)</a>
+        <a href="tel:+23231363736">+232 31 363 736 (Baimba — Koidu)</a>
+        <a href="https://github.com/sierraunlock-tech" target="_blank" rel="noopener">github.com/sierraunlock-tech</a>
+      </div>
+      <div class="footer-col">
+        <h4>Legal</h4>
+        <a href="services.html#legal">IMEI Policy</a>
+        <a href="repair.html#terms">Repair Terms (GTC)</a>
+        <a href="faq.html">Unlocking FAQ</a>
+        <a href="contact.html">Business / Wholesale</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      © <span id="year">2026</span> SIERRAUNLOCK • Unlock • Repair • Connect — Sierra Leone • <span id="siteVersion">v1.3.2</span>
+    </div>
+  </footer>
+
+  <script src="assets/js/security.js"></script>
+  <script src="assets/js/main.js"></script>
+  <script>
+    /* Marketplace v3 • catalog + filters + Seller Corner (orders → Alhassan WhatsApp) */
+    (function () {
+      const BASE = [
+        { icon:'📱', img:null, name:'iPhone 11 Screen Assembly', brand:'Apple',    cat:'screens',    cond:'oem',  desc:'Fits: iPhone 11. In-cell panel, tested touch & true-tone. Fitted in-store or sealed box.', price:'From SLE 1,150' },
+        { icon:'📱', img:null, name:'Galaxy A54 Screen',         brand:'Samsung',  cat:'screens',    cond:'comp', desc:'Fits: Galaxy A54. High-grade compatible AMOLED, bright & uniform, 30-day test warranty.', price:'From SLE 1,400' },
+        { icon:'📱', img:null, name:'Spark 20 Screen + Frame',   brand:'Tecno',    cat:'screens',    cond:'comp', desc:'Fits: all Spark 20 series. Full assembly with frame, tested on device.', price:'Quote' },
+        { icon:'🔋', img:null, name:'iPhone 11 Battery 3110mAh', brand:'Apple',    cat:'batteries',  cond:'oem',  desc:'Fits: iPhone 11. Zero-cycle OEM-grade cell with health report.', price:'From SLE 650' },
+        { icon:'🔋', img:null, name:'Note 30 Battery',           brand:'Infinix',  cat:'batteries',  cond:'comp', desc:'Fits: Infinix Note 30. High-capacity, fast-charge tested.', price:'From SLE 450' },
+        { icon:'🔩', img:null, name:'S20 FE Back Glass',         brand:'Samsung',  cat:'phoneparts', cond:'oem',  desc:'Fits: S20 FE. OEM back glass with adhesive; fitting available.', price:'Quote' },
+        { icon:'🔩', img:null, name:'A70 Charging Port',         brand:'Itel',     cat:'phoneparts', cond:'comp', desc:'Fits: Itel A70. Solder-type port, fitted & tested while you wait.', price:'From SLE 250' },
+        { icon:'💽', img:null, name:'500GB Laptop HDD',          brand:'Seagate/WD', cat:'computer', cond:'used', desc:'Fits: any laptop with 2.5" SATA bay. Fully scanned, zero bad sectors, 6-month warranty.', price:'From SLE 500' },
+        { icon:'⚡', img:null, name:'256GB SATA SSD',            brand:'Kingston', cat:'computer',   cond:'oem',  desc:'Fits: laptops & desktops with SATA. Brand new, 500MB/s, free clone of old drive.', price:'From SLE 900' },
+        { icon:'🧠', img:null, name:'8GB DDR4 Laptop RAM',       brand:'Samsung',  cat:'computer',   cond:'used', desc:'Fits: DDR4 laptops (2666MHz). Tested, lifetime exchange warranty.', price:'From SLE 550' },
+        { icon:'🎧', img:null, name:'Type-C Fast Charger 25W',   brand:'Tecno',    cat:'accessories',cond:'comp', desc:'Fits: all USB-C phones. Brand new, boxed, 30-day warranty.', price:'From SLE 150' },
+        { icon:'🎧', img:null, name:'Wireless Earbuds Pro',      brand:'Oraimo',   cat:'accessories',cond:'oem',  desc:'Universal. Sealed box, 6-month warranty, paired & tested in front of you.', price:'From SLE 350' },
+        { icon:'💻', img:null, name:'EliteBook 840 G5',          brand:'HP',       cat:'laptops',    cond:'used', desc:'Complete laptop: i5 8th gen, 8GB RAM, 256GB SSD, UK-used, battery 90%+.', price:'From SLE 4,500' },
+        { icon:'💻', img:null, name:'ThinkPad T480',             brand:'Lenovo',   cat:'laptops',    cond:'second', desc:'Second-hand: i5-8350U, 8GB/256GB, light keyboard shine, charger included.', price:'From SLE 4,800' }
+      ];
+      const COND = { oem:['OEM New','cond-oem'], comp:['Compatible New','cond-comp'], used:['Used — Tested','cond-used'], second:['Second-Hand','cond-second'] };
+      const approved = () => { try { return JSON.parse(localStorage.getItem('su_products') || '[]'); } catch (e) { return []; } };
+      const pending  = () => { try { return JSON.parse(localStorage.getItem('su_pending_products') || '[]'); } catch (e) { return []; } };
+      const catalog  = () => approved().filter(p => !p.pending).concat(BASE);
+
+      const grid = document.getElementById('prodGrid');
+      const count = document.getElementById('mktCount');
+      const search = document.getElementById('mktSearch');
+      let activeCat = 'all';
+
+      function render() {
+        grid.innerHTML = '';
+        const term = search.value.trim().toLowerCase();
+        let visible = 0;
+        catalog().forEach((p) => {
+          const matchCat = activeCat === 'all' || p.cat === activeCat;
+          const matchTerm = !term || (p.name + ' ' + p.brand + ' ' + p.desc).toLowerCase().includes(term);
+          if (!matchCat || !matchTerm) return;
+          visible++;
+          const [condLabel, condClass] = COND[p.cond] || ['Listed','cond-comp'];
+          const card = document.createElement('article');
+          card.className = 'prod-card';
+          card.style.animationDelay = (visible % 6) * 70 + 'ms';
+          card.innerHTML =
+            '<div class="prod-top"><div class="prod-icon">' + (p.img ? '<img src="' + p.img + '" alt="' + p.name + '">' : p.icon) + '</div>' +
+            '<span class="cond ' + condClass + '">' + condLabel + '</span></div>' +
+            '<h3></h3><p class="prod-brand"></p><p class="desc"></p>' +
+            '<div class="prod-foot"><span class="prod-price"></span><a class="btn btn-wa btn-sm" target="_blank" rel="noopener">Order</a></div>';
+          card.querySelector('h3').textContent = p.name;
+          card.querySelector('.prod-brand').textContent = p.brand;
+          card.querySelector('.desc').textContent = p.desc;
+          card.querySelector('.prod-price').textContent = p.price;
+          card.querySelector('a').href = 'https://wa.me/232754378475?text=' +
+            encodeURIComponent('SIERRAUNLOCK MARKETPLACE ORDER\nItem: ' + p.name + '\nBrand: ' + p.brand + '\nCondition: ' + condLabel + '\nListed price: ' + p.price);
+          grid.appendChild(card);
+        });
+        count.textContent = 'Showing ' + visible + ' of ' + catalog().length + ' listings';
+      }
+
+      document.getElementById('filterBar').addEventListener('click', (e) => {
+        const chip = e.target.closest('.chip'); if (!chip) return;
+        document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active'); activeCat = chip.dataset.cat; render();
+      });
+      search.addEventListener('input', render);
+      render();
+
+      const CATMAP = { 'Phone Screen':'screens', 'Phone Battery':'batteries', 'Phone Part':'phoneparts', 'Computer Part':'computer', 'Laptop':'laptops', 'Electronics Accessory':'accessories', 'Other':'accessories' };
+      const CONDMAP = { 'OEM New':'oem', 'Compatible New':'comp', 'Used — Tested':'used', 'Second-Hand':'second' };
+      const ICONS = { screens:'📱', batteries:'🔋', phoneparts:'🔩', computer:'💽', laptops:'💻', accessories:'🎧' };
+
+      function fileToThumb(file, cb) {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+          const max = 320;
+          const sc = Math.min(1, max / Math.max(img.width, img.height));
+          const w = Math.round(img.width * sc), h = Math.round(img.height * sc);
+          const c = document.createElement('canvas');
+          c.width = w; c.height = h;
+          c.getContext('2d').drawImage(img, 0, 0, w, h);
+          URL.revokeObjectURL(url);
+          cb(c.toDataURL('image/jpeg', 0.62));
+        };
+        img.src = url;
+      }
+
+      document.getElementById('sellForm').addEventListener('submit', function (e) {
+        e.preventDefault();
+        const g = (id) => document.getElementById(id).value.trim();
+        const file = document.getElementById('sPhoto').files[0];
+        if (!file) { alert('A photo of the actual item is required.'); return; }
+        if (file.size > 8 * 1024 * 1024) { alert('Photo too large (max 8MB). Take a normal phone photo.'); return; }
+        fileToThumb(file, (imgData) => {
+          const cat = CATMAP[g('sCat')];
+          const listing = {
+            icon: ICONS[cat], img: imgData, name: g('sItem'), brand: g('sBrand'), cat: cat,
+            cond: CONDMAP[g('sCond')], desc: 'Fits: ' + g('sFits') + '. ' + g('sDesc'),
+            price: g('sPrice') ? 'SLE ' + g('sPrice') : 'Negotiable',
+            seller: g('sName'), phone: g('sPhone'), pending: true
+          };
+          const arr = pending(); arr.unshift(listing);
+          try { localStorage.setItem('su_pending_products', JSON.stringify(arr)); }
+          catch (err) { alert('Storage full on this device — remove old submissions in Admin or use a smaller photo.'); return; }
+          window.open('https://wa.me/232754378475?text=' + encodeURIComponent(
+            'SIERRAUNLOCK — SELLER LISTING (needs approval)\nSeller: ' + listing.seller + '\nPhone: ' + listing.phone +
+            '\nPart type: ' + g('sCat') + '\nItem: ' + listing.name + '\nBrand: ' + listing.brand +
+            '\nFits: ' + g('sFits') + '\nCondition: ' + g('sCond') + '\nPrice: ' + listing.price +
+            '\nDescription: ' + g('sDesc') + '\n(I will attach the item photo in this chat now.)'
+          ), '_blank');
+          e.target.reset();
+          alert('✔ Submitted! Attach the photo in the WhatsApp chat that opened. Admin approval publishes it on the marketplace.');
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

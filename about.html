@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>About Us & Our Founders | SIERRAUNLOCK</title>
+  
+  <!-- LOGO AS FAVICON + SEARCH PREVIEW -->
+  <link rel="icon" type="image/png" href="assets/images/brand/favicon.png">
+  <link rel="apple-touch-icon" href="assets/images/brand/favicon.png">
+  <meta property="og:title" content="About SIERRAUNLOCK — Meet the Founders">
+  <meta property="og:description" content="Meet Alhassan Mansaray and Baimba Conteh, the engineers behind Sierra Leone's first digital unlocking platform.">
+  <meta property="og:image" content="assets/images/brand/sierraunlock-logo.png">
+  <meta name="theme-color" content="#0072C6">
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Core CSS & Motion Engine -->
+  <link rel="stylesheet" href="assets/css/style.css">
+  <link rel="stylesheet" href="assets/css/animations.css">
+  
+  <style>
+    /* Page-specific styles for About */
+    .about-hero{background:radial-gradient(1100px 480px at 85% -10%,rgba(30,181,58,.35),transparent 60%),radial-gradient(900px 420px at 10% 110%,rgba(0,114,198,.45),transparent 60%),linear-gradient(135deg,var(--sl-blue-dark) 0%,#06283F 55%,var(--sl-green-dark) 130%);color:#fff;padding:5.5rem 1.2rem 4rem;text-align:center}
+    .about-hero h1{font-size:clamp(2rem,5vw,3rem);font-weight:900;margin:1rem 0}
+    .about-hero p{max-width:760px;margin:0 auto;color:rgba(255,255,255,.92);font-size:1.1rem}
+    .philosophy-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.5rem;margin-top:2rem}
+    .philosophy-card{background:#fff;border:1px solid var(--line);border-radius:var(--radius-lg);padding:2rem;box-shadow:var(--shadow-1);text-align:center;transition:transform .3s,box-shadow .3s}
+    .philosophy-card:hover{transform:translateY(-6px);box-shadow:var(--shadow-2)}
+    .philosophy-card h3{color:var(--sl-blue-dark);font-size:1.25rem;margin-bottom:.8rem;text-transform:uppercase;letter-spacing:.05em;font-weight:900}
+    .philosophy-card p{color:var(--ink-soft);line-height:1.7}
+    .timeline{max-width:800px;margin:3rem auto 0;padding:0 1.2rem}
+    .timeline-item{display:flex;gap:1.5rem;margin-bottom:2rem;align-items:flex-start}
+    .timeline-icon{flex:none;width:52px;height:52px;border-radius:50%;background:var(--grad-brand);color:#fff;display:grid;place-items:center;font-size:1.3rem;box-shadow:var(--shadow-1)}
+    .timeline-content h4{font-size:1.1rem;margin-bottom:.3rem;color:var(--ink)}
+    .timeline-content p{color:var(--ink-soft);font-size:.95rem;line-height:1.6}
+  </style>
+</head>
+<body>
+
+  <!-- BOLD MOTTOS — VERY TOP -->
+  <div class="motto-bar">
+    <span>IT CAN ONLY BE GOD</span><span class="motto-divider">✦</span><span>LEARN BEFORE YOU EARN</span>
+  </div>
+
+  <!-- HEADER — LOGO TOP-LEFT -->
+  <header class="site-header">
+    <div class="header-inner">
+      <a href="index.html" class="brand" aria-label="SIERRAUNLOCK home">
+        <img src="assets/images/brand/sierraunlock-logo.png" alt="SIERRAUNLOCK logo" class="brand-logo">
+        <span class="brand-name">SIERRA<span>UNLOCK</span></span>
+      </a>
+      <nav class="main-nav" id="mainNav" aria-label="Main navigation">
+        <a class="nav-link" href="index.html">Home</a>
+        <a class="nav-link active" href="about.html">About</a>
+        <a class="nav-link" href="services.html">Unlock Services</a>
+        <a class="nav-link" href="repair.html">Repair</a>
+        <a class="nav-link" href="marketplace.html">Marketplace</a>
+        <a class="nav-link" href="shops.html">Shops &amp; Map</a>
+        <a class="nav-link" href="payments.html">Payments</a>
+        <a class="nav-link" href="faq.html">FAQ</a>
+        <a class="nav-link" href="contact.html">Contact</a>
+      </nav>
+      <a class="btn btn-whatsapp header-cta" href="https://whatsapp.com/channel/0029VbDtNmh1XquQ7GVpp409" target="_blank" rel="noopener">WhatsApp Channel</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu">☰</button>
+    </div>
+    <div class="flag-stripe"></div>
+  </header>
+
+  <main>
+    <!-- HERO -->
+    <section class="about-hero">
+      <p class="hero-kicker">The First in Sierra Leone</p>
+      <h1>About SIERRAUNLOCK</h1>
+      <p>Built on trust, engineered for reliability. We are Sierra Leone's first dedicated digital unlocking and repair platform, bridging the gap between local technicians and global unlocking servers.</p>
+    </section>
+
+    <!-- LEGAL IMEI STRIP (Triggers the tools marquee from EXT-02) -->
+    <div class="legal-strip">
+      ⚠️ <strong>IMEI / blacklist tampering is ILLEGAL.</strong> SIERRAUNLOCK performs only legal carrier &amp; network unlocks in line with CTIA consumer standards and Sierra Leone law. Proof of ownership is required.
+    </div>
+
+    <!-- OUR PHILOSOPHY -->
+    <section class="section">
+      <div class="section-head">
+        <h2>Our Core Philosophy</h2>
+        <div class="underline"></div>
+        <p>The two pillars that guide every repair, unlock, and business transaction we handle.</p>
+      </div>
+      <div class="container philosophy-grid">
+        <div class="philosophy-card reveal">
+          <h3>It Can Only Be God</h3>
+          <p>We approach every complex board-level repair and difficult network unlock with humility and dedication. When human limits are reached, we rely on faith, patience, and precision to deliver results for our customers.</p>
+        </div>
+        <div class="philosophy-card reveal">
+          <h3>Learn Before You Earn</h3>
+          <p>Technology evolves daily. Before we charge a client, we ensure our engineers have mastered the tool, the firmware, and the hardware. Continuous education is mandatory for every SIERRAUNLOCK technician.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- FOUNDERS -->
+    <section class="section section-alt" id="founders">
+      <div class="section-head">
+        <h2>Meet The Founders</h2>
+        <div class="underline"></div>
+        <p>Decades of combined field experience, from the streets of Waterloo to the diamond capital of Koidu.</p>
+      </div>
+      <div class="container founder-grid">
+        <article class="founder-card reveal">
+          <img src="assets/images/founders/alhassan-mansaray-founder.jpg" alt="Alhassan Mansaray — Founder and Chief Unlock Specialist">
+          <div class="founder-body">
+            <h3>Alhassan Mansaray</h3>
+            <p class="role">Founder • Chief Unlock Specialist</p>
+            <p class="meta">📍 Tombo Park, Waterloo (Opposite Peninsula School)</p>
+            <p class="bio">A highly respected figure in Sierra Leone's mobile industry, Alhassan brings over 20 to 25 years of hands-on experience in phone unlocking, trading, and customer relations across the country. His deep understanding of local networks and carrier policies forms the backbone of our unlocking services.</p>
+          </div>
+        </article>
+        <article class="founder-card reveal">
+          <img src="assets/images/founders/baimba-conteh-engineer.jpg" alt="Baimba Conteh — Co-Founder and Technical Engineer">
+          <div class="founder-body">
+            <h3>Baimba Conteh</h3>
+            <p class="role">Co-Founder • Technical Engineer</p>
+            <p class="meta">📍 Koidu City, Kono District</p>
+            <p class="bio">Based in the heart of Kono, Baimba is the technical mastermind behind our hardware diagnostics and board-level repairs. He leads the engineering team, enforces strict quality control, and champions our core rule: <em>"Learn before you earn."</em></p>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- OUR JOURNEY / TIMELINE -->
+    <section class="section">
+      <div class="section-head">
+        <h2>The SIERRAUNLOCK Journey</h2>
+        <div class="underline"></div>
+      </div>
+      <div class="timeline">
+        <div class="timeline-item reveal">
+          <div class="timeline-icon">🛠️</div>
+          <div class="timeline-content">
+            <h4>Two Decades of Groundwork</h4>
+            <p>Alhassan builds a trusted reputation in mobile trading and unlocking across Sierra Leone, mastering the physical markets from Freetown to the provinces.</p>
+          </div>
+        </div>
+        <div class="timeline-item reveal">
+          <div class="timeline-icon">🔌</div>
+          <div class="timeline-content">
+            <h4>Engineering Meets Experience</h4>
+            <p>Baimba Conteh joins the vision, bringing advanced technical engineering, micro-soldering, and firmware expertise from Koidu City to the team.</p>
+          </div>
+        </div>
+        <div class="timeline-item reveal">
+          <div class="timeline-icon">🌍</div>
+          <div class="timeline-content">
+            <h4>Going Digital — The First in SL</h4>
+            <p>SIERRAUNLOCK is launched as the country's first dedicated web platform for legal unlocking and verified spare parts, eliminating fraud and connecting local shops to global server APIs.</p>
+          </div>
+        </div>
+        <div class="timeline-item reveal">
+          <div class="timeline-icon">🚀</div>
+          <div class="timeline-content">
+            <h4>Nationwide Network</h4>
+            <p>Expanding our GPS shop map, integrating Binance/Mobile Money payments, and empowering local technicians to grow their businesses through our wholesale API access.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="site-footer">
+    <div class="footer-grid container">
+      <div class="footer-col">
+        <a href="index.html" class="brand footer-brand">
+          <img src="assets/images/brand/sierraunlock-logo.png" alt="SIERRAUNLOCK logo" class="brand-logo">
+          <span class="brand-name">SIERRA<span>UNLOCK</span></span>
+        </a>
+        <p class="footer-about">Sierra Leone's first digital unlocking platform. Unlock • Repair • Connect.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Quick Links</h4>
+        <a href="about.html">About &amp; Founders</a>
+        <a href="services.html">Unlock Services</a>
+        <a href="marketplace.html">Marketplace</a>
+        <a href="shops.html">Shops &amp; Map</a>
+        <a href="admin.html">Admin Dashboard</a>
+      </div>
+      <div class="footer-col">
+        <h4>Contact</h4>
+        <a href="mailto:sierraunlock@gmail.com">sierraunlock@gmail.com</a>
+        <a href="tel:+23231363736">+232 31 363 736</a>
+        <a href="tel:+23233469056">+232 33 469 056</a>
+        <a href="https://github.com/sierraunlock-tech" target="_blank" rel="noopener">github.com/sierraunlock-tech</a>
+      </div>
+      <div class="footer-col">
+        <h4>Legal</h4>
+        <a href="services.html#legal">IMEI Policy</a>
+        <a href="repair.html#terms">Repair Terms (GTC)</a>
+        <a href="faq.html">Unlocking FAQ</a>
+        <a href="contact.html">Business / Wholesale</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      © <span id="year">2026</span> SIERRAUNLOCK • Unlock • Repair • Connect — Sierra Leone • <span id="siteVersion">v1.1.0</span>
+    </div>
+  </footer>
+
+  <script src="assets/js/security.js"></script>
+  <script src="assets/js/main.js"></script>
+</body>
+</html>

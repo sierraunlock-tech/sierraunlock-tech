@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shops & GPS Map — Find an Unlocker Near You | SIERRAUNLOCK</title>
+  <link rel="icon" type="image/png" href="assets/images/brand/favicon.png">
+  <link rel="apple-touch-icon" href="assets/images/brand/favicon.png">
+  <meta name="description" content="Find verified phone unlockers, electronics and repair shops near you on a live GPS map — add your own shop with a photo and exact GPS.">
+  <meta property="og:title" content="Shops & Map — SIERRAUNLOCK">
+  <meta property="og:image" content="assets/images/brand/sierraunlock-logo.png">
+  <meta name="theme-color" content="#0072C6">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="assets/css/style.css">
+  <link rel="stylesheet" href="assets/css/animations.css">
+  <style>
+    .shops-hero{background:radial-gradient(1100px 480px at 85% -10%,rgba(30,181,58,.35),transparent 60%),radial-gradient(900px 420px at 10% 110%,rgba(0,114,198,.45),transparent 60%),linear-gradient(135deg,var(--sl-blue-dark) 0%,#06283F 55%,var(--sl-green-dark) 130%);color:#fff;padding:5rem 1.2rem 3.8rem;text-align:center}
+    .shops-hero h1{font-size:clamp(2rem,5vw,3rem);font-weight:900;margin:1rem 0}
+    .shops-hero p{max-width:780px;margin:0 auto;color:rgba(255,255,255,.92)}
+    .map-controls{display:flex;gap:.8rem;flex-wrap:wrap;justify-content:center;margin-bottom:1.2rem}
+    .area-search{display:flex;gap:.6rem;flex:1;max-width:560px;min-width:260px}
+    .area-search input{flex:1;padding:.7rem 1.1rem;border-radius:999px;border:1.5px solid var(--line);background:#fff;font-size:.95rem;font-family:var(--font-body);box-shadow:var(--shadow-1)}
+    .area-search input:focus{outline:none;border-color:var(--sl-blue)}
+    #map{height:460px;border-radius:var(--radius-lg);border:1px solid var(--line);box-shadow:var(--shadow-1);position:relative;z-index:1;background:#E8F3FC}
+    .su-pin-wrap{background:none;border:none}
+    .su-pin{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;font-size:1.05rem;border:2px solid #fff;box-shadow:0 6px 14px rgba(10,27,42,.35)}
+    .pin-hub{background:linear-gradient(135deg,var(--sl-green-dark),var(--sl-blue))}
+    .pin-shop{background:#fff;border:2px solid var(--sl-blue)}
+    .near-list{display:grid;gap:.8rem;margin-top:1.5rem}
+    .near-item{display:flex;justify-content:space-between;align-items:center;gap:1rem;background:#fff;border:1px solid var(--line);border-radius:14px;padding:.9rem 1.1rem;box-shadow:var(--shadow-1)}
+    .near-item small{color:var(--ink-soft)}
+    .near-item .info{flex:1}
+    .dist{font-weight:800;color:var(--sl-green-dark);white-space:nowrap}
+    .vtag{background:#E7F8EC;color:var(--sl-green-dark);border:1px solid var(--sl-green);font-size:.64rem;font-weight:800;padding:.2rem .5rem;border-radius:999px;letter-spacing:.06em}
+    .form-card{max-width:780px;margin:0 auto;background:#fff;border:1px solid var(--line);border-radius:var(--radius-lg);padding:2rem;box-shadow:var(--shadow-1)}
+    .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+    @media(max-width:640px){.form-grid{grid-template-columns:1fr}}
+    .form-field{display:flex;flex-direction:column;gap:.35rem}
+    .form-field.full{grid-column:1/-1}
+    .form-field label{font-size:.78rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-soft)}
+    .form-field input,.form-field select,.form-field textarea{border:1.5px solid var(--line);border-radius:12px;padding:.7rem .9rem;font-family:var(--font-body);font-size:.95rem;background:var(--paper);width:100%;transition:border-color .25s,box-shadow .25s}
+    .form-field input:focus,.form-field select:focus,.form-field textarea:focus{outline:none;border-color:var(--sl-blue);box-shadow:0 0 0 3px rgba(0,114,198,.15)}
+    .form-note{font-size:.82rem;color:var(--ink-soft);margin-top:.9rem}
+    .gps-row{display:flex;gap:.6rem;align-items:center}
+    .gps-row input{flex:1}
+  </style>
+</head>
+<body>
+
+  <div class="motto-bar">
+    <span>IT CAN ONLY BE GOD</span><span class="motto-divider">✦</span><span>LEARN BEFORE YOU EARN</span>
+  </div>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a href="index.html" class="brand" aria-label="SIERRAUNLOCK home">
+        <img src="assets/images/brand/sierraunlock-logo.png" alt="SIERRAUNLOCK logo" class="brand-logo">
+        <span class="brand-name">SIERRA<span>UNLOCK</span></span>
+      </a>
+      <nav class="main-nav" id="mainNav" aria-label="Main navigation">
+        <a class="nav-link" href="index.html">Home</a>
+        <a class="nav-link" href="about.html">About</a>
+        <a class="nav-link" href="services.html">Unlock Services</a>
+        <a class="nav-link" href="repair.html">Repair</a>
+        <a class="nav-link" href="marketplace.html">Marketplace</a>
+        <a class="nav-link active" href="shops.html">Shops &amp; Map</a>
+        <a class="nav-link" href="reseller.html">Resellers</a>
+        <a class="nav-link" href="payments.html">Payments</a>
+        <a class="nav-link" href="faq.html">FAQ</a>
+        <a class="nav-link" href="contact.html">Contact</a>
+      </nav>
+      <a class="btn btn-whatsapp header-cta" href="https://whatsapp.com/channel/0029VbDtNmh1XquQ7GVpp409" target="_blank" rel="noopener">WhatsApp Channel</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu">☰</button>
+    </div>
+    <div class="flag-stripe"></div>
+  </header>
+
+  <main>
+    <section class="shops-hero">
+      <p class="hero-kicker">From Freetown to Koidu — One Network</p>
+      <h1>Shops &amp; GPS Unlocker Map</h1>
+      <p>Find verified unlockers, electronics and repair shops near you — with photos and exact GPS. Any shop owner can add their shop for free and get discovered.</p>
+    </section>
+
+    <div class="legal-strip">
+      📍 <strong>Growing nationwide.</strong> Verified hubs 🏢 • community shops 🔓 with snapshots &amp; exact coordinates after admin approval.
+    </div>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>Find a Shop Near You</h2>
+        <div class="underline"></div>
+        <p>Search a town or use your GPS — nearest shops listed with photo, type and distance.</p>
+      </div>
+      <div class="container">
+        <div class="map-controls">
+          <form class="area-search" id="areaForm">
+            <input id="areaSearch" placeholder="Your town… e.g. Bo, Freetown, Kenema, Makeni" aria-label="Search town">
+            <button class="btn btn-brand" type="submit">Search</button>
+          </form>
+          <button class="btn" id="locateBtn" style="border:2px solid var(--sl-blue);color:var(--sl-blue)"> Use My Location</button>
+        </div>
+        <div id="map" aria-label="Map of SIERRAUNLOCK shops across Sierra Leone"></div>
+        <div class="near-list" id="nearList"></div>
+      </div>
+    </section>
+
+    <section class="section section-alt">
+      <div class="section-head">
+        <h2>Our Verified Hubs</h2>
+        <div class="underline"></div>
+      </div>
+      <div class="container founder-grid">
+        <article class="founder-card">
+          <div class="founder-body">
+            <h3>🏢 Waterloo Hub — Western Area</h3>
+            <p class="role">Unlocking • Trading • Customer Desk</p>
+            <p class="meta">📍 Tombo Park, Waterloo — opposite Peninsula School</p>
+            <p class="bio">Led by Founder Alhassan Mansaray. Walk-ins welcome for unlocks, quotes and marketplace pickups.</p>
+            <p style="margin:.8rem 0"><a href="tel:+232754378475" class="link" style="color:var(--sl-blue);font-weight:700">+232 75 437 8475</a></p>
+            <button class="btn btn-brand btn-sm view-hub" data-lat="8.3486" data-lng="-12.8201">View on Map</button>
+          </div>
+        </article>
+        <article class="founder-card">
+          <div class="founder-body">
+            <h3>🏢 Koidu Hub — Kono District</h3>
+            <p class="role">Engineering • Board-Level Repair • Certification</p>
+            <p class="meta">📍 Koidu City, Kono District</p>
+            <p class="bio">Led by Co-Founder &amp; Technical Engineer Baimba Conteh. Hardware diagnostics and technician training center.</p>
+            <p style="margin:.8rem 0"><a href="tel:+23231363736" class="link" style="color:var(--sl-blue);font-weight:700">+232 31 363 736</a></p>
+            <button class="btn btn-brand btn-sm view-hub" data-lat="8.6447" data-lng="-10.9700">View on Map</button>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="addshop">
+      <div class="section-head">
+        <h2>Add Your Shop — Free (Photo + Exact GPS)</h2>
+        <div class="underline"></div>
+        <p>Unlockers, repairers, electronics &amp; computer shops, accessories dealers: snap your shop, pin it, get customers.</p>
+      </div>
+      <div class="container">
+        <form class="form-card" id="shopForm">
+          <div class="form-grid">
+            <div class="form-field"><label for="shopName">Shop / Business Name *</label><input id="shopName" required placeholder="e.g. Kamara Phone Clinic"></div>
+            <div class="form-field"><label for="ownerName">Owner Name *</label><input id="ownerName" required placeholder="Your full name"></div>
+            <div class="form-field"><label for="shopType">Shop Type *</label>
+              <select id="shopType" required>
+                <option value="">Select…</option>
+                <option>Unlock Shop</option><option>Electronics Shop</option><option>Repair Shop</option>
+                <option>Computer Shop</option><option>Accessories Dealer</option><option>Parts Dealer</option><option>Other</option>
+              </select>
+            </div>
+            <div class="form-field"><label for="shopPhone">Phone / WhatsApp *</label><input id="shopPhone" required placeholder="+232 ..."></div>
+            <div class="form-field"><label for="shopDistrict">District *</label>
+              <select id="shopDistrict" required>
+                <option value="">Select…</option>
+                <option>Western Area</option><option>Bo</option><option>Bonthe</option><option>Bombali</option>
+                <option>Kailahun</option><option>Kenema</option><option>Karene</option><option>Koinadugu</option>
+                <option>Kono</option><option>Moyamba</option><option>Port Loko</option><option>Pujehun</option>
+                <option>Tonkolili</option><option>Falaba</option>
+              </select>
+            </div>
+            <div class="form-field"><label>Exact GPS Position *</label>
+              <div class="gps-row">
+                <input id="shopLat" placeholder="Latitude" readonly>
+                <input id="shopLng" placeholder="Longitude" readonly>
+                <button type="button" class="btn btn-brand btn-sm" id="gpsBtn"> Get My GPS Position</button>
+              </div>
+            </div>
+            <div class="form-field full"><label for="shopArea">Area / Street (mention your town) *</label><input id="shopArea" required placeholder="e.g. Main Motor Park, Bo"></div>
+            <div class="form-field full"><label for="shopPhoto">Snapshot of Your Shop (storefront) *</label><input id="shopPhoto" type="file" accept="image/*" required></div>
+            <div class="form-field full"><label for="shopDesc">What You Sell / Services</label><textarea id="shopDesc" rows="2" placeholder="e.g. Phones, chargers, earphones, screens, unlocking, repairs…"></textarea></div>
+          </div>
+          <p class="form-note">📸 Stand in front of your shop and take the snapshot now — buyers see it instantly. The GPS button captures your <strong>exact coordinates</strong> so clients navigate straight to your door. Listing is free; admin approval publishes it site-wide.</p>
+          <div style="margin-top:1.2rem;text-align:center">
+            <button type="submit" class="btn btn-brand"> SUBMIT MY SHOP</button>
+          </div>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-grid container">
+      <div class="footer-col">
+        <a href="index.html" class="brand footer-brand">
+          <img src="assets/images/brand/sierraunlock-logo.png" alt="SIERRAUNLOCK logo" class="brand-logo">
+          <span class="brand-name">SIERRA<span>UNLOCK</span></span>
+        </a>
+        <p class="footer-about">Sierra Leone's first digital unlocking platform. Unlock • Repair • Connect.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Quick Links</h4>
+        <a href="about.html">About &amp; Founders</a>
+        <a href="services.html">Unlock Services</a>
+        <a href="marketplace.html">Marketplace</a>
+        <a href="shops.html">Shops &amp; Map</a>
+        <a href="reseller.html">Become a Reseller</a>
+        <a href="auth.html">👤 Sign In / Register</a>
+        <a href="admin.html">Admin Dashboard</a>
+      </div>
+      <div class="footer-col">
+        <h4>Contact</h4>
+        <a href="mailto:sierraunlock@gmail.com">sierraunlock@gmail.com</a>
+        <a href="tel:+232754378475">+232 75 437 8475 (Alhassan — Waterloo)</a>
+        <a href="tel:+23231363736">+232 31 363 736 (Baimba — Koidu)</a>
+        <a href="https://github.com/sierraunlock-tech" target="_blank" rel="noopener">github.com/sierraunlock-tech</a>
+      </div>
+      <div class="footer-col">
+        <h4>Legal</h4>
+        <a href="services.html#legal">IMEI Policy</a>
+        <a href="repair.html#terms">Repair Terms (GTC)</a>
+        <a href="faq.html">Unlocking FAQ</a>
+        <a href="contact.html">Business / Wholesale</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      © <span id="year">2026</span> SIERRAUNLOCK • Unlock • Repair • Connect — Sierra Leone • <span id="siteVersion">v1.3.2</span>
+    </div>
+  </footer>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="assets/js/security.js"></script>
+  <script src="assets/js/main.js"></script>
+  <script src="assets/js/map.js"></script>
+</body>
+</html>

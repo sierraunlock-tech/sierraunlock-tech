@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <title>Admin Dashboard | SIERRAUNLOCK</title>
+  <link rel="icon" type="image/png" href="assets/images/brand/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+  <link rel="stylesheet" href="assets/css/animations.css">
+  <style>
+    [hidden]{display:none !important}
+    .adm-top{background:var(--ink);color:#fff;padding:.8rem 1.2rem;display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}
+    .adm-top .brand-name{color:#fff}.adm-top .brand-name span{color:#7CF29C}
+    .adm-top .btn{padding:.45rem 1rem;font-size:.78rem}
+    .login-wrap{min-height:75vh;display:grid;place-items:center;padding:2rem 1rem}
+    .login-card{background:#fff;border-radius:var(--radius-lg);box-shadow:var(--shadow-2);padding:2.4rem;max-width:400px;width:100%;text-align:center;border-top:6px solid var(--sl-green)}
+    .login-card h2{margin-bottom:.4rem}
+    .login-card p{color:var(--ink-soft);font-size:.88rem;margin-bottom:1.2rem}
+    .login-card input{width:100%;padding:.85rem 1rem;border-radius:12px;border:1.5px solid var(--line);font-size:1.1rem;text-align:center;letter-spacing:.4em;font-family:var(--font-body)}
+    .login-card input:focus{outline:none;border-color:var(--sl-blue)}
+    #loginErr{color:var(--danger);font-size:.82rem;margin-top:.7rem;min-height:1.2em}
+    .shake{animation:shake .4s}
+    @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+    .adm-wrap{display:grid;grid-template-columns:230px 1fr;gap:1.4rem;max-width:1200px;margin:0 auto;padding:1.6rem 1.2rem}
+    @media(max-width:900px){.adm-wrap{grid-template-columns:1fr}.adm-tabs{flex-direction:row;flex-wrap:wrap}}
+    .adm-tabs{display:flex;flex-direction:column;gap:.5rem;align-content:flex-start}
+    .adm-tab{padding:.75rem 1rem;border-radius:12px;border:1px solid var(--line);background:#fff;font-weight:700;font-size:.86rem;cursor:pointer;text-align:left;font-family:var(--font-head)}
+    .adm-tab.active{background:var(--grad-brand);color:#fff;border-color:transparent}
+    .adm-panel{background:#fff;border:1px solid var(--line);border-radius:var(--radius-lg);padding:1.6rem;box-shadow:var(--shadow-1)}
+    .adm-panel h3{margin-bottom:1rem;font-size:1.05rem}
+    .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:1rem;margin-bottom:1.4rem}
+    .stat-card{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:1rem;text-align:center}
+    .stat-card b{display:block;font-family:var(--font-head);font-size:1.45rem;color:var(--sl-blue-dark)}
+    .stat-card span{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft)}
+    .row-item{display:flex;justify-content:space-between;align-items:center;gap:.7rem;padding:.7rem .9rem;border:1px solid var(--line);border-radius:12px;margin-bottom:.6rem;flex-wrap:wrap}
+    .row-item .info{flex:1;min-width:200px}
+    .row-item small{color:var(--ink-soft)}
+    .tag{font-size:.66rem;font-weight:800;padding:.25rem .6rem;border-radius:999px;text-transform:uppercase;letter-spacing:.05em}
+    .tag-pending{background:#FFF8E6;color:#92400E;border:1px solid #D97706}
+    .tag-progress{background:#E8F3FC;color:var(--sl-blue-dark);border:1px solid var(--sl-blue)}
+    .tag-solved{background:#E7F8EC;color:var(--sl-green-dark);border:1px solid var(--sl-green)}
+    .prow{display:grid;grid-template-columns:1fr 110px 90px 90px;gap:.6rem;align-items:center;padding:.5rem 0;border-bottom:1px dashed var(--line);font-size:.88rem}
+    @media(max-width:640px){.prow{grid-template-columns:1fr 1fr}}
+    .prow input,.prow select{padding:.45rem .6rem;border:1.5px solid var(--line);border-radius:8px;font-family:var(--font-body);width:100%}
+    .psell{font-weight:800;color:var(--sl-green-dark)}
+    .mini-form{display:grid;grid-template-columns:1fr 1fr;gap:.8rem;margin-bottom:1.2rem}
+    @media(max-width:640px){.mini-form{grid-template-columns:1fr}}
+    .mini-form input,.mini-form select,.mini-form textarea{padding:.6rem .8rem;border:1.5px solid var(--line);border-radius:10px;font-family:var(--font-body);font-size:.9rem;width:100%;background:var(--paper)}
+    .mini-form .full{grid-column:1/-1}
+    .inline{display:flex;gap:.7rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem}
+    .inline input{padding:.6rem .9rem;border:1.5px solid var(--line);border-radius:10px;width:160px;font-family:var(--font-body)}
+  </style>
+</head>
+<body>
+
+  <div class="motto-bar">
+    <span>IT CAN ONLY BE GOD</span><span class="motto-divider">✦</span><span>LEARN BEFORE YOU EARN</span>
+  </div>
+
+  <div class="adm-top">
+    <a href="index.html" class="brand">
+      <img src="assets/images/brand/sierraunlock-logo.png" alt="SIERRAUNLOCK logo" class="brand-logo">
+      <span class="brand-name">SIERRA<span>UNLOCK</span> • ADMIN</span>
+    </a>
+    <div style="display:flex;gap:.6rem">
+      <a class="btn btn-whatsapp" href="index.html">View Site</a>
+      <button class="btn" id="logoutBtn" style="background:#FDECEA;color:#B00020">Logout</button>
+    </div>
+  </div>
+
+  <!-- LOGIN -->
+  <div class="login-wrap" id="loginView">
+    <div class="login-card" id="loginCard">
+      <h2>🔐 Admin Access</h2>
+      <p>Founders only. Default PIN <strong>2026</strong> — change it in Settings after login.</p>
+      <input type="password" id="pinInput" inputmode="numeric" placeholder="••••" aria-label="Admin PIN">
+      <div style="margin-top:1rem"><button class="btn btn-brand" id="loginBtn">UNLOCK DASHBOARD</button></div>
+      <p id="loginErr"></p>
+    </div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div class="adm-wrap" id="dashView" hidden>
+    <nav class="adm-tabs" aria-label="Admin sections">
+      <button class="adm-tab active" data-tab="overview">📊 Overview</button>
+      <button class="adm-tab" data-tab="rates">💱 Rates &amp; Pricing</button>
+      <button class="adm-tab" data-tab="pending">📥 Seller Submissions</button>
+      <button class="adm-tab" data-tab="shops">📍 Shops Approval</button>
+      <button class="adm-tab" data-tab="market">🛒 Marketplace</button>
+      <button class="adm-tab" data-tab="jobs">🧾 Jobs Board</button>
+      <button class="adm-tab" data-tab="settings">⚙️ Settings</button>
+    </nav>
+
+    <div>
+      <section class="adm-panel adm-sec" id="sec-overview">
+        <h3>Platform Overview</h3>
+        <div class="stat-grid">
+          <div class="stat-card"><b id="stJobs">0</b><span>Jobs Logged</span></div>
+          <div class="stat-card"><b id="stSolved">0</b><span>Solved</span></div>
+          <div class="stat-card"><b id="stPendingShops">0</b><span>Shops Pending</span></div>
+          <div class="stat-card"><b id="stPendingProd">0</b><span>Listings Pending</span></div>
+          <div class="stat-card"><b id="stProducts">0</b><span>Live Listings</span></div>
+          <div class="stat-card"><b id="stRate">—</b><span>SLE per USD</span></div>
+          <div class="stat-card"><b id="stVersion">—</b><span>Site Version</span></div>
+        </div>
+        <p style="color:var(--ink-soft);font-size:.88rem">Everything you change here updates the public pages on their next load. When the backend keys arrive (EXT-16), this dashboard syncs site-wide.</p>
+      </section>
+
+      <section class="adm-panel adm-sec" id="sec-rates" hidden>
+        <h3>SLE Exchange Rate</h3>
+        <div class="inline">
+          <input type="number" step="0.01" id="rateInput" aria-label="SLE per USD">
+          <button class="btn btn-brand" id="rateSave">Save Rate</button>
+        </div>
+        <h3 style="margin-top:1.6rem">Tool Pricing — Supplier Cost + Your Margin ($5–$10)</h3>
+        <div class="prow" style="font-weight:800"><span>Tool</span><span>Cost ($)</span><span>Margin</span><span>Sell Price</span></div>
+        <div id="pricingRows"></div>
+        <p style="color:var(--ink-soft);font-size:.85rem;margin-top:.9rem">Sell prices are private — public pages show "Quote" until you publish a price list.</p>
+      </section>
+
+      <section class="adm-panel adm-sec" id="sec-pending" hidden>
+        <h3>Seller Submissions (approve to publish with photo)</h3>
+        <div id="pendingList"></div>
+      </section>
+
+      <section class="adm-panel adm-sec" id="sec-shops" hidden>
+        <h3>Community Shop Submissions</h3>
+        <div id="shopList"></div>
+      </section>
+
+      <section class="adm-panel adm-sec" id="sec-market" hidden>
+        <h3>Add Marketplace Listing</h3>
+        <form class="mini-form" id="prodForm">
+          <input id="pName" required placeholder="Item name *">
+          <input id="pBrand" required placeholder="Brand *">
+          <select id="pCat" required><option value="">Category *</option><option value="screens">Screens</option><option value="batteries">Batteries</option><option value="phoneparts">Phone Parts</option><option value="computer">Computer Hardware</option><option value="laptops">Laptops</option><option value="accessories">Accessories</option></select>
+          <select id="pCond" required><option value="">Condition *</option><option value="oem">OEM New</option><option value="comp">Compatible New</option><option value="used">Used — Tested</option><option value="second">Second-Hand</option></select>
+          <input id="pPrice" placeholder="Price e.g. From SLE 900">
+          <input id="pIcon" placeholder="Emoji icon e.g. 📱 (optional)" maxlength="4">
+          <textarea id="pDesc" class="full" rows="2" required placeholder="Honest description (fits + defects) *"></textarea>
+          <div class="full"><button class="btn btn-brand" type="submit">Publish Listing</button></div>
+        </form>
+        <h3>Current Live Listings</h3>
+        <div id="prodList"></div>
+      </section>
+
+      <section class="adm-panel adm-sec" id="sec-jobs" hidden>
+        <h3>Log a Job</h3>
+        <form class="mini-form" id="jobForm">
+          <input id="jCustomer" required placeholder="Customer name *">
+          <input id="jDevice" required placeholder="Device e.g. iPhone 11 *">
+          <input id="jService" required placeholder="Service e.g. Network unlock *">
+          <select id="jHub" required><option value="">Hub *</option><option>Waterloo Hub</option><option>Koidu Hub</option><option>Remote / Online</option></select>
+          <div class="full"><button class="btn btn-brand" type="submit">Add Job</button></div>
+        </form>
+        <h3>Job Board</h3>
+        <div id="jobList"></div>
+      </section>
+
+      <section class="adm-panel adm-sec" id="sec-settings" hidden>
+        <h3>Site Version (shown in every footer)</h3>
+        <div class="inline">
+          <input type="text" id="verInput" aria-label="Site version">
+          <button class="btn btn-brand" id="verSave">Update Version</button>
+        </div>
+        <h3 style="margin-top:1.6rem">Change Admin PIN</h3>
+        <div class="inline">
+          <input type="password" id="pinCur" placeholder="Current PIN">
+          <input type="password" id="pinNew" placeholder="New PIN (4+ chars)">
+          <button class="btn btn-brand" id="pinSave">Change PIN</button>
+        </div>
+        <h3 style="margin-top:1.6rem;color:var(--danger)">Danger Zone</h3>
+        <button class="btn" id="dangerClear" style="background:#FDECEA;color:#B00020">Clear All Local Admin Data</button>
+      </section>
+    </div>
+  </div>
+
+  <script src="assets/js/security.js"></script>
+  <script src="assets/js/main.js"></script>
+  <script src="assets/js/admin.js"></script>
+</body>
+</html>

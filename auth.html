@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <title>Sign In / Create Account | SIERRAUNLOCK</title>
+  <link rel="icon" type="image/png" href="assets/images/brand/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+  <style>
+    .auth-wrap{min-height:80vh;display:grid;place-items:center;padding:2.5rem 1rem;background:radial-gradient(900px 420px at 10% 0%,rgba(30,181,58,.25),transparent 60%),radial-gradient(900px 420px at 90% 100%,rgba(0,114,198,.3),transparent 60%),var(--paper)}
+    .auth-card{background:#fff;border-radius:var(--radius-lg);box-shadow:var(--shadow-2);max-width:460px;width:100%;padding:2.2rem;border-top:6px solid var(--sl-green)}
+    .auth-card h2{text-align:center;margin-bottom:.3rem}
+    .auth-sub{text-align:center;color:var(--ink-soft);font-size:.88rem;margin-bottom:1.4rem}
+    .auth-tabs{display:flex;gap:.6rem;margin-bottom:1.4rem}
+    .auth-tabs button{flex:1;padding:.7rem;border-radius:12px;border:1.5px solid var(--line);background:#fff;font-family:var(--font-head);font-weight:800;font-size:.85rem;cursor:pointer}
+    .auth-tabs button.active{background:var(--grad-brand);color:#fff;border-color:transparent}
+    .a-field{margin-bottom:.9rem}
+    .a-field label{display:block;font-size:.75rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:.3rem}
+    .a-field input{width:100%;padding:.75rem .9rem;border-radius:12px;border:1.5px solid var(--line);font-family:var(--font-body);font-size:.95rem;background:var(--paper)}
+    .a-field input:focus{outline:none;border-color:var(--sl-blue);box-shadow:0 0 0 3px rgba(0,114,198,.15)}
+    .demo-box{background:#FFF8E6;border:1.5px dashed #D97706;border-radius:12px;padding:.8rem;text-align:center;font-size:.85rem;color:#92400E;margin-bottom:.9rem}
+    .demo-box b{font-size:1.3rem;letter-spacing:.4em;display:block;margin-top:.2rem}
+    .why{margin-top:1.3rem;font-size:.8rem;color:var(--ink-soft)}
+    .why li{margin:.3rem 0;padding-left:1.3rem;position:relative}
+    .why li::before{content:"✔";position:absolute;left:0;color:var(--sl-green-dark)}
+  </style>
+</head>
+<body>
+  <div class="motto-bar">
+    <span>IT CAN ONLY BE GOD</span><span class="motto-divider">✦</span><span>LEARN BEFORE YOU EARN</span>
+  </div>
+
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <h2>🔐 SIERRAUNLOCK Account</h2>
+      <p class="auth-sub">One free account to buy tools, sell parts, list your shop and track every order.</p>
+      <div class="auth-tabs" id="authTabs">
+        <button id="tabReg" class="active">Create Account</button>
+        <button id="tabIn">Sign In</button>
+      </div>
+
+      <div id="regPanel">
+        <div class="a-field"><label>Full Name *</label><input id="rName" placeholder="e.g. Abdul Kamara"></div>
+        <div class="a-field"><label>Phone / WhatsApp *</label><input id="rPhone" placeholder="+232 ..."></div>
+        <div class="a-field"><label>Email *</label><input id="rEmail" type="email" placeholder="you@example.com"></div>
+        <div class="a-field"><label>Password (4+ chars) *</label><input id="rPass" type="password" placeholder="••••••"></div>
+        <button class="btn btn-brand" id="sendCodeBtn" style="width:100%">SEND VERIFICATION CODE</button>
+
+        <div id="codeStep" hidden style="margin-top:1rem">
+          <div class="demo-box" id="demoBox" hidden> DEMO MODE (until EmailJS is connected) — your code:<b id="demoCode"></b></div>
+          <div class="a-field"><label>Enter 6-Digit Code</label><input id="rCode" inputmode="numeric" maxlength="6" placeholder="••••••"></div>
+          <button class="btn btn-whatsapp" id="verifyBtn" style="width:100%">VERIFY &amp; CREATE ACCOUNT</button>
+        </div>
+      </div>
+
+      <div id="inPanel" hidden>
+        <div class="a-field"><label>Email</label><input id="iEmail" type="email" placeholder="you@example.com"></div>
+        <div class="a-field"><label>Password</label><input id="iPass" type="password" placeholder="••••••"></div>
+        <button class="btn btn-brand" id="signInBtn" style="width:100%">SIGN IN</button>
+      </div>
+
+      <ul class="why">
+        <li>Verification code protects your account from fraud.</li>
+        <li>Receipts &amp; order history tied to your phone/email.</li>
+        <li>Required for buying tools, selling parts &amp; listing shops.</li>
+      </ul>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+  <script src="assets/js/security.js"></script>
+  <script src="assets/js/auth.js"></script>
+</body>
+</html>

@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Unlock Services — 100% Legal | SIERRAUNLOCK</title>
+  <link rel="icon" type="image/png" href="assets/images/brand/favicon.png">
+  <link rel="apple-touch-icon" href="assets/images/brand/favicon.png">
+  <meta name="description" content="Legal carrier & network unlocking in Sierra Leone. iPhone, Samsung, Tecno, Infinix and more. IMEI tampering is illegal — we unlock the right way.">
+  <meta property="og:title" content="Unlock Services — SIERRAUNLOCK">
+  <meta property="og:image" content="assets/images/brand/sierraunlock-logo.png">
+  <meta name="theme-color" content="#0072C6">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+  <link rel="stylesheet" href="assets/css/animations.css">
+  <style>
+    .services-hero{background:radial-gradient(1100px 480px at 85% -10%,rgba(30,181,58,.35),transparent 60%),radial-gradient(900px 420px at 10% 110%,rgba(0,114,198,.45),transparent 60%),linear-gradient(135deg,var(--sl-blue-dark) 0%,#06283F 55%,var(--sl-green-dark) 130%);color:#fff;padding:5.5rem 1.2rem 4rem;text-align:center}
+    .services-hero h1{font-size:clamp(2rem,5vw,3rem);font-weight:900;margin:1rem 0}
+    .services-hero p{max-width:780px;margin:0 auto;color:rgba(255,255,255,.92);font-size:1.05rem}
+    .explain-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:2rem;align-items:start}
+    .explain-text p{color:var(--ink-soft);margin-bottom:1rem;font-size:.97rem}
+    .explain-text strong{color:var(--ink)}
+    .explain-side{background:#fff;border:1px solid var(--line);border-radius:var(--radius-lg);padding:1.6rem;box-shadow:var(--shadow-1)}
+    .explain-side h3{font-size:1rem;margin-bottom:.8rem}
+    .explain-side li{margin:.5rem 0;padding-left:1.5rem;position:relative;color:var(--ink-soft);font-size:.92rem}
+    .explain-side li::before{content:"✔";position:absolute;left:0;color:var(--sl-green-dark);font-weight:800}
+    @media(max-width:900px){.explain-grid{grid-template-columns:1fr}}
+    .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1.4rem}
+    .step{background:#fff;border:1px solid var(--line);border-radius:var(--radius-lg);padding:1.6rem;box-shadow:var(--shadow-1);transition:transform .3s,box-shadow .3s}
+    .step:hover{transform:translateY(-6px);box-shadow:var(--shadow-2)}
+    .step-num{width:44px;height:44px;border-radius:50%;background:var(--grad-brand);color:#fff;display:grid;place-items:center;font-weight:800;font-family:var(--font-head);margin-bottom:.9rem}
+    .step h3{font-size:1rem;margin-bottom:.4rem}
+    .step p{color:var(--ink-soft);font-size:.9rem}
+    .legal-panel{max-width:920px;margin:0 auto;background:#FFF7F7;border:2px solid var(--danger);border-radius:var(--radius-lg);padding:2rem;box-shadow:var(--shadow-1)}
+    .legal-panel h3{color:var(--danger);margin-bottom:.6rem;font-size:1.2rem}
+    .legal-panel > p{color:#6B2A26;font-size:.95rem;margin-bottom:1.2rem}
+    .legal-cols{display:grid;grid-template-columns:1fr 1fr;gap:1.6rem}
+    @media(max-width:760px){.legal-cols{grid-template-columns:1fr}}
+    .legal-list li{margin:.5rem 0;padding-left:1.7rem;position:relative;color:var(--ink-soft);font-size:.93rem}
+    .legal-list li::before{content:"✖";position:absolute;left:0;color:var(--danger);font-size:.8rem;top:.22rem}
+    .legal-list.good li::before{content:"✔";color:var(--sl-green-dark);font-size:.9rem}
+    .legal-list h4{margin-bottom:.5rem;font-size:.95rem;text-transform:uppercase;letter-spacing:.05em}
+    .form-card{max-width:780px;margin:0 auto;background:#fff;border:1px solid var(--line);border-radius:var(--radius-lg);padding:2rem;box-shadow:var(--shadow-1)}
+    .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+    @media(max-width:640px){.form-grid{grid-template-columns:1fr}}
+    .form-field{display:flex;flex-direction:column;gap:.35rem}
+    .form-field.full{grid-column:1/-1}
+    .form-field label{font-size:.78rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-soft)}
+    .form-field input,.form-field select,.form-field textarea{border:1.5px solid var(--line);border-radius:12px;padding:.7rem .9rem;font-family:var(--font-body);font-size:.95rem;background:var(--paper);transition:border-color .25s,box-shadow .25s;width:100%}
+    .form-field input:focus,.form-field select:focus,.form-field textarea:focus{outline:none;border-color:var(--sl-blue);box-shadow:0 0 0 3px rgba(0,114,198,.15)}
+    .form-note{font-size:.82rem;color:var(--ink-soft);margin-top:.9rem}
+    .wholesale{background:var(--grad-brand);color:#fff;text-align:center}
+    .wholesale h2{font-size:clamp(1.5rem,3vw,2.1rem);font-weight:800}
+    .wholesale p{color:rgba(255,255,255,.92);margin:.7rem auto 1.6rem;max-width:720px}
+  </style>
+</head>
+<body>
+
+  <div class="motto-bar">
+    <span>IT CAN ONLY BE GOD</span><span class="motto-divider">✦</span><span>LEARN BEFORE YOU EARN</span>
+  </div>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a href="index.html" class="brand" aria-label="SIERRAUNLOCK home">
+        <img src="assets/images/brand/sierraunlock-logo.png" alt="SIERRAUNLOCK logo" class="brand-logo">
+        <span class="brand-name">SIERRA<span>UNLOCK</span></span>
+      </a>
+      <nav class="main-nav" id="mainNav" aria-label="Main navigation">
+        <a class="nav-link" href="index.html">Home</a>
+        <a class="nav-link" href="about.html">About</a>
+        <a class="nav-link active" href="services.html">Unlock Services</a>
+        <a class="nav-link" href="repair.html">Repair</a>
+        <a class="nav-link" href="marketplace.html">Marketplace</a>
+        <a class="nav-link" href="shops.html">Shops &amp; Map</a>
+        <a class="nav-link" href="reseller.html">Resellers</a>
+        <a class="nav-link" href="payments.html">Payments</a>
+        <a class="nav-link" href="faq.html">FAQ</a>
+        <a class="nav-link" href="contact.html">Contact</a>
+      </nav>
+      <a class="btn btn-whatsapp header-cta" href="https://whatsapp.com/channel/0029VbDtNmh1XquQ7GVpp409" target="_blank" rel="noopener">WhatsApp Channel</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu">☰</button>
+    </div>
+    <div class="flag-stripe"></div>
+  </header>
+
+  <main>
+    <section class="services-hero">
+      <p class="hero-kicker">100% Legal • Owner-Verified • CTIA-Aligned</p>
+      <h1>Network &amp; Carrier Unlocking</h1>
+      <p>Unlocking a phone lets you move it from one network to another compatible network. We perform legal carrier unlocks for every major brand — with proof of ownership, transparent quotes and fast turnaround.</p>
+    </section>
+
+    <div class="legal-strip">
+      ⚠️ <strong>IMEI / blacklist tampering is ILLEGAL.</strong> Every unlock on this platform is a legal carrier unlock. See our full policy <a href="#legal" style="text-decoration:underline;font-weight:800">below</a>.
+    </div>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>What Is Cell Phone Unlocking?</h2>
+        <div class="underline"></div>
+      </div>
+      <div class="container explain-grid">
+        <div class="explain-text">
+          <p>Some phones contain software that prevents them from being used on different mobile networks, even when those networks are technologically compatible. If you bought your phone from one provider, that software <strong>"locks"</strong> the device to that provider's network.</p>
+          <p><strong>Unlocking removes that software lock</strong> so your device can accept SIM cards from other compatible networks. The process varies by device and carrier: a carrier may unlock automatically after conditions are met, send unlock instructions on request, or complete the process in-store. SIERRAUNLOCK handles the technical side for you — legally, safely and with the carrier's own policies respected.</p>
+          <p><strong>Technological compatibility note:</strong> unlocking disables the software lock, but it does not change your phone's hardware. A device designed for one network's technology (GSM, LTE, CDMA) must still be compatible with the new network. We always check compatibility <em>before</em> you pay.</p>
+        </div>
+        <aside class="explain-side">
+          <h3>Brands We Unlock</h3>
+          <ul>
+            <li>Apple iPhone (all models)</li>
+            <li>Samsung Galaxy</li>
+            <li>Tecno • Infinix • Itel</li>
+            <li>Nokia • Huawei • Honor</li>
+            <li>Xiaomi • Redmi • POCO</li>
+            <li>Google Pixel • Oppo • Vivo</li>
+          </ul>
+        </aside>
+      </div>
+    </section>
+
+    <section class="section section-alt">
+      <div class="section-head">
+        <h2>How Your Unlock Works</h2>
+        <div class="underline"></div>
+        <p>Four clean steps — no fraud, no guesswork.</p>
+      </div>
+      <div class="container steps">
+        <div class="step"><div class="step-num">1</div><h3>Request &amp; Verify</h3><p>Send brand, model and network. We verify ownership and check unlock eligibility. IMEI is used <em>only</em> for eligibility — never altered.</p></div>
+        <div class="step"><div class="step-num">2</div><h3>Quote &amp; Payment</h3><p>You receive a clear quote in SLE/USD. Pay via Orange Money (+232 75 437 8475), Binance Pay (ID 754378475) or crypto before work begins.</p></div>
+        <div class="step"><div class="step-num">3</div><h3>Unlock Execution</h3><p>Remote server unlock, factory code or in-store handling at Waterloo / Koidu hubs — using licensed partner tools only.</p></div>
+        <div class="step"><div class="step-num">4</div><h3>Test &amp; Confirm</h3><p>We test with your new SIM, confirm voice/data functionality and hand over with a written confirmation of the unlock.</p></div>
+      </div>
+    </section>
+
+    <section class="section" id="legal">
+      <div class="section-head">
+        <h2>Our IMEI &amp; Anti-Fraud Policy</h2>
+        <div class="underline"></div>
+      </div>
+      <div class="container">
+        <div class="legal-panel">
+          <h3>⚠️ IMEI tampering is a crime. We will never do it.</h3>
+          <p>The IMEI identifies a device on networks. Changing, spoofing or "cleaning" a blacklisted IMEI is illegal under Sierra Leone law and international regulation, and it enables phone theft. SIERRAUNLOCK refuses all such jobs.</p>
+          <div class="legal-cols">
+            <div>
+              <ul class="legal-list">
+                <h4>We NEVER do</h4>
+                <li>IMEI changing / spoofing / "cleaning"</li>
+                <li>Blacklist or stolen-device removal</li>
+                <li>FRP/account removal without proof of ownership</li>
+                <li>Any job on a device reported lost or stolen</li>
+              </ul>
+            </div>
+            <div>
+              <ul class="legal-list good">
+                <h4>We ALWAYS do</h4>
+                <li>Legal carrier &amp; network unlocks</li>
+                <li>Owner-verified FRP resets with purchase proof</li>
+                <li>Eligibility checks through official channels</li>
+                <li>Report suspicious devices to the proper authorities</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section-alt">
+      <div class="section-head">
+        <h2>The CTIA Consumer Standards We Follow</h2>
+        <div class="underline"></div>
+        <p>Six principles that keep unlocking fair for every customer.</p>
+      </div>
+      <div class="container card-grid">
+        <article class="card"><div class="icon">📄</div><h3>1. Disclosure</h3><p>Clear, concise and readily accessible unlocking policies — published and explained in plain language.</p></article>
+        <article class="card"><div class="icon">📝</div><h3>2. Postpaid Policy</h3><p>Devices unlocked after the service contract, installment plan or early termination fee is fulfilled.</p></article>
+        <article class="card"><div class="icon">⏳</div><h3>3. Prepaid Policy</h3><p>Prepaid devices eligible for unlocking no later than one year after initial activation.</p></article>
+        <article class="card"><div class="icon">🔔</div><h3>4. Notice</h3><p>Customers are notified when their device becomes eligible — or devices are unlocked automatically.</p></article>
+        <article class="card"><div class="icon">⚡</div><h3>5. Response Time</h3><p>Eligible requests handled within two business days, or a clear explanation is provided.</p></article>
+        <article class="card"><div class="icon">🎖️</div><h3>6. Deployed Personnel</h3><p>Military customers deployed internationally unlocked upon verification of deployment papers.</p></article>
+      </div>
+    </section>
+
+    <section class="section" id="request">
+      <div class="section-head">
+        <h2>Request an Unlock Now</h2>
+        <div class="underline"></div>
+        <p>Fill the form — it opens WhatsApp with your request pre-typed to Alhassan's desk.</p>
+      </div>
+      <div class="container">
+        <form class="form-card" id="unlockForm">
+          <div class="form-grid">
+            <div class="form-field"><label for="fName">Full Name *</label><input id="fName" required placeholder="e.g. Abdul Kamara"></div>
+            <div class="form-field"><label for="fPhone">Your Phone Number *</label><input id="fPhone" required placeholder="+232 ..."></div>
+            <div class="form-field"><label for="fBrand">Brand *</label>
+              <select id="fBrand" required>
+                <option value="">Select brand…</option>
+                <option>Apple iPhone</option><option>Samsung</option><option>Tecno</option><option>Infinix</option>
+                <option>Itel</option><option>Nokia</option><option>Huawei</option><option>Xiaomi</option>
+                <option>Google Pixel</option><option>Oppo</option><option>Vivo</option><option>Other</option>
+              </select>
+            </div>
+            <div class="form-field"><label for="fModel">Model *</label><input id="fModel" required placeholder="e.g. iPhone 11 / Spark 20"></div>
+            <div class="form-field"><label for="fNetwork">Currently Locked To</label><input id="fNetwork" placeholder="e.g. Orange SL, Africell…"></div>
+            <div class="form-field"><label for="fTarget">Want To Use</label><input id="fTarget" placeholder="e.g. Africell, Orange, foreign SIM…"></div>
+            <div class="form-field full"><label for="fImei">IMEI (optional — 15 digits)</label><input id="fImei" inputmode="numeric" maxlength="15" placeholder="Dial *#06# to see it"></div>
+            <div class="form-field full"><label for="fNote">Extra Details</label><textarea id="fNote" rows="3" placeholder="Anything else we should know?"></textarea></div>
+          </div>
+          <p class="form-note">🔒 Your IMEI is used <strong>only</strong> to check unlock eligibility. It is never altered, shared or stored for any other purpose. Proof of ownership will be requested.</p>
+          <div style="margin-top:1.2rem;text-align:center">
+            <button type="submit" class="btn btn-wa"> SEND REQUEST VIA WHATSAPP</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <section class="section wholesale">
+      <div class="container">
+        <h2>Business &amp; Wholesale Unlock Accounts</h2>
+        <p>Are you a shop or technician? Get partner access to our unlocking servers and tools, wholesale credits, priority turnaround and training under our <em>"Learn Before You Earn"</em> program.</p>
+        <div class="community-btns">
+          <a class="btn btn-outline-light" href="reseller.html">Become a Reseller</a>
+          <a class="btn btn-wa" href="https://wa.me/232754378475?text=SIERRAUNLOCK%20WHOLESALE%20INQUIRY" target="_blank" rel="noopener">WhatsApp Business Desk</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-grid container">
+      <div class="footer-col">
+        <a href="index.html" class="brand footer-brand">
+          <img src="assets/images/brand/sierraunlock-logo.png" alt="SIERRAUNLOCK logo" class="brand-logo">
+          <span class="brand-name">SIERRA<span>UNLOCK</span></span>
+        </a>
+        <p class="footer-about">Sierra Leone's first digital unlocking platform. Unlock • Repair • Connect.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Quick Links</h4>
+        <a href="about.html">About &amp; Founders</a>
+        <a href="services.html">Unlock Services</a>
+        <a href="marketplace.html">Marketplace</a>
+        <a href="shops.html">Shops &amp; Map</a>
+        <a href="reseller.html">Become a Reseller</a>
+        <a href="auth.html">👤 Sign In / Register</a>
+        <a href="admin.html">Admin Dashboard</a>
+      </div>
+      <div class="footer-col">
+        <h4>Contact</h4>
+        <a href="mailto:sierraunlock@gmail.com">sierraunlock@gmail.com</a>
+        <a href="tel:+232754378475">+232 75 437 8475 (Alhassan — Waterloo)</a>
+        <a href="tel:+23231363736">+232 31 363 736 (Baimba — Koidu)</a>
+        <a href="https://github.com/sierraunlock-tech" target="_blank" rel="noopener">github.com/sierraunlock-tech</a>
+      </div>
+      <div class="footer-col">
+        <h4>Legal</h4>
+        <a href="services.html#legal">IMEI Policy</a>
+        <a href="repair.html#terms">Repair Terms (GTC)</a>
+        <a href="faq.html">Unlocking FAQ</a>
+        <a href="contact.html">Business / Wholesale</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      © <span id="year">2026</span> SIERRAUNLOCK • Unlock • Repair • Connect — Sierra Leone • <span id="siteVersion">v1.3.1</span>
+    </div>
+  </footer>
+
+  <script src="assets/js/security.js"></script>
+  <script src="assets/js/main.js"></script>
+  <script>
+    /* Unlock request → Alhassan's WhatsApp */
+    document.getElementById('unlockForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      const g = (id) => document.getElementById(id).value.trim();
+      const imei = g('fImei');
+      if (imei && !/^\d{15}$/.test(imei)) {
+        alert('⚠️ The IMEI must be exactly 15 digits — or leave the field blank.');
+        return;
+      }
+      const lines = [
+        'SIERRAUNLOCK — UNLOCK REQUEST',
+        'Name: ' + g('fName'),
+        'Phone: ' + g('fPhone'),
+        'Brand: ' + g('fBrand'),
+        'Model: ' + g('fModel'),
+        'Locked to: ' + (g('fNetwork') || '—'),
+        'Want to use: ' + (g('fTarget') || '—'),
+        'IMEI: ' + (imei || '—'),
+        'Notes: ' + (g('fNote') || '—')
+      ];
+      window.open('https://wa.me/232754378475?text=' + encodeURIComponent(lines.join('\n')), '_blank');
+    });
+  </script>
+</body>
+</html>
