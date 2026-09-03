@@ -16,7 +16,6 @@
   <link rel="stylesheet" href="assets/css/style.css">
   <link rel="stylesheet" href="assets/css/animations.css">
   <style>
-    /* EXT-06 page styles */
     .faq-hero{background:radial-gradient(1100px 480px at 85% -10%,rgba(30,181,58,.35),transparent 60%),radial-gradient(900px 420px at 10% 110%,rgba(0,114,198,.45),transparent 60%),linear-gradient(135deg,var(--sl-blue-dark) 0%,#06283F 55%,var(--sl-green-dark) 130%);color:#fff;padding:5rem 1.2rem 3.6rem;text-align:center}
     .faq-hero h1{font-size:clamp(2rem,5vw,3rem);font-weight:900;margin:1rem 0}
     .faq-hero p{max-width:760px;margin:0 auto;color:rgba(255,255,255,.92)}
@@ -57,6 +56,7 @@
         <a class="nav-link" href="repair.html">Repair</a>
         <a class="nav-link" href="marketplace.html">Marketplace</a>
         <a class="nav-link" href="shops.html">Shops &amp; Map</a>
+        <a class="nav-link" href="reseller.html">Resellers</a>
         <a class="nav-link" href="payments.html">Payments</a>
         <a class="nav-link active" href="faq.html">FAQ</a>
         <a class="nav-link" href="contact.html">Contact</a>
@@ -130,7 +130,7 @@
             <div class="faq-a"><p>The DMCA generally prohibits bypassing access controls on copyrighted materials. Cell phones often contain access controls that "lock" the phone to a particular network, and the DMCA generally prohibits <strong>unauthorized</strong> removal or modification of those controls. This is exactly why SIERRAUNLOCK only performs authorized, legal unlocks with proof of ownership — never unauthorized bypassing.</p></div></div>
 
           <div class="faq-item"><button class="faq-q" aria-expanded="false"><span>Q15 — Where can I find more information about mobile wireless device unlocking?</span><span class="faq-chevron">▾</span></button>
-            <div class="faq-a"><p>Consult consumer guides on Mobile Phone and Device Unlocking FAQs from your carrier, and join the SIERRAUNLOCK community for local, practical answers: our <strong>WhatsApp Channel</strong> and <strong>Facebook Group</strong> publish daily updates, price lists and tool alerts — or contact us directly at <strong>sierraunlock@gmail.com</strong> / +232 31 363 736.</p></div></div>
+            <div class="faq-a"><p>Consult consumer guides on Mobile Phone and Device Unlocking FAQs from your carrier, and join the SIERRAUNLOCK community for local, practical answers: our <strong>WhatsApp Channel</strong> and <strong>Facebook Group</strong> publish daily updates, price lists and tool alerts — or contact us directly at <strong>sierraunlock@gmail.com</strong> / <strong>+232 75 908 206</strong> (Alhassan) / <strong>+232 31 363 736</strong> (Baimba).</p></div></div>
         </div>
       </div>
     </section>
@@ -163,13 +163,15 @@
         <a href="services.html">Unlock Services</a>
         <a href="marketplace.html">Marketplace</a>
         <a href="shops.html">Shops &amp; Map</a>
+        <a href="reseller.html">Become a Reseller</a>
+        <a href="auth.html">👤 Sign In / Register</a>
         <a href="admin.html">Admin Dashboard</a>
       </div>
       <div class="footer-col">
         <h4>Contact</h4>
         <a href="mailto:sierraunlock@gmail.com">sierraunlock@gmail.com</a>
-        <a href="tel:+23231363736">+232 31 363 736</a>
-        <a href="tel:+23233469056">+232 33 469 056</a>
+        <a href="tel:+23275908206">+232 75 908 206 (Alhassan — Waterloo)</a>
+        <a href="tel:+23231363736">+232 31 363 736 (Baimba — Koidu)</a>
         <a href="https://github.com/sierraunlock-tech" target="_blank" rel="noopener">github.com/sierraunlock-tech</a>
       </div>
       <div class="footer-col">
@@ -181,7 +183,7 @@
       </div>
     </div>
     <div class="footer-bottom">
-      © <span id="year">2026</span> SIERRAUNLOCK • Unlock • Repair • Connect — Sierra Leone • <span id="siteVersion">v1.1.0</span>
+      © <span id="year">2026</span> SIERRAUNLOCK • Unlock • Repair • Connect — Sierra Leone • <span id="siteVersion">v1.5.0</span>
     </div>
   </footer>
 
@@ -216,7 +218,7 @@
           item.classList.toggle('hidden', !match);
           if (match) {
             visible++;
-            setOpen(item, term.length >= 2);   /* auto-open matches while searching */
+            setOpen(item, term.length >= 2);
           } else {
             setOpen(item, false);
           }

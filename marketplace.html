@@ -217,7 +217,7 @@
       <div class="footer-col">
         <h4>Contact</h4>
         <a href="mailto:sierraunlock@gmail.com">sierraunlock@gmail.com</a>
-        <a href="tel:+232754378475">+232 75 437 8475 (Alhassan — Waterloo)</a>
+        <a href="tel:+23275908206">+232 75 908 206 (Alhassan — Waterloo)</a>
         <a href="tel:+23231363736">+232 31 363 736 (Baimba — Koidu)</a>
         <a href="https://github.com/sierraunlock-tech" target="_blank" rel="noopener">github.com/sierraunlock-tech</a>
       </div>
@@ -230,14 +230,14 @@
       </div>
     </div>
     <div class="footer-bottom">
-      © <span id="year">2026</span> SIERRAUNLOCK • Unlock • Repair • Connect — Sierra Leone • <span id="siteVersion">v1.3.2</span>
+      © <span id="year">2026</span> SIERRAUNLOCK • Unlock • Repair • Connect — Sierra Leone • <span id="siteVersion">v1.5.0</span>
     </div>
   </footer>
 
   <script src="assets/js/security.js"></script>
   <script src="assets/js/main.js"></script>
   <script>
-    /* Marketplace v3 • catalog + filters + Seller Corner (orders → Alhassan WhatsApp) */
+    /* Marketplace v3 • catalog + filters + Seller Corner (orders → Alhassan WhatsApp 75 908 206) */
     (function () {
       const BASE = [
         { icon:'📱', img:null, name:'iPhone 11 Screen Assembly', brand:'Apple',    cat:'screens',    cond:'oem',  desc:'Fits: iPhone 11. In-cell panel, tested touch & true-tone. Fitted in-store or sealed box.', price:'From SLE 1,150' },
@@ -287,7 +287,7 @@
           card.querySelector('.prod-brand').textContent = p.brand;
           card.querySelector('.desc').textContent = p.desc;
           card.querySelector('.prod-price').textContent = p.price;
-          card.querySelector('a').href = 'https://wa.me/232754378475?text=' +
+          card.querySelector('a').href = 'https://wa.me/23275908206?text=' +
             encodeURIComponent('SIERRAUNLOCK MARKETPLACE ORDER\nItem: ' + p.name + '\nBrand: ' + p.brand + '\nCondition: ' + condLabel + '\nListed price: ' + p.price);
           grid.appendChild(card);
         });
@@ -339,7 +339,7 @@
           const arr = pending(); arr.unshift(listing);
           try { localStorage.setItem('su_pending_products', JSON.stringify(arr)); }
           catch (err) { alert('Storage full on this device — remove old submissions in Admin or use a smaller photo.'); return; }
-          window.open('https://wa.me/232754378475?text=' + encodeURIComponent(
+          window.open('https://wa.me/23275908206?text=' + encodeURIComponent(
             'SIERRAUNLOCK — SELLER LISTING (needs approval)\nSeller: ' + listing.seller + '\nPhone: ' + listing.phone +
             '\nPart type: ' + g('sCat') + '\nItem: ' + listing.name + '\nBrand: ' + listing.brand +
             '\nFits: ' + g('sFits') + '\nCondition: ' + g('sCond') + '\nPrice: ' + listing.price +

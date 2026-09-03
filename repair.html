@@ -16,7 +16,6 @@
   <link rel="stylesheet" href="assets/css/style.css">
   <link rel="stylesheet" href="assets/css/animations.css">
   <style>
-    /* EXT-05 page styles */
     .repair-hero{background:radial-gradient(1100px 480px at 85% -10%,rgba(30,181,58,.35),transparent 60%),radial-gradient(900px 420px at 10% 110%,rgba(0,114,198,.45),transparent 60%),linear-gradient(135deg,var(--sl-blue-dark) 0%,#06283F 55%,var(--sl-green-dark) 130%);color:#fff;padding:5.5rem 1.2rem 4rem;text-align:center}
     .repair-hero h1{font-size:clamp(2rem,5vw,3rem);font-weight:900;margin:1rem 0}
     .repair-hero p{max-width:780px;margin:0 auto;color:rgba(255,255,255,.92);font-size:1.05rem}
@@ -63,6 +62,7 @@
         <a class="nav-link active" href="repair.html">Repair</a>
         <a class="nav-link" href="marketplace.html">Marketplace</a>
         <a class="nav-link" href="shops.html">Shops &amp; Map</a>
+        <a class="nav-link" href="reseller.html">Resellers</a>
         <a class="nav-link" href="payments.html">Payments</a>
         <a class="nav-link" href="faq.html">FAQ</a>
         <a class="nav-link" href="contact.html">Contact</a>
@@ -84,7 +84,6 @@
       ⚠️ <strong>Back up your data before every repair.</strong> SIERRAUNLOCK is not liable for lost data. Read the <a href="#mustread" style="text-decoration:underline;font-weight:800">Must-Read rules</a> and the <a href="#terms" style="text-decoration:underline;font-weight:800">GTC Terms</a> below.
     </div>
 
-    <!-- REPAIR SERVICES -->
     <section class="section">
       <div class="section-head">
         <h2>What We Repair</h2>
@@ -104,7 +103,6 @@
       </div>
     </section>
 
-    <!-- MUST READ -->
     <section class="section section-alt" id="mustread">
       <div class="section-head">
         <h2>Most Important — Must Read</h2>
@@ -130,7 +128,6 @@
       </div>
     </section>
 
-    <!-- BOOKING FORM -->
     <section class="section" id="book">
       <div class="section-head">
         <h2>Book a Repair</h2>
@@ -166,7 +163,6 @@
       </div>
     </section>
 
-    <!-- FULL GTC TERMS -->
     <section class="section section-alt" id="terms">
       <div class="section-head">
         <h2>General Terms &amp; Conditions for Repair Service</h2>
@@ -237,13 +233,15 @@
         <a href="services.html">Unlock Services</a>
         <a href="marketplace.html">Marketplace</a>
         <a href="shops.html">Shops &amp; Map</a>
+        <a href="reseller.html">Become a Reseller</a>
+        <a href="auth.html">👤 Sign In / Register</a>
         <a href="admin.html">Admin Dashboard</a>
       </div>
       <div class="footer-col">
         <h4>Contact</h4>
         <a href="mailto:sierraunlock@gmail.com">sierraunlock@gmail.com</a>
-        <a href="tel:+23231363736">+232 31 363 736</a>
-        <a href="tel:+23233469056">+232 33 469 056</a>
+        <a href="tel:+23275908206">+232 75 908 206 (Alhassan — Waterloo)</a>
+        <a href="tel:+23231363736">+232 31 363 736 (Baimba — Koidu)</a>
         <a href="https://github.com/sierraunlock-tech" target="_blank" rel="noopener">github.com/sierraunlock-tech</a>
       </div>
       <div class="footer-col">
@@ -255,14 +253,14 @@
       </div>
     </div>
     <div class="footer-bottom">
-      © <span id="year">2026</span> SIERRAUNLOCK • Unlock • Repair • Connect — Sierra Leone • <span id="siteVersion">v1.1.0</span>
+      © <span id="year">2026</span> SIERRAUNLOCK • Unlock • Repair • Connect — Sierra Leone • <span id="siteVersion">v1.5.0</span>
     </div>
   </footer>
 
   <script src="assets/js/security.js"></script>
   <script src="assets/js/main.js"></script>
   <script>
-    /* EXT-05 • Repair booking → WhatsApp (no backend required) */
+    /* Repair booking → Alhassan's WhatsApp Desk */
     document.getElementById('repairForm').addEventListener('submit', function (e) {
       e.preventDefault();
       const g = (id) => document.getElementById(id).value.trim();
@@ -277,7 +275,7 @@
         'Hub: ' + g('rHub'),
         'I confirm I will back up my data before delivery.'
       ];
-      window.open('https://wa.me/23231363736?text=' + encodeURIComponent(lines.join('\n')), '_blank');
+      window.open('https://wa.me/23275908206?text=' + encodeURIComponent(lines.join('\n')), '_blank');
     });
   </script>
 </body>

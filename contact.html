@@ -16,7 +16,6 @@
   <link rel="stylesheet" href="assets/css/style.css">
   <link rel="stylesheet" href="assets/css/animations.css">
   <style>
-    /* EXT-10 page styles */
     .contact-hero{background:radial-gradient(1100px 480px at 85% -10%,rgba(30,181,58,.35),transparent 60%),radial-gradient(900px 420px at 10% 110%,rgba(0,114,198,.45),transparent 60%),linear-gradient(135deg,var(--sl-blue-dark) 0%,#06283F 55%,var(--sl-green-dark) 130%);color:#fff;padding:5rem 1.2rem 3.8rem;text-align:center}
     .contact-hero h1{font-size:clamp(2rem,5vw,3rem);font-weight:900;margin:1rem 0}
     .contact-hero p{max-width:780px;margin:0 auto;color:rgba(255,255,255,.92)}
@@ -65,6 +64,7 @@
         <a class="nav-link" href="repair.html">Repair</a>
         <a class="nav-link" href="marketplace.html">Marketplace</a>
         <a class="nav-link" href="shops.html">Shops &amp; Map</a>
+        <a class="nav-link" href="reseller.html">Resellers</a>
         <a class="nav-link" href="payments.html">Payments</a>
         <a class="nav-link" href="faq.html">FAQ</a>
         <a class="nav-link active" href="contact.html">Contact</a>
@@ -86,7 +86,6 @@
       ⚡ <strong>Fastest response:</strong> WhatsApp, Mon–Sat 8:00–18:30 GMT. Emails answered within 24 hours.
     </div>
 
-    <!-- JOIN BANNERS -->
     <section class="section">
       <div class="section-head">
         <h2>Join The Community — Bold &amp; Free</h2>
@@ -109,21 +108,19 @@
       </div>
     </section>
 
-    <!-- CHANNELS -->
     <section class="section section-alt">
       <div class="section-head">
         <h2>Every Way To Reach Us</h2>
         <div class="underline"></div>
       </div>
       <div class="container channel-grid">
-        <article class="card channel-card"><div class="icon" style="margin:0 auto">📞</div><h3>Call / WhatsApp Desk</h3><a class="big" href="tel:+23231363736">+232 31 363 736</a><a class="big" href="tel:+23233469056">+232 33 469 056</a><p>Quotes, bookings, payment confirmation.</p></article>
+        <article class="card channel-card"><div class="icon" style="margin:0 auto">📞</div><h3>Call / WhatsApp Desk</h3><a class="big" href="tel:+23275908206">+232 75 908 206 (Alhassan)</a><a class="big" href="tel:+23231363736">+232 31 363 736 (Baimba)</a><p>Quotes, bookings, payment confirmation.</p></article>
         <article class="card channel-card"><div class="icon" style="margin:0 auto">✉️</div><h3>Email</h3><a class="big" href="mailto:sierraunlock@gmail.com">sierraunlock@gmail.com</a><p>Business accounts, partnerships, documents.</p></article>
         <article class="card channel-card"><div class="icon" style="margin:0 auto">🧑‍💻</div><h3>GitHub (Development)</h3><a class="big" href="https://github.com/sierraunlock-tech" target="_blank" rel="noopener">github.com/sierraunlock-tech</a><p>Open development of the SIERRAUNLOCK platform.</p></article>
-        <article class="card channel-card"><div class="icon" style="margin:0 auto"></div><h3>Business Hours</h3><span class="big">Mon–Sat • 8:00–18:30</span><p>Sundays: emergency unlocks via WhatsApp only.</p></article>
+        <article class="card channel-card"><div class="icon" style="margin:0 auto">🕒</div><h3>Business Hours</h3><span class="big">Mon–Sat • 8:00–18:30</span><p>Sundays: emergency unlocks via WhatsApp only.</p></article>
       </div>
     </section>
 
-    <!-- HUBS -->
     <section class="section">
       <div class="section-head">
         <h2>Visit A Hub</h2>
@@ -145,7 +142,6 @@
       </div>
     </section>
 
-    <!-- BUSINESS FORM -->
     <section class="section section-alt" id="business">
       <div class="section-head">
         <h2>Business / Wholesale Application</h2>
@@ -201,13 +197,15 @@
         <a href="services.html">Unlock Services</a>
         <a href="marketplace.html">Marketplace</a>
         <a href="shops.html">Shops &amp; Map</a>
+        <a href="reseller.html">Become a Reseller</a>
+        <a href="auth.html">👤 Sign In / Register</a>
         <a href="admin.html">Admin Dashboard</a>
       </div>
       <div class="footer-col">
         <h4>Contact</h4>
         <a href="mailto:sierraunlock@gmail.com">sierraunlock@gmail.com</a>
-        <a href="tel:+23231363736">+232 31 363 736</a>
-        <a href="tel:+23233469056">+232 33 469 056</a>
+        <a href="tel:+23275908206">+232 75 908 206 (Alhassan — Waterloo)</a>
+        <a href="tel:+23231363736">+232 31 363 736 (Baimba — Koidu)</a>
         <a href="https://github.com/sierraunlock-tech" target="_blank" rel="noopener">github.com/sierraunlock-tech</a>
       </div>
       <div class="footer-col">
@@ -219,14 +217,14 @@
       </div>
     </div>
     <div class="footer-bottom">
-      © <span id="year">2026</span> SIERRAUNLOCK • Unlock • Repair • Connect — Sierra Leone • <span id="siteVersion">v1.1.0</span>
+      © <span id="year">2026</span> SIERRAUNLOCK • Unlock • Repair • Connect — Sierra Leone • <span id="siteVersion">v1.5.0</span>
     </div>
   </footer>
 
   <script src="assets/js/security.js"></script>
   <script src="assets/js/main.js"></script>
   <script>
-    /* EXT-10 • Business application → WhatsApp */
+    /* Business application → Alhassan's WhatsApp */
     document.getElementById('bizForm').addEventListener('submit', function (e) {
       e.preventDefault();
       const g = (id) => document.getElementById(id).value.trim();
@@ -241,7 +239,7 @@
         'Volume: ' + g('bVolume'),
         'About: ' + (g('bMsg') || '—')
       ];
-      window.open('https://wa.me/23231363736?text=' + encodeURIComponent(lines.join('\n')), '_blank');
+      window.open('https://wa.me/23275908206?text=' + encodeURIComponent(lines.join('\n')), '_blank');
     });
   </script>
 </body>

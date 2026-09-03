@@ -1,12 +1,12 @@
 /* =====================================================================
-   SIERRAUNLOCK • GPS SHOP MAP ENGINE v5 (numbers final-corrected)
-   Alhassan/Waterloo = +232 75 437 8475 • Baimba/Koidu = +232 31 363 736
+   SIERRAUNLOCK • GPS SHOP MAP ENGINE v6 (numbers FINAL)
+   Alhassan/Waterloo = +232 75 908 206 • Baimba/Koidu = +232 31 363 736
    ===================================================================== */
 'use strict';
 (function () {
 
   const HUBS = [
-    { name:'SIERRAUNLOCK Waterloo Hub', owner:'Alhassan Mansaray', area:'Tombo Park, Waterloo (opposite Peninsula School)', district:'Western Area', phone:'+232 75 437 8475', lat:8.3486, lng:-12.8201, verified:true, type:'Unlock Shop' },
+    { name:'SIERRAUNLOCK Waterloo Hub', owner:'Alhassan Mansaray', area:'Tombo Park, Waterloo (opposite Peninsula School)', district:'Western Area', phone:'+232 75 908 206', lat:8.3486, lng:-12.8201, verified:true, type:'Unlock Shop' },
     { name:'SIERRAUNLOCK Koidu Hub',    owner:'Baimba Conteh',     area:'Koidu City',                                       district:'Kono',         phone:'+232 31 363 736', lat:8.6447, lng:-10.9700, verified:true, type:'Engineering Hub' }
   ];
 
@@ -145,13 +145,13 @@
         if (isNaN(lat) || isNaN(lng)) {
           const area = g('shopArea').toLowerCase();
           const hit = Object.keys(TOWNS).find(t => area.includes(t));
-          if (!hit) { alert('Press "🎯 Get My GPS Position" for your exact location, or mention a known town in the Area field.'); return; }
+          if (!hit) { alert('Press "Get My GPS Position" for your exact location, or mention a known town in the Area field.'); return; }
           lat = TOWNS[hit][0]; lng = TOWNS[hit][1];
         }
         const shop = { name:g('shopName'), owner:g('ownerName'), area:g('shopArea'), district:g('shopDistrict'), phone:g('shopPhone'), type:g('shopType'), img:imgData, lat:lat, lng:lng, verified:false };
         const arr = loadUserShops(); arr.push(shop); saveUserShops(arr);
         renderMarkers(); updateNear(null);
-        window.open('https://wa.me/232754378475?text=' + encodeURIComponent(
+        window.open('https://wa.me/23275908206?text=' + encodeURIComponent(
           'SIERRAUNLOCK — NEW SHOP SUBMISSION\nShop: ' + shop.name + '\nType: ' + shop.type + '\nOwner: ' + shop.owner +
           '\nArea: ' + shop.area + ', ' + shop.district + '\nPhone: ' + shop.phone +
           '\nGPS: ' + lat.toFixed(6) + ', ' + lng.toFixed(6) + '\n(Shop snapshot photo attached in this chat)'
