@@ -1,11 +1,10 @@
 /* =====================================================================
-   SIERRAUNLOCK • CORE ENGINE v4
-   v4: business WhatsApp = Alhassan +232754378475 (central switch),
-       account gate (sign-in required to buy/sell/list), Resellers tab.
+   SIERRAUNLOCK • CORE ENGINE v5
+   v5: animated rotator line auto-injected into EVERY page hero.
    ===================================================================== */
 'use strict';
 
-/* 1 • CENTRAL WHATSAPP DESK SWITCH (all order/request flows → Alhassan) */
+/* 1 • CENTRAL WHATSAPP DESK SWITCH (all flows → Alhassan) */
 (function () {
   const orig = window.open.bind(window);
   window.open = function (url, ...rest) {
@@ -14,7 +13,7 @@
   };
 })();
 
-/* 2 • ACCOUNT GATE — register/sign-in required to buy, sell or list */
+/* 2 • ACCOUNT GATE — sign-in required to buy, sell or list */
 (function () {
   const GATED = ['unlockForm', 'repairForm', 'sellForm', 'shopForm', 'resForm', 'bizForm'];
   const user = () => sessionStorage.getItem('su_user');
@@ -31,7 +30,7 @@
   }, true);
 })();
 
-const SITE_VERSION = localStorage.getItem('su_version') || 'v1.3.0 • build 2026-08-30';
+const SITE_VERSION = localStorage.getItem('su_version') || 'v1.4.0 • build 2026-09-02';
 
 const TOOLS = [
   { icon:'🔓', name:'Unlock Codes',        tag:'All Brands',      img:null },
@@ -60,6 +59,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('a[href*="wa.me/23231363736"]').forEach(a => a.href = a.href.replace('23231363736', '232754378475'));
   injectResellerLink();
   injectAccountLink();
+  injectPageRotator();
   initNav();
   initRotator();
   initYearVersion();
@@ -67,6 +67,20 @@ document.addEventListener('DOMContentLoaded', () => {
   initToolsMarquee();
   initReveal();
 });
+
+/* NEW v5: put the animated green line inside EVERY page hero */
+function injectPageRotator() {
+  if (document.getElementById('rotatorText')) return;           /* index already has it */
+  const h1 = document.querySelector('section[class*="hero"] h1'); /* matches .hero, .services-hero, .mkt-hero, .shops-hero, .pay-hero, .res-hero … */
+  if (!h1) return;
+  const br = document.createElement('br');
+  const span = document.createElement('span');
+  span.className = 'rotator';
+  span.id = 'rotatorText';
+  span.textContent = ROTATOR_PHRASES[0];
+  h1.appendChild(br);
+  h1.appendChild(span);
+}
 
 function injectResellerLink() {
   const nav = document.getElementById('mainNav');

@@ -1,24 +1,24 @@
 /* =====================================================================
-   SIERRAUNLOCK • MOTION ENGINE v2
-   v2: flowing flag stripe, card shine sweep, growing underline,
-       floating hero orbs, faster marquee.
+   SIERRAUNLOCK • MOTION ENGINE v3
+   v3: animated rotator line on EVERY page hero + all v2 motion.
    ===================================================================== */
 
 /* 1 • ANIMATED GRADIENTS */
 .motto-bar{background-size:220% 220%;animation:gradientShift 9s ease infinite}
 @keyframes gradientShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
 
-/* 2 • ROLLING FLAG STRIPE (green→white→blue flows) */
+/* 2 • ROLLING FLAG STRIPE */
 .flag-stripe{background:repeating-linear-gradient(90deg,var(--sl-green) 0 33.3%,#fff 33.3% 66.6%,var(--sl-blue) 66.6% 100%);background-size:200% 100%;animation:stripeFlow 12s linear infinite}
 @keyframes stripeFlow{to{background-position:200% 0}}
 
-/* 3 • HERO TEXT ROTATOR */
-.rotator{display:inline-block;will-change:transform,opacity}
+/* 3 • HERO TEXT ROTATOR (now on every page) */
+.rotator{display:inline-block;will-change:transform,opacity;color:#7CF29C}
+section[class*="hero"] h1 .rotator{display:inline-block;margin-top:.35rem}
 .rotator.swap{animation:rotatorIn .55s ease both}
 @keyframes rotatorIn{from{opacity:0;transform:translateY(16px) rotateX(55deg)}to{opacity:1;transform:none}}
 
 /* 4 • FLOATING HERO ORBS */
-.hero{position:relative;overflow:hidden}
+.hero,.services-hero,.mkt-hero,.shops-hero,.pay-hero,.res-hero{position:relative;overflow:hidden}
 .hero::before,.hero::after{content:"";position:absolute;border-radius:50%;filter:blur(60px);opacity:.35;pointer-events:none}
 .hero::before{width:340px;height:340px;background:var(--sl-green);top:-120px;left:-100px;animation:orbFloat 11s ease-in-out infinite alternate}
 .hero::after{width:300px;height:300px;background:var(--sl-blue);bottom:-110px;right:-90px;animation:orbFloat 13s ease-in-out infinite alternate-reverse}
