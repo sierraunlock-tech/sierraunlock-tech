@@ -4,6 +4,36 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Spare Parts Marketplace | SIERRAUNLOCK</title>
+  <!--
+    =====================================================================
+    SIERRAUNLOCK • SPARE PARTS MARKETPLACE — marketplace.html (v2 • DOCUMENTED)
+    ---------------------------------------------------------------------
+    WHAT IS THIS FILE?
+    The zero-fraud marketplace where customers buy and sellers list
+    genuine phone, computer and electronics spare parts. Every listing
+    shows a real photo, states what it fits, and requires admin approval.
+
+    SECTION MAP:
+    01  Meta tags (title, description, OG image, theme color)
+    02  Fonts & Core CSS
+    03  Page-specific styles (marketplace hero, filters, product grid, trust shield)
+    04  Motto bar
+    05  Header with Services ▾ dropdown
+    06  Marketplace hero + legal strip
+    07  Browse parts (filter bar + search + product grid)
+    08  Trust Shield (6 anti-fraud rules)
+    09  Seller Corner (rules + submission form → WhatsApp)
+    10  Footer
+    11  Scripts (security + main + marketplace engine)
+
+    CRITICAL NUMBER MAP:
+    • Alhassan phone / Orange Money / WhatsApp desk : +232 75 908 206
+    • Alhassan Binance Pay ID (crypto ONLY)         : 754378475
+    • Baimba phone / Koidu hub                      : +232 31 363 736
+
+    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
+    =====================================================================
+  -->
   <link rel="icon" type="image/png" href="assets/images/brand/favicon.png">
   <link rel="apple-touch-icon" href="assets/images/brand/favicon.png">
   <meta name="description" content="Buy & sell genuine phone, computer and electronics spare parts in Sierra Leone — new, used-tested and second-hand. Photos, clear brands, zero fraud.">
@@ -65,10 +95,12 @@
 </head>
 <body>
 
+  <!-- 04 • MOTTO BAR -->
   <div class="motto-bar">
     <span>IT CAN ONLY BE GOD</span><span class="motto-divider">✦</span><span>LEARN BEFORE YOU EARN</span>
   </div>
 
+  <!-- 05 • HEADER WITH SERVICES DROPDOWN -->
   <header class="site-header">
     <div class="header-inner">
       <a href="index.html" class="brand" aria-label="SIERRAUNLOCK home">
@@ -78,10 +110,15 @@
       <nav class="main-nav" id="mainNav" aria-label="Main navigation">
         <a class="nav-link" href="index.html">Home</a>
         <a class="nav-link" href="about.html">About</a>
-        <a class="nav-link" href="services.html">Unlock Services</a>
-        <a class="nav-link" href="repair.html">Repair</a>
-        <a class="nav-link active" href="marketplace.html">Marketplace</a>
-        <a class="nav-link" href="shops.html">Shops &amp; Map</a>
+        <div class="nav-item">
+          <a class="nav-link" href="services.html">Services ▾</a>
+          <div class="nav-drop">
+            <a href="services.html">🔓 Unlock Services</a>
+            <a href="repair.html">🔩 Repair</a>
+            <a href="marketplace.html">🧰 Marketplace</a>
+            <a href="shops.html">📍 Shops &amp; Map</a>
+          </div>
+        </div>
         <a class="nav-link" href="reseller.html">Resellers</a>
         <a class="nav-link" href="payments.html">Payments</a>
         <a class="nav-link" href="faq.html">FAQ</a>
@@ -94,6 +131,7 @@
   </header>
 
   <main>
+    <!-- 06 • MARKETPLACE HERO + LEGAL STRIP -->
     <section class="mkt-hero">
       <p class="hero-kicker">Phones • Computers • Electronics Accessories • Second-Hand Welcome</p>
       <h1>Spare Parts Marketplace</h1>
@@ -104,6 +142,7 @@
       🛡️ <strong>Zero-fraud marketplace.</strong> Real photos, honest conditions, tested parts, serial checks. Want to list your SHOP instead? <a href="shops.html" style="text-decoration:underline;font-weight:800">Add it on the Map page</a>.
     </div>
 
+    <!-- 07 • BROWSE PARTS -->
     <section class="section">
       <div class="section-head">
         <h2>Browse Parts &amp; Devices</h2>
@@ -129,6 +168,7 @@
       </div>
     </section>
 
+    <!-- 08 • TRUST SHIELD -->
     <section class="section section-alt">
       <div class="section-head">
         <h2>The SIERRAUNLOCK Trust Shield</h2>
@@ -145,6 +185,7 @@
       </div>
     </section>
 
+    <!-- 09 • SELLER CORNER -->
     <section class="section" id="sell">
       <div class="section-head">
         <h2>Seller Corner — Sell Your Parts</h2>
@@ -195,6 +236,7 @@
     </section>
   </main>
 
+  <!-- 10 • FOOTER -->
   <footer class="site-footer">
     <div class="footer-grid container">
       <div class="footer-col">
@@ -234,6 +276,7 @@
     </div>
   </footer>
 
+  <!-- 11 • SCRIPTS -->
   <script src="assets/js/security.js"></script>
   <script src="assets/js/main.js"></script>
   <script>

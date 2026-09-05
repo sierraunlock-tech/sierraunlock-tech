@@ -4,6 +4,43 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Unlock Services — 100% Legal | SIERRAUNLOCK</title>
+  <!--
+    =====================================================================
+    SIERRAUNLOCK • UNLOCK SERVICES — services.html (v2 • DOCUMENTED)
+    ---------------------------------------------------------------------
+    WHAT IS THIS FILE?
+    The core legal unlocking service page. It explains:
+    • What cell phone unlocking means and how it works
+    • The 4-step unlock process (Request → Quote → Unlock → Confirm)
+    • Our strict IMEI & Anti-Fraud policy (never altering IMEI)
+    • The 6 CTIA Consumer Standards we follow
+    • The unlock request form (routes to Alhassan's WhatsApp desk)
+    • Wholesale/business account CTA
+
+    SECTION MAP:
+    01  Meta tags
+    02  Fonts & Core CSS
+    03  Page-specific styles (services hero, explain grid, legal panel)
+    04  Motto bar
+    05  Header with Services ▾ dropdown
+    06  Services hero + legal strip
+    07  What is cell phone unlocking? (with brands list)
+    08  How your unlock works (4 steps)
+    09  IMEI & Anti-Fraud policy panel
+    10  CTIA Consumer Standards (6 principles)
+    11  Unlock request form (routes to Alhassan's WhatsApp)
+    12  Wholesale CTA
+    13  Footer
+    14  Scripts (security + main + unlock form handler)
+
+    CRITICAL NUMBER MAP:
+    • Alhassan phone / Orange Money / WhatsApp desk : +232 75 908 206
+    • Alhassan Binance Pay ID (crypto ONLY)         : 754378475
+    • Baimba phone / Koidu hub                      : +232 31 363 736
+
+    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
+    =====================================================================
+  -->
   <link rel="icon" type="image/png" href="assets/images/brand/favicon.png">
   <link rel="apple-touch-icon" href="assets/images/brand/favicon.png">
   <meta name="description" content="Legal carrier & network unlocking in Sierra Leone. iPhone, Samsung, Tecno, Infinix and more. IMEI tampering is illegal — we unlock the right way.">
@@ -58,10 +95,12 @@
 </head>
 <body>
 
+  <!-- 04 • MOTTO BAR -->
   <div class="motto-bar">
     <span>IT CAN ONLY BE GOD</span><span class="motto-divider">✦</span><span>LEARN BEFORE YOU EARN</span>
   </div>
 
+  <!-- 05 • HEADER WITH SERVICES DROPDOWN -->
   <header class="site-header">
     <div class="header-inner">
       <a href="index.html" class="brand" aria-label="SIERRAUNLOCK home">
@@ -71,10 +110,15 @@
       <nav class="main-nav" id="mainNav" aria-label="Main navigation">
         <a class="nav-link" href="index.html">Home</a>
         <a class="nav-link" href="about.html">About</a>
-        <a class="nav-link active" href="services.html">Unlock Services</a>
-        <a class="nav-link" href="repair.html">Repair</a>
-        <a class="nav-link" href="marketplace.html">Marketplace</a>
-        <a class="nav-link" href="shops.html">Shops &amp; Map</a>
+        <div class="nav-item">
+          <a class="nav-link active" href="services.html">Services ▾</a>
+          <div class="nav-drop">
+            <a href="services.html">🔓 Unlock Services</a>
+            <a href="repair.html">🔩 Repair</a>
+            <a href="marketplace.html">🧰 Marketplace</a>
+            <a href="shops.html">📍 Shops &amp; Map</a>
+          </div>
+        </div>
         <a class="nav-link" href="reseller.html">Resellers</a>
         <a class="nav-link" href="payments.html">Payments</a>
         <a class="nav-link" href="faq.html">FAQ</a>
@@ -87,6 +131,7 @@
   </header>
 
   <main>
+    <!-- 06 • SERVICES HERO + LEGAL STRIP -->
     <section class="services-hero">
       <p class="hero-kicker">100% Legal • Owner-Verified • CTIA-Aligned</p>
       <h1>Network &amp; Carrier Unlocking</h1>
@@ -97,6 +142,7 @@
       ⚠️ <strong>IMEI / blacklist tampering is ILLEGAL.</strong> Every unlock on this platform is a legal carrier unlock. See our full policy <a href="#legal" style="text-decoration:underline;font-weight:800">below</a>.
     </div>
 
+    <!-- 07 • WHAT IS CELL PHONE UNLOCKING? -->
     <section class="section">
       <div class="section-head">
         <h2>What Is Cell Phone Unlocking?</h2>
@@ -122,6 +168,7 @@
       </div>
     </section>
 
+    <!-- 08 • HOW YOUR UNLOCK WORKS -->
     <section class="section section-alt">
       <div class="section-head">
         <h2>How Your Unlock Works</h2>
@@ -136,6 +183,7 @@
       </div>
     </section>
 
+    <!-- 09 • IMEI & ANTI-FRAUD POLICY -->
     <section class="section" id="legal">
       <div class="section-head">
         <h2>Our IMEI &amp; Anti-Fraud Policy</h2>
@@ -169,6 +217,7 @@
       </div>
     </section>
 
+    <!-- 10 • CTIA CONSUMER STANDARDS -->
     <section class="section section-alt">
       <div class="section-head">
         <h2>The CTIA Consumer Standards We Follow</h2>
@@ -185,6 +234,7 @@
       </div>
     </section>
 
+    <!-- 11 • UNLOCK REQUEST FORM -->
     <section class="section" id="request">
       <div class="section-head">
         <h2>Request an Unlock Now</h2>
@@ -218,6 +268,7 @@
       </div>
     </section>
 
+    <!-- 12 • WHOLESALE CTA -->
     <section class="section wholesale">
       <div class="container">
         <h2>Business &amp; Wholesale Unlock Accounts</h2>
@@ -230,6 +281,7 @@
     </section>
   </main>
 
+  <!-- 13 • FOOTER -->
   <footer class="site-footer">
     <div class="footer-grid container">
       <div class="footer-col">
@@ -269,6 +321,7 @@
     </div>
   </footer>
 
+  <!-- 14 • SCRIPTS -->
   <script src="assets/js/security.js"></script>
   <script src="assets/js/main.js"></script>
   <script>

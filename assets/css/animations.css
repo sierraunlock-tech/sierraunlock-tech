@@ -1,18 +1,39 @@
 /* =====================================================================
-   SIERRAUNLOCK • MOTION ENGINE v5
-   v5: hero entrance stagger, nav underline grow, perfect-fit motion,
-       buttery easing, zero overflow on any device.
+   SIERRAUNLOCK • MOTION ENGINE — animations.css (v6 • DOCUMENTED)
+   ---------------------------------------------------------------------
+   WHAT IS THIS FILE?
+   The "Movement Brain" of the website. Every animation you see —
+   flowing flag stripe, rotating hero text, floating light orbs,
+   scrolling tools marquee, card shine, dropdown drop-in — lives here.
+
+   SECTION MAP:
+   01  Animated gradient on the motto bar
+   02  Rolling Sierra Leone flag stripe under the header
+   03  Hero rotator text swap (brand lines)
+   04  Hero entrance stagger (content fades up in order)
+   05  Floating blurred light orbs behind every hero
+   06  Nav link underline grow on hover
+   07  Rotating tools marquee (auto-scroll, pauses on hover)
+   08  Scroll reveal + growing section underline
+   09  Card shine sweep on hover
+   10  Badge & button shine sweep
+   11  Logo tilt shine
+   12  Dropdown menu drop-in motion (Services ▾)
+   13  Accessibility — kills all motion for reduced-motion users
+
+   OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu hubs, Sierra Leone
+   RULE: NEVER delete Section 13 — it is an accessibility requirement.
    ===================================================================== */
 
-/* 1 • ANIMATED GRADIENTS */
+/* 01 • ANIMATED GRADIENTS — motto bar colors slowly flow left/right */
 .motto-bar{background-size:220% 220%;animation:gradientShift 12s ease infinite}
 @keyframes gradientShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
 
-/* 2 • ROLLING FLAG STRIPE */
+/* 02 • ROLLING FLAG STRIPE — green/white/blue ribbon slides forever */
 .flag-stripe{background:repeating-linear-gradient(90deg,var(--sl-green) 0 33.3%,#fff 33.3% 66.6%,var(--sl-blue) 66.6% 100%);background-size:200% 100%;animation:stripeFlow 8s linear infinite}
 @keyframes stripeFlow{to{background-position:200% 0}}
 
-/* 3 • HERO TEXT ROTATOR — wraps on phones, one line on big screens */
+/* 03 • HERO TEXT ROTATOR — swaps brand lines; wraps on phones only */
 .rotator{display:inline-block;will-change:transform,opacity}
 section[class*="hero"] h1 .rotator,[class*="-hero"] h1 .rotator{display:inline-block;margin-top:.3rem}
 @media (min-width:701px){.rotator{white-space:nowrap}}
@@ -20,7 +41,7 @@ section[class*="hero"] h1 .rotator,[class*="-hero"] h1 .rotator{display:inline-b
 .rotator.swap{animation:rotatorIn .6s cubic-bezier(.2,.8,.2,1) both}
 @keyframes rotatorIn{from{opacity:0;transform:translateY(18px) rotateX(45deg);filter:blur(3px)}to{opacity:1;transform:none;filter:blur(0)}}
 
-/* 4 • HERO ENTRANCE STAGGER (powerful first impression) */
+/* 04 • HERO ENTRANCE STAGGER — hero children fade up one after another */
 .hero-inner>*{animation:fadeUp .8s cubic-bezier(.2,.8,.2,1) both}
 .hero-inner>*:nth-child(2){animation-delay:.1s}
 .hero-inner>*:nth-child(3){animation-delay:.2s}
@@ -28,18 +49,18 @@ section[class*="hero"] h1 .rotator,[class*="-hero"] h1 .rotator{display:inline-b
 .hero-inner>*:nth-child(5){animation-delay:.4s}
 @keyframes fadeUp{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:none}}
 
-/* 5 • FLOATING HERO ORBS (clipped inside hero — no overflow) */
+/* 05 • FLOATING HERO ORBS — soft blurred lights, clipped inside hero */
 .hero,.services-hero,.mkt-hero,.shops-hero,.pay-hero,.res-hero,.about-hero,.faq-hero,.repair-hero,.contact-hero{position:relative;overflow:hidden}
 .hero::before,.hero::after,[class*="-hero"]::before,[class*="-hero"]::after{content:"";position:absolute;border-radius:50%;filter:blur(80px);opacity:.25;pointer-events:none}
 .hero::before,[class*="-hero"]::before{width:min(400px,60vw);height:min(400px,60vw);background:var(--sl-green);top:-150px;left:-100px;animation:orbFloat 14s ease-in-out infinite alternate}
 .hero::after,[class*="-hero"]::after{width:min(350px,55vw);height:min(350px,55vw);background:var(--sl-blue);bottom:-150px;right:-100px;animation:orbFloat 16s ease-in-out infinite alternate-reverse}
 @keyframes orbFloat{from{transform:translate(0,0) scale(1)}to{transform:translate(70px,45px) scale(1.12)}}
 
-/* 6 • NAV LINK UNDERLINE GROW */
+/* 06 • NAV LINK UNDERLINE GROW — gradient line grows on hover */
 .nav-link::before{content:"";position:absolute;left:0;right:100%;bottom:-4px;height:3px;border-radius:3px;background:var(--grad-brand);transition:right .3s ease}
 .nav-link:hover::before{right:0}
 
-/* 7 • ROTATING TOOLS MARQUEE */
+/* 07 • ROTATING TOOLS MARQUEE — infinite scroll, pauses on hover */
 .tools-section{padding:3.4rem 0 3.8rem;background:linear-gradient(180deg,#fff 0%,var(--paper) 100%);overflow:hidden}
 .marquee{position:relative;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
 .marquee-track{display:flex;width:max-content;animation:marqueeScroll 35s linear infinite;padding:.6rem 0}
@@ -54,29 +75,33 @@ section[class*="hero"] h1 .rotator,[class*="-hero"] h1 .rotator{display:inline-b
 .tool-name{font-weight:800;font-size:.95rem;line-height:1.25}
 .tool-tag{font-size:.72rem;color:var(--ink-soft);letter-spacing:.08em;text-transform:uppercase;margin-top:.2rem;font-weight:600}
 
-/* 8 • SCROLL REVEAL + GROWING UNDERLINE */
+/* 08 • SCROLL REVEAL + GROWING UNDERLINE — sections wake up on scroll */
 .reveal{opacity:0;transform:translateY(28px);transition:opacity .8s cubic-bezier(.2,.8,.2,1),transform .8s cubic-bezier(.2,.8,.2,1)}
 .reveal.reveal-in{opacity:1;transform:none}
 .section-head .underline{width:0;transition:width 1s cubic-bezier(.2,.8,.2,1) .2s}
 .section-head.reveal-in .underline{width:100px}
 
-/* 9 • CARD SHINE SWEEP */
+/* 09 • CARD SHINE SWEEP — green light sweeps across cards on hover */
 .card{position:relative;overflow:hidden}
 .card::after{content:"";position:absolute;inset:0;background:linear-gradient(120deg,transparent 30%,rgba(30,181,58,.08) 50%,transparent 70%);transform:translateX(-120%);transition:transform .8s;pointer-events:none}
 .card:hover::after{transform:translateX(120%)}
 
-/* 10 • BADGE & BUTTON SHINE */
+/* 10 • BADGE & BUTTON SHINE — white shine on payment badges & CTAs */
 .badge{transition:transform .3s,border-color .3s,box-shadow .3s}
 .badge:hover{transform:translateY(-4px);border-color:var(--sl-green);box-shadow:var(--shadow-2)}
 .btn-wa,.btn-fb,.btn-brand{position:relative;overflow:hidden}
 .btn-wa::after,.btn-fb::after,.btn-brand::after{content:"";position:absolute;inset:0;background:linear-gradient(120deg,transparent 30%,rgba(255,255,255,.25) 50%,transparent 70%);transform:translateX(-120%);transition:transform .6s}
 .btn-wa:hover::after,.btn-fb:hover::after,.btn-brand:hover::after{transform:translateX(120%)}
 
-/* 11 • LOGO SHINE */
+/* 11 • LOGO SHINE — logo tilts & grows slightly on hover */
 .brand-logo{transition:transform .4s cubic-bezier(.2,.8,.2,1)}
 .brand:hover .brand-logo{transform:rotate(-6deg) scale(1.08)}
 
-/* 12 • ACCESSIBILITY */
+/* 12 • DROPDOWN MENU MOTION — Services ▾ panel drops in smoothly */
+.nav-item:hover .nav-drop,.nav-item.open .nav-drop{animation:dropIn .25s cubic-bezier(.2,.8,.2,1) both}
+@keyframes dropIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+
+/* 13 • ACCESSIBILITY — respect users who prefer reduced motion */
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation:none!important;transition:none!important}
   .marquee{overflow-x:auto;-webkit-mask-image:none;mask-image:none}

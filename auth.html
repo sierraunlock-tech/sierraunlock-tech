@@ -5,12 +5,40 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex">
   <title>Sign In / Create Account | SIERRAUNLOCK</title>
+  <!--
+    =====================================================================
+    SIERRAUNLOCK • SIGN IN / CREATE ACCOUNT — auth.html (v2 • DOCUMENTED)
+    ---------------------------------------------------------------------
+    WHAT IS THIS FILE?
+    The customer authentication gateway. Users create a free account or
+    sign in here. A verified account is required by the "Account Gate"
+    (in main.js) to buy tools, sell spare parts, list a shop on the map,
+    or submit a reseller application.
+
+    SECTION MAP:
+    01  Meta tags (noindex so Google doesn't index the login page)
+    02  Fonts & Core CSS
+    03  Page-specific styles (auth card, tabs, demo box)
+    04  Motto bar
+    05  Auth card (Create Account tab + Sign In tab)
+    06  EmailJS CDN + Security + Auth engine scripts
+
+    SECURITY NOTES:
+    • Protected by `meta name="robots" content="noindex"`.
+    • OTP verification via EmailJS (real email delivery).
+    • Brute-force protection & rate limits handled in auth.js.
+    • Honeypot fields auto-injected by security.js.
+
+    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
+    =====================================================================
+  -->
   <link rel="icon" type="image/png" href="assets/images/brand/favicon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/css/style.css">
   <style>
+    /* Auth-specific styles — keeps the login card clean and centered */
     .auth-wrap{min-height:80vh;display:grid;place-items:center;padding:2.5rem 1rem;background:radial-gradient(900px 420px at 10% 0%,rgba(30,181,58,.25),transparent 60%),radial-gradient(900px 420px at 90% 100%,rgba(0,114,198,.3),transparent 60%),var(--paper)}
     .auth-card{background:#fff;border-radius:var(--radius-lg);box-shadow:var(--shadow-2);max-width:460px;width:100%;padding:2.2rem;border-top:6px solid var(--sl-green)}
     .auth-card h2{text-align:center;margin-bottom:.3rem}
@@ -30,19 +58,23 @@
   </style>
 </head>
 <body>
+  <!-- 04 • MOTTO BAR -->
   <div class="motto-bar">
     <span>IT CAN ONLY BE GOD</span><span class="motto-divider">✦</span><span>LEARN BEFORE YOU EARN</span>
   </div>
 
+  <!-- 05 • AUTH CARD (Create Account + Sign In tabs) -->
   <div class="auth-wrap">
     <div class="auth-card">
       <h2>🔐 SIERRAUNLOCK Account</h2>
       <p class="auth-sub">One free account to buy tools, sell parts, list your shop and track every order.</p>
+      
       <div class="auth-tabs" id="authTabs">
         <button id="tabReg" class="active">Create Account</button>
         <button id="tabIn">Sign In</button>
       </div>
 
+      <!-- Create Account Panel -->
       <div id="regPanel">
         <div class="a-field"><label>Full Name *</label><input id="rName" placeholder="e.g. Abdul Kamara"></div>
         <div class="a-field"><label>Phone / WhatsApp *</label><input id="rPhone" placeholder="+232 ..."></div>
@@ -57,12 +89,14 @@
         </div>
       </div>
 
+      <!-- Sign In Panel -->
       <div id="inPanel" hidden>
         <div class="a-field"><label>Email</label><input id="iEmail" type="email" placeholder="you@example.com"></div>
         <div class="a-field"><label>Password</label><input id="iPass" type="password" placeholder="••••••"></div>
         <button class="btn btn-brand" id="signInBtn" style="width:100%">SIGN IN</button>
       </div>
 
+      <!-- Why create an account? -->
       <ul class="why">
         <li>Verification code protects your account from fraud.</li>
         <li>Receipts &amp; order history tied to your phone/email.</li>
@@ -71,6 +105,7 @@
     </div>
   </div>
 
+  <!-- 06 • SCRIPTS (EmailJS CDN + Security + Auth engine) -->
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <script src="assets/js/security.js"></script>
   <script src="assets/js/auth.js"></script>

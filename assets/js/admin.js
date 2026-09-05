@@ -1,25 +1,64 @@
 /* =====================================================================
-   SIERRAUNLOCK • ADMIN DASHBOARD ENGINE (final clean build)
-   File : assets/js/admin.js
-   Default PIN: 2026 (change in Settings after first login)
+   SIERRAUNLOCK • ADMIN DASHBOARD ENGINE — admin.js (v2 • DOCUMENTED + HARDENED)
+   ---------------------------------------------------------------------
+   WHAT IS THIS FILE?
+   The private "control room" of the platform (admin.html). Founders use
+   it to: view live stats, set the SLE rate, set tool pricing, approve
+   seller listings & community shops, publish marketplace items, log
+   repair/unlock jobs, change the site version and change the admin PIN.
+
+   SECTION MAP:
+   01  Storage helpers
+   02  Boot (login gate + 30-min inactivity auto-logout)
+   03  Tab switching
+   04  Login + brute-force lockout (5 wrong tries = 60 s freeze)
+   05  Overview stats
+   06  SLE exchange rate
+   07  Tool pricing (supplier cost + $5-$10 margin)
+   08  Seller submissions (approve / reject)
+   09  Community shops (verify / remove)
+   10  Marketplace listings (publish / remove)
+   11  Jobs board (log / advance / delete)
+   12  Settings (version, PIN change, danger zone)
+
+   SECURITY NOTES:
+   • PIN is stored base64-encoded (light obfuscation) — CHANGE DEFAULT 2026!
+   • The brute-force lockout lives HERE (security.js must not duplicate it).
+   • Admin session expires automatically after 30 minutes of inactivity.
+
+   OWNER: SIERRAUNLOCK Founders • Waterloo / Koidu, Sierra Leone
    ===================================================================== */
 'use strict';
 (function () {
+
+  /* 01 • STORAGE HELPERS — safe JSON read/write on localStorage */
   const $ = (id) => document.getElementById(id);
   const get = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } };
   const set = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 
   const TOOL_NAMES = ['Unlock Codes','FRP Reset','Flashing & Firmware','Network Config','Screen Replacement','Battery Swap','Chip-Level Repair','Data Recovery','Laptop Repair','Spare Parts Sourcing','Legal IMEI Check','OS Optimization'];
 
+  /* 02 • BOOT — show login or dashboard; start session watchdog */
+  const SESSION_MS = 30 * 60 * 1000;                    /* 30 minutes inactivity = logout */
+  const touchSession = () => sessionStorage.setItem('su_admin_t', String(Date.now()));
+  function checkSession() {
+    if (sessionStorage.getItem('su_admin_ok') !== '1') return;
+    const t = parseInt(sessionStorage.getItem('su_admin_t') || '0', 10);
+    if (Date.now() - t > SESSION_MS) { sessionStorage.removeItem('su_admin_ok'); showLogin(); }
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
-    if (!$('pinInput')) return;
+    if (!$('pinInput')) return;                          /* only runs on admin.html */
     (sessionStorage.getItem('su_admin_ok') === '1') ? showDash() : showLogin();
     $('loginBtn').addEventListener('click', tryLogin);
     $('pinInput').addEventListener('keydown', e => { if (e.key === 'Enter') tryLogin(); });
     $('logoutBtn').addEventListener('click', () => { sessionStorage.removeItem('su_admin_ok'); showLogin(); });
+    document.addEventListener('click', () => { if (sessionStorage.getItem('su_admin_ok') === '1') touchSession(); }, true);
+    setInterval(checkSession, 30000);                    /* watchdog every 30 s */
     wireTabs(); wireRates(); wirePricing(); wirePending(); wireShops(); wireProducts(); wireJobs(); wireSettings();
   });
 
+  /* 03 • TAB SWITCHING — left menu shows/hides dashboard panels */
   function wireTabs() {
     document.querySelectorAll('.adm-tab').forEach(t => t.addEventListener('click', () => {
       document.querySelectorAll('.adm-tab').forEach(x => x.classList.remove('active'));
@@ -33,18 +72,33 @@
   function showLogin() { $('loginView').hidden = false; $('dashView').hidden = true; }
   function showDash()  { $('loginView').hidden = true;  $('dashView').hidden = false; renderAll(); }
 
+  /* 04 • LOGIN + BRUTE-FORCE LOCKOUT — 5 wrong tries = 60 s freeze */
+  const LOCK_MAX = 5, LOCK_MS = 60000;
+  const lockGet = () => get('su_admin_lock', { fails: 0, until: 0 });
+  const lockSet = (s) => set('su_admin_lock', s);
+
   function tryLogin() {
+    const rem = Math.max(0, lockGet().until - Date.now());
+    if (rem > 0) { $('loginErr').textContent = '🔒 Too many wrong tries. Locked for ' + Math.ceil(rem / 1000) + ' s.'; return; }
     const ok = btoa($('pinInput').value) === (localStorage.getItem('su_pin') || btoa('2026'));
-    if (ok) { sessionStorage.setItem('su_admin_ok', '1'); $('pinInput').value = ''; $('loginErr').textContent = ''; showDash(); }
-    else {
+    if (ok) {
+      lockSet({ fails: 0, until: 0 });                   /* clear lock on success */
+      sessionStorage.setItem('su_admin_ok', '1');
+      touchSession();
+      $('pinInput').value = ''; $('loginErr').textContent = '';
+      showDash();
+    } else {
+      const s = lockGet(); s.fails += 1;
+      if (s.fails >= LOCK_MAX) { s.until = Date.now() + LOCK_MS; s.fails = 0; $('loginErr').textContent = '🔒 5 wrong tries — locked for 60 seconds.'; }
+      else { $('loginErr').textContent = 'Wrong PIN (' + s.fails + '/' + LOCK_MAX + '). Default is 2026 until you change it in Settings.'; }
+      lockSet(s);
       const c = $('loginCard'); c.classList.remove('shake'); void c.offsetWidth; c.classList.add('shake');
-      $('loginErr').textContent = 'Wrong PIN. Default is 2026 until you change it in Settings.';
     }
   }
 
   function renderAll() { renderOverview(); renderPending(); renderShops(); renderProducts(); renderJobs(); renderSettings(); }
 
-  /* ---- OVERVIEW ---- */
+  /* 05 • OVERVIEW STATS — live counters on the dashboard */
   function renderOverview() {
     const jobs = get('su_jobs', []), shops = get('su_shops', []), prods = get('su_products', []), pend = get('su_pending_products', []);
     $('stJobs').textContent = jobs.length;
@@ -53,10 +107,10 @@
     $('stPendingProd').textContent = pend.length;
     $('stProducts').textContent = prods.length;
     $('stRate').textContent = (parseFloat(localStorage.getItem('su_rate_sle')) || 22.5).toFixed(2);
-    $('stVersion').textContent = localStorage.getItem('su_version') || 'v1.1.0';
+    $('stVersion').textContent = localStorage.getItem('su_version') || 'v2.0.0';
   }
 
-  /* ---- RATES ---- */
+  /* 06 • SLE EXCHANGE RATE — feeds the Payments live converter */
   function wireRates() {
     $('rateSave').addEventListener('click', () => {
       const v = parseFloat($('rateInput').value);
@@ -67,7 +121,7 @@
     });
   }
 
-  /* ---- PRICING (cost + $5–$10 margin) ---- */
+  /* 07 • TOOL PRICING — private cost + margin math (auto-saves on typing) */
   function wirePricing() {
     const box = $('pricingRows');
     const pricing = get('su_pricing', {});
@@ -94,7 +148,7 @@
     box.addEventListener('change', save);
   }
 
-  /* ---- SELLER SUBMISSIONS ---- */
+  /* 08 • SELLER SUBMISSIONS — approve publishes to marketplace, reject deletes */
   function renderPending() {
     const arr = get('su_pending_products', []);
     const box = $('pendingList');
@@ -126,7 +180,7 @@
     });
   }
 
-  /* ---- SHOPS ---- */
+  /* 09 • COMMUNITY SHOPS — verify pins on the GPS map or remove them */
   function renderShops() {
     const arr = get('su_shops', []);
     $('shopList').innerHTML = arr.length ? arr.map((s, i) =>
@@ -150,7 +204,7 @@
     });
   }
 
-  /* ---- MARKETPLACE ---- */
+  /* 10 • MARKETPLACE — publish new listings or remove live ones */
   function renderProducts() {
     const arr = get('su_products', []);
     $('prodList').innerHTML = arr.length ? arr.map((p, i) =>
@@ -181,7 +235,7 @@
     });
   }
 
-  /* ---- JOBS ---- */
+  /* 11 • JOBS BOARD — track every job: pending → progress → solved */
   function renderJobs() {
     const arr = get('su_jobs', []);
     $('jobList').innerHTML = arr.length ? arr.map((j, i) =>
@@ -214,9 +268,9 @@
     });
   }
 
-  /* ---- SETTINGS ---- */
+  /* 12 • SETTINGS — version label, PIN change, danger-zone wipe */
   function renderSettings() {
-    $('verInput').value = localStorage.getItem('su_version') || 'v1.1.0';
+    $('verInput').value = localStorage.getItem('su_version') || 'v2.0.0';
     $('rateInput').value = (parseFloat(localStorage.getItem('su_rate_sle')) || 22.5);
   }
   function wireSettings() {
@@ -238,4 +292,4 @@
       renderAll();
     });
   }
-})(); similar
+})();

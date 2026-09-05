@@ -1,8 +1,31 @@
 /* =====================================================================
-   SIERRAUNLOCK • GLOBAL DESIGN SYSTEM v4 — PERFECT FIT
-   v4: everything fits on EVERY screen (phone → desktop), clean wraps,
-       scaled type, no horizontal overflow, premium spacing.
+   SIERRAUNLOCK • GLOBAL DESIGN SYSTEM — style.css (v5 • DOCUMENTED)
+   ---------------------------------------------------------------------
+   WHAT IS THIS FILE?
+   The "Skeleton & Skin" of the website. It defines every color, font,
+   spacing, button, card, header, footer and responsive rule.
+   (animations.css adds movement; this file adds structure + looks.)
+
+   SECTION MAP:
+   00  Design tokens (:root) + base reset
+   01  Motto bar
+   02  Header + navigation (never overflows)
+   03  Buttons
+   04  Hero sections (scale phone → desktop)
+   05  Legal strip
+   06  Sections & cards
+   07  Founders
+   08  Community band
+   09  Payment badges
+   10  Footer
+   11  Responsive breakpoints (hamburger drawer)
+   12  Dropdown menus (Services ▾)
+   13  Security UI helpers (honeypot trap for bots)
+
+   OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
    ===================================================================== */
+
+/* 00 • DESIGN TOKENS + RESET */
 :root{
   --sl-green:#1EB53A; --sl-green-dark:#0F8A2A;
   --sl-blue:#0072C6;  --sl-blue-dark:#004E8C;
@@ -27,11 +50,11 @@ h1,h2,h3,h4{font-family:var(--font-head);line-height:1.15;letter-spacing:-.02em;
 ::selection{background:var(--sl-green);color:#fff}
 .container{max-width:1240px;margin:0 auto;padding:0 1.25rem}
 
-/* 1 • MOTTO BAR (wraps cleanly on small screens) */
+/* 01 • MOTTO BAR (wraps cleanly on small screens) */
 .motto-bar{background:var(--grad-brand);color:#fff;display:flex;justify-content:center;align-items:center;gap:.9rem;padding:.65rem 1rem;font-family:var(--font-head);font-weight:800;font-size:clamp(.68rem,2.6vw,.88rem);letter-spacing:.14em;text-transform:uppercase;text-align:center;flex-wrap:wrap}
 .motto-divider{color:#D9F4E0}
 
-/* 2 • HEADER (never overflows — hamburger appears early) */
+/* 02 • HEADER (never overflows — hamburger appears early) */
 .site-header{position:sticky;top:0;z-index:100;background:rgba(255,255,255,.96);backdrop-filter:blur(12px);box-shadow:0 1px 0 var(--line)}
 .header-inner{max-width:1440px;margin:0 auto;display:flex;align-items:center;gap:1.1rem;padding:.6rem 1.25rem;min-height:var(--header-h)}
 .brand{display:flex;align-items:center;gap:.65rem;margin-right:auto;flex:none}
@@ -46,7 +69,7 @@ h1,h2,h3,h4{font-family:var(--font-head);line-height:1.15;letter-spacing:-.02em;
 .flag-stripe{height:6px}
 .nav-toggle{display:none;background:none;border:0;font-size:1.7rem;cursor:pointer;color:var(--sl-blue)}
 
-/* 3 • BUTTONS (fit on every screen) */
+/* 03 • BUTTONS (fit on every screen) */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:.55rem;padding:.8rem 1.6rem;border-radius:999px;font-family:var(--font-head);font-weight:800;font-size:clamp(.82rem,2.6vw,.95rem);border:0;cursor:pointer;transition:transform .25s,box-shadow .25s,background .25s;white-space:nowrap;letter-spacing:-.01em;max-width:100%}
 .btn:hover{transform:translateY(-3px)}
 .btn:active{transform:translateY(-1px) scale(.98)}
@@ -59,7 +82,7 @@ h1,h2,h3,h4{font-family:var(--font-head);line-height:1.15;letter-spacing:-.02em;
 .btn-fb{background:#1877F2;color:#fff;font-weight:800}
 .btn-sm{padding:.5rem 1rem;font-size:.78rem}
 
-/* 4 • HERO — scales perfectly phone → desktop */
+/* 04 • HERO — scales perfectly phone → desktop */
 .hero,.services-hero,.mkt-hero,.shops-hero,.pay-hero,.res-hero,.about-hero,.faq-hero,.repair-hero,.contact-hero{background:radial-gradient(1200px 500px at 85% -10%,rgba(30,181,58,.3),transparent 60%),radial-gradient(1000px 450px at 10% 110%,rgba(0,114,198,.35),transparent 60%),linear-gradient(135deg,var(--sl-blue-dark) 0%,#06283F 55%,var(--sl-green-dark) 130%);color:#fff;padding:clamp(3.6rem,9vw,6rem) 1.25rem clamp(3.2rem,8vw,5.5rem);text-align:center}
 .hero-kicker{letter-spacing:clamp(.14em,1vw,.3em);text-transform:uppercase;font-weight:800;font-size:clamp(.66rem,2.4vw,.85rem);color:#CFE9FF;display:inline-block;max-width:100%}
 .hero h1,[class*="-hero"] h1{font-size:clamp(1.75rem,7.2vw,4.2rem);font-weight:900;margin:1rem 0;color:#fff}
@@ -70,10 +93,10 @@ h1,h2,h3,h4{font-family:var(--font-head);line-height:1.15;letter-spacing:-.02em;
 .stat b{display:block;font-family:var(--font-head);font-size:clamp(1.4rem,5vw,2rem);font-weight:900;color:#7CF29C}
 .stat span{font-size:clamp(.66rem,2vw,.85rem);letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.9);font-weight:600}
 
-/* 5 • LEGAL STRIP */
+/* 05 • LEGAL STRIP */
 .legal-strip{background:#FDECEA;color:#8C1D18;text-align:center;padding:1rem 1.25rem;font-size:clamp(.85rem,2.6vw,1.02rem);font-weight:600;border-top:3px solid var(--danger);border-bottom:3px solid var(--danger)}
 
-/* 6 • SECTIONS & CARDS */
+/* 06 • SECTIONS & CARDS */
 .section{padding:clamp(3.4rem,8vw,5.5rem) 0}
 .section-alt{background:#fff}
 .section-head{text-align:center;margin-bottom:clamp(2.2rem,5vw,3.5rem);padding:0 1.25rem}
@@ -89,7 +112,7 @@ h1,h2,h3,h4{font-family:var(--font-head);line-height:1.15;letter-spacing:-.02em;
 .card .link{color:var(--sl-blue);font-weight:800;font-size:.95rem}
 .card .link:hover{color:var(--sl-green-dark)}
 
-/* 7 • FOUNDERS */
+/* 07 • FOUNDERS */
 .founder-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:1.7rem;max-width:960px;margin:0 auto}
 .founder-card{background:#fff;border:1px solid var(--line);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-1);transition:transform .3s,box-shadow .3s}
 .founder-card:hover{transform:translateY(-8px);box-shadow:var(--shadow-2)}
@@ -100,7 +123,7 @@ h1,h2,h3,h4{font-family:var(--font-head);line-height:1.15;letter-spacing:-.02em;
 .meta{color:var(--sl-blue);font-weight:700;font-size:.95rem;margin-bottom:.7rem;overflow-wrap:anywhere}
 .bio{color:var(--ink-soft);font-size:1rem;line-height:1.65}
 
-/* 8 • COMMUNITY */
+/* 08 • COMMUNITY */
 .community{background:var(--grad-brand);color:#fff;text-align:center;padding:clamp(3.4rem,8vw,5rem) 0}
 .community h2{font-size:clamp(1.5rem,5vw,2.6rem);font-weight:900;color:#fff}
 .community p{color:rgba(255,255,255,.95);margin:.8rem 0 1.8rem;font-size:clamp(.95rem,2.8vw,1.1rem)}
@@ -108,7 +131,7 @@ h1,h2,h3,h4{font-family:var(--font-head);line-height:1.15;letter-spacing:-.02em;
 .community-note{margin-top:1.6rem;font-size:1rem}
 .community-note a{color:#D9F4E0;text-decoration:underline;font-weight:800}
 
-/* 9 • PAYMENTS */
+/* 09 • PAYMENTS */
 .pay-badges{display:flex;gap:.9rem;flex-wrap:wrap;justify-content:center;padding:0 1rem}
 .badge{padding:.7rem 1.3rem;border-radius:999px;border:1px solid var(--line);background:#fff;font-weight:800;font-size:clamp(.78rem,2.4vw,.95rem);box-shadow:var(--shadow-1);text-align:center}
 
@@ -143,3 +166,14 @@ h1,h2,h3,h4{font-family:var(--font-head);line-height:1.15;letter-spacing:-.02em;
   .brand-logo{width:40px;height:40px}
   .btn{padding:.75rem 1.2rem}
 }
+
+/* 12 • DROPDOWN MENUS (Services ▾) — hover on desktop, tap on mobile */
+.nav-item{position:relative}
+.nav-drop{position:absolute;top:100%;left:0;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow-2);min-width:210px;padding:.6rem;display:none;flex-direction:column;gap:.2rem;z-index:95}
+.nav-item:hover .nav-drop,.nav-item.open .nav-drop{display:flex}
+.nav-drop a{padding:.55rem .8rem;border-radius:10px;font-size:.9rem;font-weight:600;color:var(--ink-soft);white-space:nowrap}
+.nav-drop a:hover{background:var(--paper);color:var(--sl-green-dark)}
+@media(max-width:1440px){.nav-drop{position:static;display:flex;box-shadow:none;border:0;padding:.2rem 0 .4rem 1rem}}
+
+/* 13 • SECURITY UI HELPERS — honeypot trap: invisible to humans, visible to bots */
+.su-honeypot{position:absolute!important;left:-9999px!important;top:auto;width:1px;height:1px;overflow:hidden}

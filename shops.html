@@ -4,6 +4,37 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Shops & GPS Map — Find an Unlocker Near You | SIERRAUNLOCK</title>
+  <!--
+    =====================================================================
+    SIERRAUNLOCK • SHOPS & GPS MAP — shops.html (v2 • DOCUMENTED)
+    ---------------------------------------------------------------------
+    WHAT IS THIS FILE?
+    The GPS-powered shop finder where customers find verified unlockers,
+    repair shops and electronics stores near them on a live Leaflet map.
+    Shop owners can also add their business for free with a snapshot
+    photo and exact GPS coordinates — admin approval publishes site-wide.
+
+    SECTION MAP:
+    01  Meta tags
+    02  Fonts + Leaflet CSS + Core CSS
+    03  Page-specific styles (shops hero, map, shop cards, form)
+    04  Motto bar
+    05  Header with Services ▾ dropdown
+    06  Shops hero + legal strip
+    07  Map controls (town search + Use My Location)
+    08  Live Leaflet map + "Near You" list
+    09  Verified hubs (Waterloo + Koidu)
+    10  Add Your Shop form (routes to Alhassan's WhatsApp via map.js)
+    11  Footer
+    12  Scripts (Leaflet + security + main + map engine)
+
+    CRITICAL NUMBER MAP:
+    • Alhassan phone / Orange Money / WhatsApp desk : +232 75 908 206
+    • Baimba phone / Koidu hub                      : +232 31 363 736
+
+    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
+    =====================================================================
+  -->
   <link rel="icon" type="image/png" href="assets/images/brand/favicon.png">
   <link rel="apple-touch-icon" href="assets/images/brand/favicon.png">
   <meta name="description" content="Find verified phone unlockers, electronics and repair shops near you on a live GPS map — add your own shop with a photo and exact GPS.">
@@ -50,10 +81,12 @@
 </head>
 <body>
 
+  <!-- 04 • MOTTO BAR -->
   <div class="motto-bar">
     <span>IT CAN ONLY BE GOD</span><span class="motto-divider">✦</span><span>LEARN BEFORE YOU EARN</span>
   </div>
 
+  <!-- 05 • HEADER WITH SERVICES DROPDOWN -->
   <header class="site-header">
     <div class="header-inner">
       <a href="index.html" class="brand" aria-label="SIERRAUNLOCK home">
@@ -63,10 +96,15 @@
       <nav class="main-nav" id="mainNav" aria-label="Main navigation">
         <a class="nav-link" href="index.html">Home</a>
         <a class="nav-link" href="about.html">About</a>
-        <a class="nav-link" href="services.html">Unlock Services</a>
-        <a class="nav-link" href="repair.html">Repair</a>
-        <a class="nav-link" href="marketplace.html">Marketplace</a>
-        <a class="nav-link active" href="shops.html">Shops &amp; Map</a>
+        <div class="nav-item">
+          <a class="nav-link" href="services.html">Services ▾</a>
+          <div class="nav-drop">
+            <a href="services.html">🔓 Unlock Services</a>
+            <a href="repair.html">🔩 Repair</a>
+            <a href="marketplace.html">🧰 Marketplace</a>
+            <a href="shops.html">📍 Shops &amp; Map</a>
+          </div>
+        </div>
         <a class="nav-link" href="reseller.html">Resellers</a>
         <a class="nav-link" href="payments.html">Payments</a>
         <a class="nav-link" href="faq.html">FAQ</a>
@@ -79,6 +117,7 @@
   </header>
 
   <main>
+    <!-- 06 • SHOPS HERO + LEGAL STRIP -->
     <section class="shops-hero">
       <p class="hero-kicker">From Freetown to Koidu — One Network</p>
       <h1>Shops &amp; GPS Unlocker Map</h1>
@@ -89,6 +128,7 @@
       📍 <strong>Growing nationwide.</strong> Verified hubs 🏢 • community shops 🔓 with snapshots &amp; exact coordinates after admin approval.
     </div>
 
+    <!-- 07 • MAP CONTROLS -->
     <section class="section">
       <div class="section-head">
         <h2>Find a Shop Near You</h2>
@@ -103,11 +143,14 @@
           </form>
           <button class="btn" id="locateBtn" style="border:2px solid var(--sl-blue);color:var(--sl-blue)"> Use My Location</button>
         </div>
+
+        <!-- 08 • LIVE LEAFLET MAP + NEAR LIST -->
         <div id="map" aria-label="Map of SIERRAUNLOCK shops across Sierra Leone"></div>
         <div class="near-list" id="nearList"></div>
       </div>
     </section>
 
+    <!-- 09 • VERIFIED HUBS -->
     <section class="section section-alt">
       <div class="section-head">
         <h2>Our Verified Hubs</h2>
@@ -137,6 +180,7 @@
       </div>
     </section>
 
+    <!-- 10 • ADD YOUR SHOP FORM -->
     <section class="section" id="addshop">
       <div class="section-head">
         <h2>Add Your Shop — Free (Photo + Exact GPS)</h2>
@@ -185,6 +229,7 @@
     </section>
   </main>
 
+  <!-- 11 • FOOTER -->
   <footer class="site-footer">
     <div class="footer-grid container">
       <div class="footer-col">
@@ -224,6 +269,7 @@
     </div>
   </footer>
 
+  <!-- 12 • SCRIPTS (Leaflet map library + security + main + map engine) -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="assets/js/security.js"></script>
   <script src="assets/js/main.js"></script>

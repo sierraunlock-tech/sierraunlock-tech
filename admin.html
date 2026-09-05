@@ -5,6 +5,32 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex">
   <title>Admin Dashboard | SIERRAUNLOCK</title>
+  <!--
+    =====================================================================
+    SIERRAUNLOCK • ADMIN DASHBOARD — admin.html (v2 • DOCUMENTED)
+    ---------------------------------------------------------------------
+    WHAT IS THIS FILE?
+    The private "control room" of the platform. Founders use this page
+    to manage the entire site without touching code:
+    • View live stats (jobs, shops, listings)
+    • Set the SLE exchange rate (feeds the Payments converter)
+    • Set wholesale tool pricing (cost + margin)
+    • Approve seller listings & community shops
+    • Publish marketplace items directly
+    • Log and track unlock/repair jobs
+    • Change the site version & admin PIN
+
+    SECURITY NOTES:
+    • Protected by `meta name="robots" content="noindex"` — not indexed.
+    • Login gate: PIN required (default 2026, change immediately).
+    • 5 wrong PINs = 60-second lockout (handled in admin.js).
+    • 30-minute inactivity auto-logout (handled in admin.js).
+    • All data lives in browser localStorage (syncs to backend in EXT-16).
+
+    ACCESS: Only founders (Alhassan & Baimba) should access this page.
+    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
+    =====================================================================
+  -->
   <link rel="icon" type="image/png" href="assets/images/brand/favicon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,6 +38,7 @@
   <link rel="stylesheet" href="assets/css/style.css">
   <link rel="stylesheet" href="assets/css/animations.css">
   <style>
+    /* Admin-specific overrides — keeps dashboard clean and functional */
     [hidden]{display:none !important}
     .adm-top{background:var(--ink);color:#fff;padding:.8rem 1.2rem;display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}
     .adm-top .brand-name{color:#fff}.adm-top .brand-name span{color:#7CF29C}
@@ -61,6 +88,7 @@
     <span>IT CAN ONLY BE GOD</span><span class="motto-divider">✦</span><span>LEARN BEFORE YOU EARN</span>
   </div>
 
+  <!-- ADMIN TOP BAR — Logo + View Site + Logout -->
   <div class="adm-top">
     <a href="index.html" class="brand">
       <img src="assets/images/brand/sierraunlock-logo.png" alt="SIERRAUNLOCK logo" class="brand-logo">
@@ -72,7 +100,7 @@
     </div>
   </div>
 
-  <!-- LOGIN -->
+  <!-- LOGIN SCREEN — PIN required to enter -->
   <div class="login-wrap" id="loginView">
     <div class="login-card" id="loginCard">
       <h2>🔐 Admin Access</h2>
@@ -83,8 +111,9 @@
     </div>
   </div>
 
-  <!-- DASHBOARD -->
+  <!-- DASHBOARD — Hidden until PIN verified -->
   <div class="adm-wrap" id="dashView" hidden>
+    <!-- Left sidebar tabs -->
     <nav class="adm-tabs" aria-label="Admin sections">
       <button class="adm-tab active" data-tab="overview">📊 Overview</button>
       <button class="adm-tab" data-tab="rates">💱 Rates &amp; Pricing</button>
@@ -95,7 +124,9 @@
       <button class="adm-tab" data-tab="settings">⚙️ Settings</button>
     </nav>
 
+    <!-- Right content panels -->
     <div>
+      <!-- Overview stats -->
       <section class="adm-panel adm-sec" id="sec-overview">
         <h3>Platform Overview</h3>
         <div class="stat-grid">
@@ -110,6 +141,7 @@
         <p style="color:var(--ink-soft);font-size:.88rem">Everything you change here updates the public pages on their next load. When the backend keys arrive (EXT-16), this dashboard syncs site-wide.</p>
       </section>
 
+      <!-- Rates & Pricing -->
       <section class="adm-panel adm-sec" id="sec-rates" hidden>
         <h3>SLE Exchange Rate</h3>
         <div class="inline">
@@ -122,16 +154,19 @@
         <p style="color:var(--ink-soft);font-size:.85rem;margin-top:.9rem">Sell prices are private — public pages show "Quote" until you publish a price list.</p>
       </section>
 
+      <!-- Seller Submissions -->
       <section class="adm-panel adm-sec" id="sec-pending" hidden>
         <h3>Seller Submissions (approve to publish with photo)</h3>
         <div id="pendingList"></div>
       </section>
 
+      <!-- Shops Approval -->
       <section class="adm-panel adm-sec" id="sec-shops" hidden>
         <h3>Community Shop Submissions</h3>
         <div id="shopList"></div>
       </section>
 
+      <!-- Marketplace direct publish -->
       <section class="adm-panel adm-sec" id="sec-market" hidden>
         <h3>Add Marketplace Listing</h3>
         <form class="mini-form" id="prodForm">
@@ -148,6 +183,7 @@
         <div id="prodList"></div>
       </section>
 
+      <!-- Jobs Board -->
       <section class="adm-panel adm-sec" id="sec-jobs" hidden>
         <h3>Log a Job</h3>
         <form class="mini-form" id="jobForm">
@@ -161,6 +197,7 @@
         <div id="jobList"></div>
       </section>
 
+      <!-- Settings -->
       <section class="adm-panel adm-sec" id="sec-settings" hidden>
         <h3>Site Version (shown in every footer)</h3>
         <div class="inline">

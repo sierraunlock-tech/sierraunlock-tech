@@ -4,8 +4,43 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SIERRAUNLOCK — Unlock • Repair • Connect | Sierra Leone</title>
+  <!--
+    =====================================================================
+    SIERRAUNLOCK • HOMEPAGE — index.html (v2 • DOCUMENTED)
+    ---------------------------------------------------------------------
+    WHAT IS THIS FILE?
+    The homepage and main landing page of SIERRAUNLOCK. This is where
+    new visitors land first. It showcases:
+    • The platform's core mission (Unlock • Repair • Connect)
+    • 7 connected services with links to their dedicated pages
+    • The 2 founders (Alhassan & Baimba) with direct phone numbers
+    • Community channels (WhatsApp + Facebook)
+    • All accepted payment methods with verified accounts
+    • Legal IMEI warning strip (required by Sierra Leone law)
+
+    SECTION MAP:
+    01  Meta tags (title, description, OG image, theme color)
+    02  Fonts & Core CSS
+    03  Motto bar
+    04  Header with Services ▾ dropdown
+    05  Hero section (main value proposition + stats)
+    06  Legal IMEI warning strip
+    07  7 service cards
+    08  Founders section (Alhassan + Baimba)
+    09  Community join section
+    10  Payments badges
+    11  Footer
+    12  Scripts (security + main)
+
+    CRITICAL NUMBER MAP:
+    • Alhassan phone / Orange Money / WhatsApp desk : +232 75 908 206
+    • Alhassan Binance Pay ID (crypto ONLY)         : 754378475
+    • Baimba phone / Koidu hub                      : +232 31 363 736
+
+    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
+    =====================================================================
+  -->
   <meta name="description" content="Sierra Leone's first professional phone unlocking platform. Legal network unlocking, expert repairs, genuine spare parts, shop map and secure payments.">
-  <!-- LOGO AS FAVICON + SEARCH PREVIEW -->
   <link rel="icon" type="image/png" href="assets/images/brand/favicon.png">
   <link rel="apple-touch-icon" href="assets/images/brand/favicon.png">
   <meta property="og:title" content="SIERRAUNLOCK — Unlock • Repair • Connect">
@@ -20,12 +55,12 @@
 </head>
 <body>
 
-  <!-- BOLD MOTTOS — VERY TOP -->
+  <!-- 03 • MOTTO BAR -->
   <div class="motto-bar">
     <span>IT CAN ONLY BE GOD</span><span class="motto-divider">✦</span><span>LEARN BEFORE YOU EARN</span>
   </div>
 
-  <!-- HEADER — LOGO TOP-LEFT -->
+  <!-- 04 • HEADER WITH SERVICES DROPDOWN -->
   <header class="site-header">
     <div class="header-inner">
       <a href="index.html" class="brand" aria-label="SIERRAUNLOCK home">
@@ -35,10 +70,15 @@
       <nav class="main-nav" id="mainNav" aria-label="Main navigation">
         <a class="nav-link active" href="index.html">Home</a>
         <a class="nav-link" href="about.html">About</a>
-        <a class="nav-link" href="services.html">Unlock Services</a>
-        <a class="nav-link" href="repair.html">Repair</a>
-        <a class="nav-link" href="marketplace.html">Marketplace</a>
-        <a class="nav-link" href="shops.html">Shops &amp; Map</a>
+        <div class="nav-item">
+          <a class="nav-link" href="services.html">Services ▾</a>
+          <div class="nav-drop">
+            <a href="services.html">🔓 Unlock Services</a>
+            <a href="repair.html">🔩 Repair</a>
+            <a href="marketplace.html">🧰 Marketplace</a>
+            <a href="shops.html">📍 Shops &amp; Map</a>
+          </div>
+        </div>
         <a class="nav-link" href="reseller.html">Resellers</a>
         <a class="nav-link" href="payments.html">Payments</a>
         <a class="nav-link" href="faq.html">FAQ</a>
@@ -51,7 +91,7 @@
   </header>
 
   <main>
-    <!-- HERO -->
+    <!-- 05 • HERO SECTION -->
     <section class="hero">
       <div class="hero-inner">
         <p class="hero-kicker">Sierra Leone's First Digital Unlocking Platform</p>
@@ -71,12 +111,12 @@
       </div>
     </section>
 
-    <!-- IMEI LEGAL WARNING -->
+    <!-- 06 • LEGAL IMEI WARNING STRIP -->
     <div class="legal-strip">
       ⚠️ <strong>IMEI / blacklist tampering is ILLEGAL.</strong> SIERRAUNLOCK performs only legal carrier &amp; network unlocks in line with CTIA consumer standards and Sierra Leone law. Proof of ownership is required for every device. Sign in to your account to access all services.
     </div>
 
-    <!-- SERVICES -->
+    <!-- 07 • 7 SERVICE CARDS -->
     <section class="section">
       <div class="section-head">
         <h2>What We Do</h2>
@@ -94,7 +134,7 @@
       </div>
     </section>
 
-    <!-- FOUNDERS -->
+    <!-- 08 • FOUNDERS SECTION -->
     <section class="section section-alt" id="founders">
       <div class="section-head">
         <h2>Meet Our Founders</h2>
@@ -124,7 +164,7 @@
       </div>
     </section>
 
-    <!-- COMMUNITY -->
+    <!-- 09 • COMMUNITY JOIN SECTION -->
     <section class="section community">
       <div class="container">
         <h2>Join the SIERRAUNLOCK Community</h2>
@@ -137,7 +177,7 @@
       </div>
     </section>
 
-    <!-- PAYMENTS -->
+    <!-- 10 • PAYMENTS BADGES -->
     <section class="section">
       <div class="section-head">
         <h2>Payments We Accept</h2>
@@ -155,7 +195,7 @@
     </section>
   </main>
 
-  <!-- FOOTER -->
+  <!-- 11 • FOOTER -->
   <footer class="site-footer">
     <div class="footer-grid container">
       <div class="footer-col">
@@ -195,6 +235,7 @@
     </div>
   </footer>
 
+  <!-- 12 • SCRIPTS -->
   <script src="assets/js/security.js"></script>
   <script src="assets/js/main.js"></script>
 </body>

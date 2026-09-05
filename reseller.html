@@ -4,6 +4,39 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Become a Reseller | SIERRAUNLOCK</title>
+  <!--
+    =====================================================================
+    SIERRAUNLOCK • RESELLER NETWORK — reseller.html (v2 • DOCUMENTED)
+    ---------------------------------------------------------------------
+    WHAT IS THIS FILE?
+    The B2B landing page for shops, technicians and hustlers who want
+    to join the SIERRAUNLOCK wholesale network. It explains the margin
+    math ($10 cost + $5-$10 margin = $15-$20 sell price), the 4-step
+    onboarding process, and hosts the application form which routes
+    directly to Alhassan's WhatsApp desk.
+
+    SECTION MAP:
+    01  Meta tags
+    02  Fonts & Core CSS
+    03  Page-specific styles (reseller hero, margin box, steps, form)
+    04  Motto bar
+    05  Header with Services ▾ dropdown
+    06  Reseller hero + legal strip
+    07  How resellers make money (margin math)
+    08  Four steps to start
+    09  Reseller application form (routes to Alhassan's WhatsApp)
+    10  Community join section
+    11  Footer
+    12  Scripts (security + main + application handler)
+
+    CRITICAL NUMBER MAP:
+    • Alhassan phone / Orange Money / WhatsApp desk : +232 75 908 206
+    • Alhassan Binance Pay ID (crypto ONLY)         : 754378475
+    • Baimba phone / Koidu hub                      : +232 31 363 736
+
+    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
+    =====================================================================
+  -->
   <link rel="icon" type="image/png" href="assets/images/brand/favicon.png">
   <link rel="apple-touch-icon" href="assets/images/brand/favicon.png">
   <meta name="description" content="Join the SIERRAUNLOCK reseller network — wholesale unlock pricing, training and support for shops and technicians across Sierra Leone.">
@@ -43,10 +76,12 @@
 </head>
 <body>
 
+  <!-- 04 • MOTTO BAR -->
   <div class="motto-bar">
     <span>IT CAN ONLY BE GOD</span><span class="motto-divider">✦</span><span>LEARN BEFORE YOU EARN</span>
   </div>
 
+  <!-- 05 • HEADER WITH SERVICES DROPDOWN -->
   <header class="site-header">
     <div class="header-inner">
       <a href="index.html" class="brand" aria-label="SIERRAUNLOCK home">
@@ -56,10 +91,15 @@
       <nav class="main-nav" id="mainNav" aria-label="Main navigation">
         <a class="nav-link" href="index.html">Home</a>
         <a class="nav-link" href="about.html">About</a>
-        <a class="nav-link" href="services.html">Unlock Services</a>
-        <a class="nav-link" href="repair.html">Repair</a>
-        <a class="nav-link" href="marketplace.html">Marketplace</a>
-        <a class="nav-link" href="shops.html">Shops &amp; Map</a>
+        <div class="nav-item">
+          <a class="nav-link" href="services.html">Services ▾</a>
+          <div class="nav-drop">
+            <a href="services.html">🔓 Unlock Services</a>
+            <a href="repair.html">🔩 Repair</a>
+            <a href="marketplace.html">🧰 Marketplace</a>
+            <a href="shops.html">📍 Shops &amp; Map</a>
+          </div>
+        </div>
         <a class="nav-link active" href="reseller.html">Resellers</a>
         <a class="nav-link" href="payments.html">Payments</a>
         <a class="nav-link" href="faq.html">FAQ</a>
@@ -72,6 +112,7 @@
   </header>
 
   <main>
+    <!-- 06 • RESELLER HERO + LEGAL STRIP -->
     <section class="res-hero">
       <p class="hero-kicker">Earn With Us — Learn Before You Earn</p>
       <h1>Become a SIERRAUNLOCK Reseller</h1>
@@ -82,6 +123,7 @@
       🤝 <strong>Resellers earn honestly:</strong> legal unlocks only, proof of ownership always, wholesale prices private to approved resellers.
     </div>
 
+    <!-- 07 • HOW RESELLERS MAKE MONEY -->
     <section class="section">
       <div class="section-head">
         <h2>How Resellers Make Money</h2>
@@ -101,6 +143,7 @@
       </div>
     </section>
 
+    <!-- 08 • FOUR STEPS TO START -->
     <section class="section section-alt">
       <div class="section-head">
         <h2>Four Steps To Start</h2>
@@ -114,6 +157,7 @@
       </div>
     </section>
 
+    <!-- 09 • RESELLER APPLICATION FORM -->
     <section class="section" id="apply">
       <div class="section-head">
         <h2>Reseller Application</h2>
@@ -149,6 +193,7 @@
       </div>
     </section>
 
+    <!-- 10 • COMMUNITY JOIN SECTION -->
     <section class="section community">
       <div class="container">
         <h2>Join The Community First</h2>
@@ -161,6 +206,7 @@
     </section>
   </main>
 
+  <!-- 11 • FOOTER -->
   <footer class="site-footer">
     <div class="footer-grid container">
       <div class="footer-col">
@@ -200,6 +246,7 @@
     </div>
   </footer>
 
+  <!-- 12 • SCRIPTS -->
   <script src="assets/js/security.js"></script>
   <script src="assets/js/main.js"></script>
   <script>

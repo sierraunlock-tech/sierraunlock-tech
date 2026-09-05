@@ -4,6 +4,35 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Unlocking FAQ — 15 Answers | SIERRAUNLOCK</title>
+  <!--
+    =====================================================================
+    SIERRAUNLOCK • UNLOCKING FAQ — faq.html (v2 • DOCUMENTED)
+    ---------------------------------------------------------------------
+    WHAT IS THIS FILE?
+    The public knowledge base for legal device unlocking. It answers the
+    15 most common consumer questions about unlocking, CTIA standards,
+    eligibility, military deployment, roaming, and the DMCA.
+
+    SECTION MAP:
+    01  Meta tags (title, description, OG image, theme color)
+    02  Fonts & Core CSS
+    03  Page-specific styles (FAQ hero, search bar, accordion items)
+    04  Motto bar
+    05  Header with Services ▾ dropdown
+    06  FAQ hero + legal strip
+    07  FAQ accordion (15 questions) + live search
+    08  Community join section
+    09  Footer
+    10  Scripts (security + main + accordion/search engine)
+
+    CRITICAL NUMBER MAP:
+    • Alhassan phone / Orange Money / WhatsApp desk : +232 75 908 206
+    • Alhassan Binance Pay ID (crypto ONLY)         : 754378475
+    • Baimba phone / Koidu hub                      : +232 31 363 736
+
+    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
+    =====================================================================
+  -->
   <link rel="icon" type="image/png" href="assets/images/brand/favicon.png">
   <link rel="apple-touch-icon" href="assets/images/brand/favicon.png">
   <meta name="description" content="Everything about legal phone unlocking: what it means, eligibility, fees, military deployment, roaming, DMCA and more — explained by SIERRAUNLOCK.">
@@ -39,10 +68,12 @@
 </head>
 <body>
 
+  <!-- 04 • MOTTO BAR -->
   <div class="motto-bar">
     <span>IT CAN ONLY BE GOD</span><span class="motto-divider">✦</span><span>LEARN BEFORE YOU EARN</span>
   </div>
 
+  <!-- 05 • HEADER WITH SERVICES DROPDOWN -->
   <header class="site-header">
     <div class="header-inner">
       <a href="index.html" class="brand" aria-label="SIERRAUNLOCK home">
@@ -52,10 +83,15 @@
       <nav class="main-nav" id="mainNav" aria-label="Main navigation">
         <a class="nav-link" href="index.html">Home</a>
         <a class="nav-link" href="about.html">About</a>
-        <a class="nav-link" href="services.html">Unlock Services</a>
-        <a class="nav-link" href="repair.html">Repair</a>
-        <a class="nav-link" href="marketplace.html">Marketplace</a>
-        <a class="nav-link" href="shops.html">Shops &amp; Map</a>
+        <div class="nav-item">
+          <a class="nav-link" href="services.html">Services ▾</a>
+          <div class="nav-drop">
+            <a href="services.html">🔓 Unlock Services</a>
+            <a href="repair.html">🔩 Repair</a>
+            <a href="marketplace.html">🧰 Marketplace</a>
+            <a href="shops.html">📍 Shops &amp; Map</a>
+          </div>
+        </div>
         <a class="nav-link" href="reseller.html">Resellers</a>
         <a class="nav-link" href="payments.html">Payments</a>
         <a class="nav-link active" href="faq.html">FAQ</a>
@@ -68,6 +104,7 @@
   </header>
 
   <main>
+    <!-- 06 • FAQ HERO + LEGAL STRIP -->
     <section class="faq-hero">
       <p class="hero-kicker">Knowledge First — Learn Before You Earn</p>
       <h1>Unlocking Questions, Answered</h1>
@@ -78,6 +115,7 @@
       ⚠️ <strong>IMEI / blacklist tampering is ILLEGAL.</strong> Everything below explains <em>legal</em> unlocking only. When in doubt, ask us before paying anyone.
     </div>
 
+    <!-- 07 • FAQ ACCORDION + LIVE SEARCH -->
     <section class="section">
       <div class="faq-wrap">
         <div class="faq-search">
@@ -135,6 +173,7 @@
       </div>
     </section>
 
+    <!-- 08 • COMMUNITY JOIN SECTION -->
     <section class="section community">
       <div class="container">
         <h2>Still Have a Question?</h2>
@@ -148,6 +187,7 @@
     </section>
   </main>
 
+  <!-- 09 • FOOTER -->
   <footer class="site-footer">
     <div class="footer-grid container">
       <div class="footer-col">
@@ -187,10 +227,11 @@
     </div>
   </footer>
 
+  <!-- 10 • SCRIPTS -->
   <script src="assets/js/security.js"></script>
   <script src="assets/js/main.js"></script>
   <script>
-    /* EXT-06 • Accordion + live search */
+    /* Accordion + live search */
     (function () {
       const items = Array.from(document.querySelectorAll('.faq-item'));
       const count = document.getElementById('faqCount');
