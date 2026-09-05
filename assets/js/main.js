@@ -1,5 +1,5 @@
 /* =====================================================================
-   SIERRAUNLOCK • CORE ENGINE — main.js (v7 • DOCUMENTED + REVEAL FIX)
+   SIERRAUNLOCK • CORE ENGINE — main.js (v8 • SMART RETURN MODE)
    ---------------------------------------------------------------------
    WHAT IS THIS FILE?
    The "Master Brain" that runs on EVERY page of the website. It:
@@ -9,7 +9,7 @@
    • Injects the animated rotator line into every hero
    • Injects the Tools & Services marquee under the legal strip
    • Powers the mobile hamburger menu, scroll reveal, year/version footer
-   • NEW (v7): Now also reveals Philosophy cards and Journey Timeline on About page
+   • NEW (v8): Smart Return Mode — pages open instantly after first visit
 
    SECTION MAP:
    01  Central WhatsApp desk switch (all flows → Alhassan 23275908206)
@@ -24,7 +24,8 @@
    10  Year + version footer injector
    11  Active nav link highlighter
    12  Tools marquee injector
-   13  Scroll reveal (IntersectionObserver) — v7 now includes philosophy cards + timeline
+   13  Scroll reveal (IntersectionObserver)
+   14  Smart Return Mode (NEW v8) — animations play once per session
 
    CRITICAL NUMBER MAP (do not change without updating the normalizer):
    • Alhassan phone / Orange Money / WhatsApp desk : +232 75 908 206
@@ -272,9 +273,6 @@ function initToolsMarquee() {
 }
 
 /* 13 • SCROLL REVEAL — fades elements in as they enter the viewport */
-/* v7 FIX: added .philosophy-card, .timeline-item and generic .reveal so
-   the About page's philosophy cards and journey timeline are no longer stuck
-   at opacity:0. Any element with class "reveal" will now fade in on scroll. */
 function initReveal() {
   const targets = document.querySelectorAll(
     '.card, .founder-card, .stat, .section-head, .badge, .tool-card, .philosophy-card, .timeline-item, .reveal'
@@ -293,3 +291,12 @@ function initReveal() {
   }, { threshold: 0.12 });
   targets.forEach(el => io.observe(el));
 }
+
+/* 14 • SMART RETURN MODE — animations play once per session; return visits open instantly */
+(function () {
+  if (sessionStorage.getItem('su_seen') === '1') {
+    document.documentElement.classList.add('su-returning');   /* skip entrance replays */
+  } else {
+    sessionStorage.setItem('su_seen', '1');                   /* first visit: play the show */
+  }
+})();

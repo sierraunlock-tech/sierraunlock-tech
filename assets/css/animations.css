@@ -1,5 +1,5 @@
 /* =====================================================================
-   SIERRAUNLOCK • MOTION ENGINE — animations.css (v6 • DOCUMENTED)
+   SIERRAUNLOCK • MOTION ENGINE — animations.css (v7 • SMART RETURN MODE)
    ---------------------------------------------------------------------
    WHAT IS THIS FILE?
    The "Movement Brain" of the website. Every animation you see —
@@ -20,6 +20,7 @@
    11  Logo tilt shine
    12  Dropdown menu drop-in motion (Services ▾)
    13  Accessibility — kills all motion for reduced-motion users
+   14  Smart Return Mode — skips entrance animations for returning visitors
 
    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu hubs, Sierra Leone
    RULE: NEVER delete Section 13 — it is an accessibility requirement.
@@ -108,3 +109,16 @@ section[class*="hero"] h1 .rotator,[class*="-hero"] h1 .rotator{display:inline-b
   .reveal{opacity:1;transform:none}
   .section-head .underline{width:100px}
 }
+
+/* 14 • SMART RETURN MODE — returning visitors see content instantly (no animation replay)
+   When main.js detects the user has visited before (this session), it adds
+   the class "su-returning" to <html>. This block kills entrance animations
+   so pages open instantly — ambient motion (flag stripe, marquee, orbs)
+   keeps running for visual polish. */
+html.su-returning .reveal{opacity:1!important;transform:none!important;transition:none!important}
+html.su-returning .section-head .underline{width:100px!important;transition:none!important}
+html.su-returning .hero-inner>*{animation:none!important;opacity:1!important;transform:none!important}
+html.su-returning .rotator{animation:none!important;opacity:1!important;transform:none!important;filter:none!important}
+html.su-returning .prod-card{animation:none!important;opacity:1!important;transform:none!important}
+html.su-returning .philosophy-card,
+html.su-returning .timeline-item{opacity:1!important;transform:none!important;transition:none!important}

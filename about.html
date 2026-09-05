@@ -1,29 +1,53 @@
-some yards html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>About Us & Our Founders | SIERRAUNLOCK</title>
-  
-  <!-- LOGO AS FAVICON + SEARCH PREVIEW -->
+  <!--
+    =====================================================================
+    SIERRAUNLOCK • ABOUT & FOUNDERS — about.html (v2 • DOCUMENTED)
+    ---------------------------------------------------------------------
+    WHAT IS THIS FILE?
+    The company story page. It introduces the two founders (Alhassan
+    Mansaray in Waterloo, Baimba Conteh in Koidu), the two core
+    philosophies ("It Can Only Be God" + "Learn Before You Earn"), and
+    the 4-step journey from street markets to a nationwide digital
+    platform.
+
+    SECTION MAP:
+    01  Meta tags (title, description, OG image, theme color)
+    02  Fonts & Core CSS
+    03  Page-specific styles (about hero, philosophy cards, timeline)
+    04  Motto bar
+    05  Header with Services ▾ dropdown
+    06  About hero
+    07  Legal IMEI warning strip
+    08  Our Core Philosophy (2 pillars)
+    09  Meet the Founders (Alhassan + Baimba with direct tel: links)
+    10  The SIERRAUNLOCK Journey (4-step timeline)
+    11  Footer
+    12  Scripts (security + main)
+
+    CRITICAL NUMBER MAP:
+    • Alhassan phone / Orange Money / WhatsApp desk : +232 75 908 206
+    • Baimba phone / Koidu hub                      : +232 31 363 736
+
+    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
+    =====================================================================
+  -->
   <link rel="icon" type="image/png" href="assets/images/brand/favicon.png">
   <link rel="apple-touch-icon" href="assets/images/brand/favicon.png">
   <meta property="og:title" content="About SIERRAUNLOCK — Meet the Founders">
   <meta property="og:description" content="Meet Alhassan Mansaray and Baimba Conteh, the engineers behind Sierra Leone's first digital unlocking platform.">
   <meta property="og:image" content="assets/images/brand/sierraunlock-logo.png">
   <meta name="theme-color" content="#0072C6">
-  
-  <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  
-  <!-- Core CSS & Motion Engine -->
   <link rel="stylesheet" href="assets/css/style.css">
   <link rel="stylesheet" href="assets/css/animations.css">
-  
   <style>
-    /* Page-specific styles for About */
     .about-hero{background:radial-gradient(1100px 480px at 85% -10%,rgba(30,181,58,.35),transparent 60%),radial-gradient(900px 420px at 10% 110%,rgba(0,114,198,.45),transparent 60%),linear-gradient(135deg,var(--sl-blue-dark) 0%,#06283F 55%,var(--sl-green-dark) 130%);color:#fff;padding:5.5rem 1.2rem 4rem;text-align:center}
     .about-hero h1{font-size:clamp(2rem,5vw,3rem);font-weight:900;margin:1rem 0}
     .about-hero p{max-width:760px;margin:0 auto;color:rgba(255,255,255,.92);font-size:1.1rem}
@@ -41,12 +65,12 @@ some yards html>
 </head>
 <body>
 
-  <!-- BOLD MOTTOS — VERY TOP -->
+  <!-- 04 • MOTTO BAR -->
   <div class="motto-bar">
     <span>IT CAN ONLY BE GOD</span><span class="motto-divider">✦</span><span>LEARN BEFORE YOU EARN</span>
   </div>
 
-  <!-- HEADER — LOGO TOP-LEFT -->
+  <!-- 05 • HEADER WITH SERVICES DROPDOWN -->
   <header class="site-header">
     <div class="header-inner">
       <a href="index.html" class="brand" aria-label="SIERRAUNLOCK home">
@@ -56,10 +80,15 @@ some yards html>
       <nav class="main-nav" id="mainNav" aria-label="Main navigation">
         <a class="nav-link" href="index.html">Home</a>
         <a class="nav-link active" href="about.html">About</a>
-        <a class="nav-link" href="services.html">Unlock Services</a>
-        <a class="nav-link" href="repair.html">Repair</a>
-        <a class="nav-link" href="marketplace.html">Marketplace</a>
-        <a class="nav-link" href="shops.html">Shops &amp; Map</a>
+        <div class="nav-item">
+          <a class="nav-link" href="services.html">Services ▾</a>
+          <div class="nav-drop">
+            <a href="services.html">🔓 Unlock Services</a>
+            <a href="repair.html">🔩 Repair</a>
+            <a href="marketplace.html">🧰 Marketplace</a>
+            <a href="shops.html">📍 Shops &amp; Map</a>
+          </div>
+        </div>
         <a class="nav-link" href="reseller.html">Resellers</a>
         <a class="nav-link" href="payments.html">Payments</a>
         <a class="nav-link" href="faq.html">FAQ</a>
@@ -72,19 +101,19 @@ some yards html>
   </header>
 
   <main>
-    <!-- HERO -->
+    <!-- 06 • ABOUT HERO -->
     <section class="about-hero">
       <p class="hero-kicker">The First in Sierra Leone</p>
       <h1>About SIERRAUNLOCK</h1>
       <p>Built on trust, engineered for reliability. We are Sierra Leone's first dedicated digital unlocking and repair platform, bridging the gap between local technicians and global unlocking servers.</p>
     </section>
 
-    <!-- LEGAL IMEI STRIP (Triggers the tools marquee from EXT-02) -->
+    <!-- 07 • LEGAL IMEI STRIP (triggers the tools marquee) -->
     <div class="legal-strip">
       ⚠️ <strong>IMEI / blacklist tampering is ILLEGAL.</strong> SIERRAUNLOCK performs only legal carrier &amp; network unlocks in line with CTIA consumer standards and Sierra Leone law. Proof of ownership is required.
     </div>
 
-    <!-- OUR PHILOSOPHY -->
+    <!-- 08 • OUR CORE PHILOSOPHY -->
     <section class="section">
       <div class="section-head">
         <h2>Our Core Philosophy</h2>
@@ -103,7 +132,7 @@ some yards html>
       </div>
     </section>
 
-    <!-- FOUNDERS -->
+    <!-- 09 • MEET THE FOUNDERS -->
     <section class="section section-alt" id="founders">
       <div class="section-head">
         <h2>Meet The Founders</h2>
@@ -134,7 +163,7 @@ some yards html>
       </div>
     </section>
 
-    <!-- OUR JOURNEY / TIMELINE -->
+    <!-- 10 • THE SIERRAUNLOCK JOURNEY -->
     <section class="section">
       <div class="section-head">
         <h2>The SIERRAUNLOCK Journey</h2>
@@ -171,10 +200,9 @@ some yards html>
         </div>
       </div>
     </section>
-
   </main>
 
-  <!-- FOOTER -->
+  <!-- 11 • FOOTER -->
   <footer class="site-footer">
     <div class="footer-grid container">
       <div class="footer-col">
@@ -210,10 +238,11 @@ some yards html>
       </div>
     </div>
     <div class="footer-bottom">
-      © <span id="year">2026</span> SIERRAUNLOCK • Unlock • Repair • Connect — Sierra Leone • <span id="siteVersion">v1.5.0</span>
+      © <span id="year">2026</span> SIERRAUNLOCK • Unlock • Repair • Connect — Sierra Leone • <span id="siteVersion">v2.0.0</span>
     </div>
   </footer>
 
+  <!-- 12 • SCRIPTS -->
   <script src="assets/js/security.js"></script>
   <script src="assets/js/main.js"></script>
 </body>
