@@ -1,5 +1,5 @@
 /* =====================================================================
-   SIERRAUNLOCK • CORE ENGINE — main.js (v6 • DOCUMENTED + NUMBER-FIXED)
+   SIERRAUNLOCK • CORE ENGINE — main.js (v7 • DOCUMENTED + REVEAL FIX)
    ---------------------------------------------------------------------
    WHAT IS THIS FILE?
    The "Master Brain" that runs on EVERY page of the website. It:
@@ -9,6 +9,7 @@
    • Injects the animated rotator line into every hero
    • Injects the Tools & Services marquee under the legal strip
    • Powers the mobile hamburger menu, scroll reveal, year/version footer
+   • NEW (v7): Now also reveals Philosophy cards and Journey Timeline on About page
 
    SECTION MAP:
    01  Central WhatsApp desk switch (all flows → Alhassan 23275908206)
@@ -23,7 +24,7 @@
    10  Year + version footer injector
    11  Active nav link highlighter
    12  Tools marquee injector
-   13  Scroll reveal (IntersectionObserver)
+   13  Scroll reveal (IntersectionObserver) — v7 now includes philosophy cards + timeline
 
    CRITICAL NUMBER MAP (do not change without updating the normalizer):
    • Alhassan phone / Orange Money / WhatsApp desk : +232 75 908 206
@@ -271,8 +272,13 @@ function initToolsMarquee() {
 }
 
 /* 13 • SCROLL REVEAL — fades elements in as they enter the viewport */
+/* v7 FIX: added .philosophy-card, .timeline-item and generic .reveal so
+   the About page's philosophy cards and journey timeline are no longer stuck
+   at opacity:0. Any element with class "reveal" will now fade in on scroll. */
 function initReveal() {
-  const targets = document.querySelectorAll('.card, .founder-card, .stat, .section-head, .badge, .tool-card');
+  const targets = document.querySelectorAll(
+    '.card, .founder-card, .stat, .section-head, .badge, .tool-card, .philosophy-card, .timeline-item, .reveal'
+  );
   if (!targets.length || !('IntersectionObserver' in window)) {
     targets.forEach(el => el.classList.add('reveal-in')); return;
   }
