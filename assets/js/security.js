@@ -1,5 +1,5 @@
 /* =====================================================================
-   SIERRAUNLOCK • SECURITY HARDENING LAYER — security.js (v3 • FINAL)
+   SIERRAUNLOCK • SECURITY HARDENING LAYER — security.js (v4 • CLEAN)
    ---------------------------------------------------------------------
    WHAT IS THIS FILE?
    The "Security Shield" of the entire website. It loads FIRST on every
@@ -29,10 +29,12 @@
    11  Backend hook for future EXT-13 integration
 
    SECURITY NOTES:
-   • The admin PIN lockout is NOT here — it lives in admin.js v2 to
+   • The admin key lockout is NOT here — it lives in admin.js v3 to
      avoid double-locking and race conditions.
    • Honeypot fields are invisible to humans but bots auto-fill them.
    • This file MUST load before main.js in every HTML file.
+   • v4: removed ignored frame-ancestors directive from CSP meta tag
+     (clickjacking protection still active via frame-buster in Section 01).
 
    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
    ===================================================================== */
@@ -116,6 +118,8 @@
     });
 
     /* 08 • CSP META TAG INJECTOR — blocks injected malicious scripts (basic XSS protection) */
+    /* v4: frame-ancestors directive removed (ignored in meta tags; clickjacking protection
+       still enforced by the frame-buster JavaScript in Section 01 above). */
     if (!document.querySelector('meta[http-equiv="Content-Security-Policy"]')) {
       const csp = document.createElement('meta');
       csp.setAttribute('http-equiv', 'Content-Security-Policy');
@@ -150,5 +154,5 @@
   });
 
   /* 11 • HOOK FOR THE FUTURE BACKEND (EXT-13) — signals security layer is ready */
-  window.SU_SEC = { layer: 'frontend-v3', ready: true };
+  window.SU_SEC = { layer: 'frontend-v4', ready: true };
 })();
