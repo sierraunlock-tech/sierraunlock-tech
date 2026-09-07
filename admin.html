@@ -7,7 +7,7 @@
   <title>Admin Dashboard | SIERRAUNLOCK</title>
   <!--
     =====================================================================
-    SIERRAUNLOCK • ADMIN DASHBOARD — admin.html (v2 • DOCUMENTED)
+    SIERRAUNLOCK • ADMIN DASHBOARD — admin.html (v3 • PRIVATE)
     ---------------------------------------------------------------------
     WHAT IS THIS FILE?
     The private "control room" of the platform. Founders use this page
@@ -18,14 +18,15 @@
     • Approve seller listings & community shops
     • Publish marketplace items directly
     • Log and track unlock/repair jobs
-    • Change the site version & admin PIN
+    • Change the site version & admin key
 
     SECURITY NOTES:
     • Protected by `meta name="robots" content="noindex"` — not indexed.
-    • Login gate: PIN required (default 2026, change immediately).
-    • 5 wrong PINs = 60-second lockout (handled in admin.js).
+    • Login gate: private founders' key required (NEVER published on screen).
+    • 5 wrong keys = 60-second lockout (handled in admin.js).
     • 30-minute inactivity auto-logout (handled in admin.js).
-    • All data lives in browser localStorage (syncs to backend in EXT-16).
+    • No link to this page exists on the public site (removed from footers).
+    • Access only by typing the URL directly + knowing the private key.
 
     ACCESS: Only founders (Alhassan & Baimba) should access this page.
     OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
@@ -100,18 +101,18 @@
     </div>
   </div>
 
-  <!-- LOGIN SCREEN — PIN required to enter -->
+  <!-- LOGIN SCREEN — Private key required (no hint shown) -->
   <div class="login-wrap" id="loginView">
     <div class="login-card" id="loginCard">
       <h2>🔐 Admin Access</h2>
-      <p>Founders only. Default PIN <strong>2026</strong> — change it in Settings after login.</p>
-      <input type="password" id="pinInput" inputmode="numeric" placeholder="••••" aria-label="Admin PIN">
+      <p>Founders only. Private access key required.</p>
+      <input type="password" id="pinInput" inputmode="numeric" placeholder="••••••••" aria-label="Admin key">
       <div style="margin-top:1rem"><button class="btn btn-brand" id="loginBtn">UNLOCK DASHBOARD</button></div>
       <p id="loginErr"></p>
     </div>
   </div>
 
-  <!-- DASHBOARD — Hidden until PIN verified -->
+  <!-- DASHBOARD — Hidden until key verified -->
   <div class="adm-wrap" id="dashView" hidden>
     <!-- Left sidebar tabs -->
     <nav class="adm-tabs" aria-label="Admin sections">
@@ -204,11 +205,11 @@
           <input type="text" id="verInput" aria-label="Site version">
           <button class="btn btn-brand" id="verSave">Update Version</button>
         </div>
-        <h3 style="margin-top:1.6rem">Change Admin PIN</h3>
+        <h3 style="margin-top:1.6rem">Change Admin Key</h3>
         <div class="inline">
-          <input type="password" id="pinCur" placeholder="Current PIN">
-          <input type="password" id="pinNew" placeholder="New PIN (4+ chars)">
-          <button class="btn btn-brand" id="pinSave">Change PIN</button>
+          <input type="password" id="pinCur" placeholder="Current key">
+          <input type="password" id="pinNew" placeholder="New key (4+ chars)">
+          <button class="btn btn-brand" id="pinSave">Change Key</button>
         </div>
         <h3 style="margin-top:1.6rem;color:var(--danger)">Danger Zone</h3>
         <button class="btn" id="dangerClear" style="background:#FDECEA;color:#B00020">Clear All Local Admin Data</button>

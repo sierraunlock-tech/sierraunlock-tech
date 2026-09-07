@@ -1,11 +1,11 @@
 /* =====================================================================
-   SIERRAUNLOCK • ADMIN DASHBOARD ENGINE — admin.js (v2 • DOCUMENTED + HARDENED)
+   SIERRAUNLOCK • ADMIN DASHBOARD ENGINE — admin.js (v3 • PRIVATE KEY)
    ---------------------------------------------------------------------
    WHAT IS THIS FILE?
    The private "control room" of the platform (admin.html). Founders use
    it to: view live stats, set the SLE rate, set tool pricing, approve
    seller listings & community shops, publish marketplace items, log
-   repair/unlock jobs, change the site version and change the admin PIN.
+   repair/unlock jobs, change the site version and change the admin key.
 
    SECTION MAP:
    01  Storage helpers
@@ -19,12 +19,14 @@
    09  Community shops (verify / remove)
    10  Marketplace listings (publish / remove)
    11  Jobs board (log / advance / delete)
-   12  Settings (version, PIN change, danger zone)
+   12  Settings (version, key change, danger zone)
 
    SECURITY NOTES:
-   • PIN is stored base64-encoded (light obfuscation) — CHANGE DEFAULT 2026!
+   • Private founders' key is hardcoded — NEVER shared or published.
+   • Key is stored base64-encoded in localStorage (light obfuscation).
    • The brute-force lockout lives HERE (security.js must not duplicate it).
    • Admin session expires automatically after 30 minutes of inactivity.
+   • All error messages are deliberately vague — no key hints leaked.
 
    OWNER: SIERRAUNLOCK Founders • Waterloo / Koidu, Sierra Leone
    ===================================================================== */
@@ -79,8 +81,8 @@
 
   function tryLogin() {
     const rem = Math.max(0, lockGet().until - Date.now());
-    if (rem > 0) { $('loginErr').textContent = '🔒 Too many wrong tries. Locked for ' + Math.ceil(rem / 1000) + ' s.'; return; }
-    const ok = btoa($('pinInput').value) === (localStorage.getItem('su_pin') || btoa('2026'));
+    if (rem > 0) { $('loginErr').textContent = '🔒 Too many attempts. Try again later.'; return; }
+    const ok = btoa($('pinInput').value) === (localStorage.getItem('su_pin') || btoa('19980511'));
     if (ok) {
       lockSet({ fails: 0, until: 0 });                   /* clear lock on success */
       sessionStorage.setItem('su_admin_ok', '1');
@@ -89,8 +91,12 @@
       showDash();
     } else {
       const s = lockGet(); s.fails += 1;
-      if (s.fails >= LOCK_MAX) { s.until = Date.now() + LOCK_MS; s.fails = 0; $('loginErr').textContent = '🔒 5 wrong tries — locked for 60 seconds.'; }
-      else { $('loginErr').textContent = 'Wrong PIN (' + s.fails + '/' + LOCK_MAX + '). Default is 2026 until you change it in Settings.'; }
+      if (s.fails >= LOCK_MAX) {
+        s.until = Date.now() + LOCK_MS; s.fails = 0;
+        $('loginErr').textContent = '🔒 Too many attempts. Access temporarily suspended.';
+      } else {
+        $('loginErr').textContent = '❌ Access denied. Invalid credentials.';
+      }
       lockSet(s);
       const c = $('loginCard'); c.classList.remove('shake'); void c.offsetWidth; c.classList.add('shake');
     }
@@ -268,7 +274,7 @@
     });
   }
 
-  /* 12 • SETTINGS — version label, PIN change, danger-zone wipe */
+  /* 12 • SETTINGS — version label, key change, danger-zone wipe */
   function renderSettings() {
     $('verInput').value = localStorage.getItem('su_version') || 'v2.0.0';
     $('rateInput').value = (parseFloat(localStorage.getItem('su_rate_sle')) || 22.5);
@@ -281,10 +287,14 @@
     });
     $('pinSave').addEventListener('click', () => {
       const cur = $('pinCur').value, nw = $('pinNew').value;
-      if (btoa(cur) !== (localStorage.getItem('su_pin') || btoa('2026'))) { alert('Current PIN is wrong.'); return; }
-      if (nw.length < 4) { alert('New PIN must be at least 4 characters.'); return; }
-      localStorage.setItem('su_pin', btoa(nw)); $('pinCur').value = ''; $('pinNew').value = '';
-      alert('✔ PIN changed.');
+      if (btoa(cur) !== (localStorage.getItem('su_pin') || btoa('19980511'))) {
+        alert('❌ Current key is incorrect.');
+        return;
+      }
+      if (nw.length < 4) { alert('New key must be at least 4 characters.'); return; }
+      localStorage.setItem('su_pin', btoa(nw));
+      $('pinCur').value = ''; $('pinNew').value = '';
+      alert('✔ Private key changed successfully.');
     });
     $('dangerClear').addEventListener('click', () => {
       if (!confirm('Delete ALL local admin data (shops, products, pending, jobs, pricing, rate, version)?')) return;
