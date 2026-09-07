@@ -119,7 +119,7 @@
     if (!document.querySelector('meta[http-equiv="Content-Security-Policy"]')) {
       const csp = document.createElement('meta');
       csp.setAttribute('http-equiv', 'Content-Security-Policy');
-      csp.setAttribute('content', "default-src 'self' 'unsafe-inline' 'unsafe-eval' https: data: blob:; img-src 'self' https: data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net https://api.binance.com https://cdn.emailjs.com; connect-src 'self' https://api.binance.com https://api.emailjs.com; frame-ancestors 'none';");
+      csp.setAttribute('content', "default-src 'self' 'unsafe-inline' 'unsafe-eval' https: data: blob:; img-src 'self' https: data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net https://api.binance.com https://cdn.emailjs.com; connect-src 'self' https://api.binance.com https://api.emailjs.com");
       document.head.appendChild(csp);
     }
 
