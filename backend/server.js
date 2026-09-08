@@ -1,41 +1,5 @@
 /* =====================================================================
-   SIERRAUNLOCK • BACKEND API — server.js (v3.1 • SMART PATH PROBE)
-   ---------------------------------------------------------------------
-   WHAT IS THIS FILE?
-   The Node.js/Express "server brain" (deployed on Render). It:
-   • Receives unlock orders from the website
-   • Connects to the FastUnlockers.us upstream server via API key
-   • Places orders upstream ONLY when a founder approves (admin token)
-   • Tracks job status, serves the SLE rate, verifies Binance webhooks
-   • NEW v3.1: /api/upstream-test now AUTO-PROBES 32 candidate endpoint
-     paths + auth styles and reports which door opens (GET-only, safe)
-
-   SECTION MAP:
-   01  Environment + dependencies
-   02  Storage helpers (data.json, capped at 500 jobs)
-   03  Global security middleware (helmet, CORS, body limit, rate limits, logging)
-   04  Auth helpers (admin token)
-   05  Joi validation schemas
-   06  Public endpoints (health, rates, root banner)
-   07  Customer endpoints (unlock request, job status)
-   08  Admin endpoints (set rate, update job)
-   09  Binance webhook stub (HMAC when secret set)
-   10  FASTUNLOCKERS UPSTREAM ADAPTER — config from env ONLY
-   11  UPSTREAM SMART PROBE (founders only) — finds the working endpoint
-   12  Services proxy (cached 10 min)
-   13  Upstream order placement (admin token = payment confirmed first)
-   14  404 + central error handler + boot
-
-   ENV VARIABLES (Render + local .env — NEVER in frontend, NEVER in Git):
-   PORT, FRONTEND_URL, ADMIN_TOKEN, UNLOCK_API_URL, UNLOCK_API_KEY,
-   optional: UNLOCK_API_KEY_HEADER, UNLOCK_API_SERVICES_PATH,
-             UNLOCK_API_ORDER_PATH, UNLOCK_API_STATUS_PATH,
-             UNLOCK_API_BALANCE_PATH, BINANCE_WEBHOOK_SECRET
-
-   MONEY SAFETY: /api/order requires the admin token. The probe (section 11)
-   sends GET requests ONLY — it can never place an order or spend balance.
-
-   OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
+   SIERRAUNLOCK • BACKEND API — server.js (v3.2 • POST PROBE FINAL)
    ===================================================================== */
 
 /* 01 • ENVIRONMENT + DEPENDENCIES */
@@ -94,9 +58,9 @@ const orderSchema = Joi.object({
 });
 
 /* 06 • PUBLIC ENDPOINTS */
-app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.1.0', docs: '/api/health' }));
+app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.2.0', docs: '/api/health' }));
 app.get('/api/health', (req, res) => res.json({
-  ok: true, service: 'SIERRAUNLOCK API', version: '3.1.0',
+  ok: true, service: 'SIERRAUNLOCK API', version: '3.2.0',
   mode: fuReady() ? 'connected-to-fastunlockers' : 'manual-mode',
   time: new Date().toISOString()
 }));
@@ -152,15 +116,15 @@ app.post('/api/webhook/binance', express.raw({ type: '*/*' }), (req, res) => {
   res.json({ ok: true, received: true });
 });
 
-/* 10 • FASTUNLOCKERS UPSTREAM ADAPTER — all config from environment ONLY */
+/* 10 • FASTUNLOCKERS UPSTREAM ADAPTER — config from env ONLY */
 const FU = {
   base: (process.env.UNLOCK_API_URL || '').replace(/\/+$/, ''),
   key: process.env.UNLOCK_API_KEY || '',
   keyHeader: process.env.UNLOCK_API_KEY_HEADER || 'x-api-key',
-  servicesPath: process.env.UNLOCK_API_SERVICES_PATH || '/api/v1/services',
-  orderPath: process.env.UNLOCK_API_ORDER_PATH || '/api/v1/order',
-  statusPath: process.env.UNLOCK_API_STATUS_PATH || '/api/v1/order/',
-  balancePath: process.env.UNLOCK_API_BALANCE_PATH || '/api/v1/balance'
+  servicesPath: process.env.UNLOCK_API_SERVICES_PATH || '/api/services',
+  orderPath: process.env.UNLOCK_API_ORDER_PATH || '/api/order',
+  statusPath: process.env.UNLOCK_API_STATUS_PATH || '/api/order/',
+  balancePath: process.env.UNLOCK_API_BALANCE_PATH || '/api/balance'
 };
 function fuReady() { return !!(FU.base && FU.key); }
 function fuHeaders() { return { [FU.keyHeader]: FU.key, 'Accept': 'application/json', 'Content-Type': 'application/json' }; }
@@ -171,7 +135,7 @@ async function fuFetchRaw(url, headers, opts) {
     const r = await fetch(url, Object.assign({ headers: headers, signal: ctrl.signal }, opts || {}));
     const text = await r.text();
     let json = null; try { json = JSON.parse(text); } catch (e) {}
-    return { http: r.status, json, text: text.slice(0, 300) };
+    return { http: r.status, json, text: text.slice(0, 400) };
   } catch (e) {
     return { http: 0, json: null, text: 'network error: ' + e.message };
   } finally { clearTimeout(t); }
@@ -180,17 +144,17 @@ async function fuFetch(p, opts) {
   return fuFetchRaw(FU.base + p, fuHeaders(), opts);
 }
 
-/* 11 • UPSTREAM SMART PROBE v3.2 — founders only. POST-safe probe.
-   FastUnlockers answers POST on /api/balance and /api/services (base without /public).
-   We POST with a JSON body; we never send an IMEI so no order is placed. */
+/* 11 • UPSTREAM SMART PROBE v3.2 — POST probe on /api/balance and /api/services
+   FastUnlockers answered 405 to GET on /api/balance and /api/services → means POST only.
+   This probe sends POST with JSON body; never sends IMEI → no order is placed. */
 app.get('/api/upstream-test', strict, async (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   if (!fuReady()) return res.json({ ok: false, error: 'UNLOCK_API_URL / UNLOCK_API_KEY not set.' });
   const root = FU.base.replace(/\/public\/?$/, '');
   const probes = [
-    { url: root + '/api/balance',   auth: 'header', body: { command: 'balance' } },
-    { url: root + '/api/services',  auth: 'header', body: { command: 'services' } },
-    { url: root + '/api/balance?key=' + encodeURIComponent(FU.key), auth: 'query', body: { command: 'balance' } },
+    { url: root + '/api/balance',  auth: 'header', body: { command: 'balance' } },
+    { url: root + '/api/services', auth: 'header', body: { command: 'services' } },
+    { url: root + '/api/balance?key=' + encodeURIComponent(FU.key),  auth: 'query', body: { command: 'balance' } },
     { url: root + '/api/services?key=' + encodeURIComponent(FU.key), auth: 'query', body: { command: 'services' } },
     { url: FU.base + '/api/balance',  auth: 'header', body: { command: 'balance' } },
     { url: FU.base + '/api/services', auth: 'header', body: { command: 'services' } }
@@ -216,39 +180,13 @@ app.get('/api/upstream-test', strict, async (req, res) => {
   }
   res.json({ ok: true, winner, report });
 });
-   Knocks on 32 candidate doors (2 bases x 8 paths x 2 auth styles) and
-   reports which one opens with JSON. Run once after deploy. */
-app.get('/api/upstream-test', strict, async (req, res) => {
-  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
-  if (!fuReady()) return res.json({ ok: false, error: 'UNLOCK_API_URL / UNLOCK_API_KEY not set.' });
-  const root = FU.base.replace(/\/public\/?$/, '');
-  const paths = ['/api/v2/balance', '/api/v2/services', '/api/v1/balance', '/api/v1/services', '/api/balance', '/api/services', '/balance', '/services'];
-  const report = [];
-  let winner = null;
-  for (const b of ['FU', 'ROOT']) {
-    const base = (b === 'FU') ? FU.base : root;
-    for (const p of paths) {
-      for (const a of ['header', 'query']) {
-        const url = base + p + (a === 'query' ? '?key=' + encodeURIComponent(FU.key) : '');
-        const headers = (a === 'header') ? fuHeaders() : { 'Accept': 'application/json' };
-        const r = await fuFetchRaw(url, headers);
-        report.push(b + ' ' + p + ' ' + a + ' => ' + r.http);
-        if (r.http === 200 && r.json && !winner) {
-          winner = { base: b, path: p, auth: a, sample: r.json };
-        }
-      }
-    }
-    if (winner) break;
-  }
-  res.json({ ok: true, winner, report });
-});
 
 /* 12 • SERVICES PROXY — cached 10 minutes */
 let svcCache = { ts: 0, data: null };
 app.get('/api/services', async (req, res) => {
   if (!fuReady()) return res.json({ ok: false, mode: 'manual', services: [] });
   if (svcCache.data && Date.now() - svcCache.ts < 600000) return res.json({ ok: true, cached: true, services: svcCache.data });
-  const r = await fuFetch(FU.servicesPath);
+  const r = await fuFetchRaw(FU.base + '/api/services', fuHeaders(), { method: 'POST', body: JSON.stringify({ command: 'services' }) });
   if (r.http === 200 && r.json) { svcCache = { ts: Date.now(), data: r.json }; return res.json({ ok: true, cached: false, services: r.json }); }
   res.status(502).json({ ok: false, error: 'Upstream unreachable', detail: r });
 });
@@ -293,4 +231,4 @@ app.use((err, req, res, next) => {
   console.error('[ERR]', err.message);
   res.status(err.status || 500).json({ ok: false, error: 'Server error.' });
 });
-app.listen(PORT, () => console.log('SIERRAUNLOCK API v3.1 online on :' + PORT + ' — mode: ' + (fuReady() ? 'CONNECTED TO FASTUNLOCKERS' : 'MANUAL')));
+app.listen(PORT, () => console.log('SIERRAUNLOCK API v3.2 online on :' + PORT + ' — mode: ' + (fuReady() ? 'CONNECTED TO FASTUNLOCKERS' : 'MANUAL')));
