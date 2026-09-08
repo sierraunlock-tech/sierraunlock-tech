@@ -1,5 +1,5 @@
 /* =====================================================================
-   SIERRAUNLOCK • BACKEND API — server.js (v3 • FASTUNLOCKERS CONNECTED)
+   SIERRAUNLOCK • BACKEND API — server.js (v3.1 • SMART PATH PROBE)
    ---------------------------------------------------------------------
    WHAT IS THIS FILE?
    The Node.js/Express "server brain" (deployed on Render). It:
@@ -7,6 +7,8 @@
    • Connects to the FastUnlockers.us upstream server via API key
    • Places orders upstream ONLY when a founder approves (admin token)
    • Tracks job status, serves the SLE rate, verifies Binance webhooks
+   • NEW v3.1: /api/upstream-test now AUTO-PROBES 32 candidate endpoint
+     paths + auth styles and reports which door opens (GET-only, safe)
 
    SECTION MAP:
    01  Environment + dependencies
@@ -14,25 +16,24 @@
    03  Global security middleware (helmet, CORS, body limit, rate limits, logging)
    04  Auth helpers (admin token)
    05  Joi validation schemas
-   06  Public endpoints (health, rates)
+   06  Public endpoints (health, rates, root banner)
    07  Customer endpoints (unlock request, job status)
    08  Admin endpoints (set rate, update job)
    09  Binance webhook stub (HMAC when secret set)
-   10  FASTUNLOCKERS UPSTREAM ADAPTER (EXT-16) — config from env ONLY
-   11  Upstream connection test (founders only — run once after deploy)
+   10  FASTUNLOCKERS UPSTREAM ADAPTER — config from env ONLY
+   11  UPSTREAM SMART PROBE (founders only) — finds the working endpoint
    12  Services proxy (cached 10 min)
    13  Upstream order placement (admin token = payment confirmed first)
    14  404 + central error handler + boot
 
    ENV VARIABLES (Render + local .env — NEVER in frontend, NEVER in Git):
-   PORT, FRONTEND_URL, ADMIN_TOKEN,
-   UNLOCK_API_URL, UNLOCK_API_KEY,
+   PORT, FRONTEND_URL, ADMIN_TOKEN, UNLOCK_API_URL, UNLOCK_API_KEY,
    optional: UNLOCK_API_KEY_HEADER, UNLOCK_API_SERVICES_PATH,
              UNLOCK_API_ORDER_PATH, UNLOCK_API_STATUS_PATH,
              UNLOCK_API_BALANCE_PATH, BINANCE_WEBHOOK_SECRET
 
-   MONEY SAFETY: /api/order requires the admin token. No order is ever
-   placed upstream (spending balance) without a founder approving it.
+   MONEY SAFETY: /api/order requires the admin token. The probe (section 11)
+   sends GET requests ONLY — it can never place an order or spend balance.
 
    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
    ===================================================================== */
@@ -93,8 +94,9 @@ const orderSchema = Joi.object({
 });
 
 /* 06 • PUBLIC ENDPOINTS */
+app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.1.0', docs: '/api/health' }));
 app.get('/api/health', (req, res) => res.json({
-  ok: true, service: 'SIERRAUNLOCK API', version: '3.0.0',
+  ok: true, service: 'SIERRAUNLOCK API', version: '3.1.0',
   mode: fuReady() ? 'connected-to-fastunlockers' : 'manual-mode',
   time: new Date().toISOString()
 }));
@@ -162,26 +164,48 @@ const FU = {
 };
 function fuReady() { return !!(FU.base && FU.key); }
 function fuHeaders() { return { [FU.keyHeader]: FU.key, 'Accept': 'application/json', 'Content-Type': 'application/json' }; }
-async function fuFetch(p, opts) {
+async function fuFetchRaw(url, headers, opts) {
   const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 15000);
+  const t = setTimeout(() => ctrl.abort(), 10000);
   try {
-    const r = await fetch(FU.base + p, Object.assign({ headers: fuHeaders(), signal: ctrl.signal }, opts || {}));
+    const r = await fetch(url, Object.assign({ headers: headers, signal: ctrl.signal }, opts || {}));
     const text = await r.text();
     let json = null; try { json = JSON.parse(text); } catch (e) {}
-    return { http: r.status, json, text: text.slice(0, 400) };
+    return { http: r.status, json, text: text.slice(0, 300) };
   } catch (e) {
     return { http: 0, json: null, text: 'network error: ' + e.message };
   } finally { clearTimeout(t); }
 }
+async function fuFetch(p, opts) {
+  return fuFetchRaw(FU.base + p, fuHeaders(), opts);
+}
 
-/* 11 • UPSTREAM CONNECTION TEST — founders only, run once after deploy */
+/* 11 • UPSTREAM SMART PROBE — founders only. GET-only. Cannot spend money.
+   Knocks on 32 candidate doors (2 bases x 8 paths x 2 auth styles) and
+   reports which one opens with JSON. Run once after deploy. */
 app.get('/api/upstream-test', strict, async (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
-  if (!fuReady()) return res.json({ ok: false, error: 'UNLOCK_API_URL / UNLOCK_API_KEY not set in environment.' });
-  const balance = await fuFetch(FU.balancePath);
-  const services = await fuFetch(FU.servicesPath);
-  res.json({ ok: true, base: FU.base, balance, services });
+  if (!fuReady()) return res.json({ ok: false, error: 'UNLOCK_API_URL / UNLOCK_API_KEY not set.' });
+  const root = FU.base.replace(/\/public\/?$/, '');
+  const paths = ['/api/v2/balance', '/api/v2/services', '/api/v1/balance', '/api/v1/services', '/api/balance', '/api/services', '/balance', '/services'];
+  const report = [];
+  let winner = null;
+  for (const b of ['FU', 'ROOT']) {
+    const base = (b === 'FU') ? FU.base : root;
+    for (const p of paths) {
+      for (const a of ['header', 'query']) {
+        const url = base + p + (a === 'query' ? '?key=' + encodeURIComponent(FU.key) : '');
+        const headers = (a === 'header') ? fuHeaders() : { 'Accept': 'application/json' };
+        const r = await fuFetchRaw(url, headers);
+        report.push(b + ' ' + p + ' ' + a + ' => ' + r.http);
+        if (r.http === 200 && r.json && !winner) {
+          winner = { base: b, path: p, auth: a, sample: r.json };
+        }
+      }
+    }
+    if (winner) break;
+  }
+  res.json({ ok: true, winner, report });
 });
 
 /* 12 • SERVICES PROXY — cached 10 minutes */
@@ -228,13 +252,10 @@ app.post('/api/order-status', strict, async (req, res) => {
   res.json({ ok: true, job });
 });
 
-/* 13c • ROOT BANNER — clean JSON at base URL (also satisfies platform health checks) */
-app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.0.0', docs: '/api/health' }));
-
 /* 14 • 404 + CENTRAL ERROR HANDLER + BOOT */
 app.use((req, res) => res.status(404).json({ ok: false, error: 'Not found.' }));
 app.use((err, req, res, next) => {
   console.error('[ERR]', err.message);
   res.status(err.status || 500).json({ ok: false, error: 'Server error.' });
 });
-app.listen(PORT, () => console.log('SIERRAUNLOCK API v3 online on :' + PORT + ' — mode: ' + (fuReady() ? 'CONNECTED TO FASTUNLOCKERS' : 'MANUAL')));
+app.listen(PORT, () => console.log('SIERRAUNLOCK API v3.1 online on :' + PORT + ' — mode: ' + (fuReady() ? 'CONNECTED TO FASTUNLOCKERS' : 'MANUAL')));
