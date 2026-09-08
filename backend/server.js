@@ -1,5 +1,58 @@
 /* =====================================================================
-   SIERRAUNLOCK • BACKEND API — server.js (v3.2 • POST PROBE FINAL)
+   SIERRAUNLOCK • BACKEND API — server.js (v3.3 • BODY FORMAT PROBE)
+   ---------------------------------------------------------------------
+   WHAT IS THIS FILE?
+   The Node.js/Express "server brain" deployed on Render. It is the
+   secure bridge between the SIERRAUNLOCK public website and the
+   FastUnlockers.us upstream unlock server.
+
+   RESPONSIBILITIES:
+   • Receives unlock orders from customers on sierraunlock.com
+   • Validates inputs (Joi schemas) before any upstream call
+   • Connects to FastUnlockers.us using the founder's API key (env-only)
+   • Places upstream orders ONLY when a founder approves (admin token)
+   • Tracks job lifecycle: queued → sent-to-server → processing → solved/failed
+   • Serves the SLE/USD exchange rate to the public Payments converter
+   • Verifies Binance Pay webhooks (HMAC) when the secret is set
+   • Auto-probes upstream API paths and body formats (founders only)
+
+   SECTION MAP:
+   01  Environment + dependencies
+   02  Storage helpers (data.json, capped at 500 jobs)
+   03  Global security middleware (helmet, CORS, body limit, rate limits, logging)
+   04  Auth helpers (admin token verification)
+   05  Joi validation schemas (unlock, job-status, rate, order)
+   06  Public endpoints (root banner, health, rates)
+   07  Customer endpoints (unlock request, job status)
+   08  Admin endpoints (set rate, update job)
+   09  Binance webhook stub (HMAC when secret is set)
+   10  FastUnlockers upstream adapter — config from env ONLY
+   11  Upstream smart probe v3.3 (founders only) — finds the right body format
+   12  Services proxy (cached 10 minutes)
+   13  Upstream order placement (admin token = payment confirmed first)
+   13b Live upstream status check for a stored job
+   14  404 + central error handler + boot
+
+   ENV VARIABLES (Render + local .env — NEVER in frontend, NEVER in Git):
+   • PORT                    — server port (Render injects automatically)
+   • FRONTEND_URL            — https://sierraunlock.com (CORS allowlist)
+   • ADMIN_TOKEN             — founders' secret token for privileged routes
+   • UNLOCK_API_URL          — https://fastunlockers.us
+   • UNLOCK_API_KEY          — founder's FastUnlockers API key (RXXYRSN-...)
+   • UNLOCK_API_KEY_HEADER   — optional override (default: x-api-key)
+   • UNLOCK_API_SERVICES_PATH, UNLOCK_API_ORDER_PATH,
+     UNLOCK_API_STATUS_PATH, UNLOCK_API_BALANCE_PATH — optional path overrides
+   • BINANCE_WEBHOOK_SECRET  — optional HMAC secret for Binance webhooks
+
+   MONEY SAFETY RULES:
+   • /api/order REQUIRES the admin token — no order is ever placed upstream
+     (and no balance is ever spent) without a founder approving first.
+   • The probe in Section 11 sends NO IMEI and NO order data — it only
+     asks for balance (read-only) to discover the right message format.
+   • The API key lives ONLY in .env (local) and Render env vars (live).
+     It is NEVER in frontend code, NEVER in Git, NEVER in logs.
+
+   OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
    ===================================================================== */
 
 /* 01 • ENVIRONMENT + DEPENDENCIES */
@@ -19,7 +72,7 @@ const PORT = process.env.PORT || 3000;
 const DATA = path.join(__dirname, 'data.json');
 app.set('trust proxy', 1);
 
-/* 02 • STORAGE HELPERS */
+/* 02 • STORAGE HELPERS — safe JSON read/write on local data.json */
 const load = () => { try { return JSON.parse(fs.readFileSync(DATA, 'utf8')); } catch (e) { return { jobs: [], rate: 22.5 }; } };
 const save = (d) => { d.jobs = (d.jobs || []).slice(0, 500); fs.writeFileSync(DATA, JSON.stringify(d, null, 2)); };
 if (!fs.existsSync(DATA)) save({ jobs: [], rate: 22.5 });
@@ -36,7 +89,7 @@ const strict = rateLimit({ windowMs: 60 * 1000, max: 6 });
 /* 04 • AUTH HELPERS */
 const adminOk = (req) => !!process.env.ADMIN_TOKEN && req.get('x-admin-token') === process.env.ADMIN_TOKEN;
 
-/* 05 • JOI SCHEMAS */
+/* 05 • JOI SCHEMAS — strict validation before any upstream call */
 const unlockSchema = Joi.object({
   imei: Joi.string().pattern(/^\d{15}$/).required(),
   brand: Joi.string().trim().min(2).max(40).required(),
@@ -58,9 +111,9 @@ const orderSchema = Joi.object({
 });
 
 /* 06 • PUBLIC ENDPOINTS */
-app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.2.0', docs: '/api/health' }));
+app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.3.0', docs: '/api/health' }));
 app.get('/api/health', (req, res) => res.json({
-  ok: true, service: 'SIERRAUNLOCK API', version: '3.2.0',
+  ok: true, service: 'SIERRAUNLOCK API', version: '3.3.0',
   mode: fuReady() ? 'connected-to-fastunlockers' : 'manual-mode',
   time: new Date().toISOString()
 }));
@@ -103,7 +156,7 @@ app.post('/api/admin/job', strict, (req, res) => {
   res.json({ ok: true, job });
 });
 
-/* 09 • BINANCE WEBHOOK STUB */
+/* 09 • BINANCE WEBHOOK STUB — verifies HMAC when secret is set */
 app.post('/api/webhook/binance', express.raw({ type: '*/*' }), (req, res) => {
   const secret = process.env.BINANCE_WEBHOOK_SECRET;
   if (secret) {
@@ -116,7 +169,7 @@ app.post('/api/webhook/binance', express.raw({ type: '*/*' }), (req, res) => {
   res.json({ ok: true, received: true });
 });
 
-/* 10 • FASTUNLOCKERS UPSTREAM ADAPTER — config from env ONLY */
+/* 10 • FASTUNLOCKERS UPSTREAM ADAPTER — all config from environment ONLY */
 const FU = {
   base: (process.env.UNLOCK_API_URL || '').replace(/\/+$/, ''),
   key: process.env.UNLOCK_API_KEY || '',
@@ -144,38 +197,45 @@ async function fuFetch(p, opts) {
   return fuFetchRaw(FU.base + p, fuHeaders(), opts);
 }
 
-/* 11 • UPSTREAM SMART PROBE v3.2 — POST probe on /api/balance and /api/services
-   FastUnlockers answered 405 to GET on /api/balance and /api/services → means POST only.
-   This probe sends POST with JSON body; never sends IMEI → no order is placed. */
+/* 11 • UPSTREAM SMART PROBE v3.3 — BODY FORMAT FINDER
+   Previous probes found that FastUnlockers:
+   • answers HTTP 200 on /api/balance and /api/services (POST only)
+   • accepts our API key (no 401)
+   • BUT returns ERROR "Invalid action" because the message body format is wrong
+   This probe tries 6 different body formats (JSON/form, action/command, with/without key)
+   and reports which one FastUnlockers understands. Read-only — no IMEI, no order data. */
 app.get('/api/upstream-test', strict, async (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   if (!fuReady()) return res.json({ ok: false, error: 'UNLOCK_API_URL / UNLOCK_API_KEY not set.' });
-  const root = FU.base.replace(/\/public\/?$/, '');
-  const probes = [
-    { url: root + '/api/balance',  auth: 'header', body: { command: 'balance' } },
-    { url: root + '/api/services', auth: 'header', body: { command: 'services' } },
-    { url: root + '/api/balance?key=' + encodeURIComponent(FU.key),  auth: 'query', body: { command: 'balance' } },
-    { url: root + '/api/services?key=' + encodeURIComponent(FU.key), auth: 'query', body: { command: 'services' } },
-    { url: FU.base + '/api/balance',  auth: 'header', body: { command: 'balance' } },
-    { url: FU.base + '/api/services', auth: 'header', body: { command: 'services' } }
+  const url = FU.base + '/api/balance';
+  const formats = [
+    { name: 'JSON action',     headers: fuHeaders(), body: JSON.stringify({ action: 'balance' }) },
+    { name: 'JSON command',    headers: fuHeaders(), body: JSON.stringify({ command: 'balance' }) },
+    { name: 'JSON action+key', headers: fuHeaders(), body: JSON.stringify({ action: 'balance', key: FU.key }) },
+    { name: 'Form action',     headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'action=balance&key=' + encodeURIComponent(FU.key) },
+    { name: 'Form command',    headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'command=balance&key=' + encodeURIComponent(FU.key) },
+    { name: 'Query action',    headers: { 'Accept': 'application/json' }, body: null, query: '?action=balance&key=' + encodeURIComponent(FU.key) }
   ];
   const report = [];
   let winner = null;
-  for (const p of probes) {
-    const headers = (p.auth === 'header') ? fuHeaders() : { 'Accept': 'application/json', 'Content-Type': 'application/json' };
+  for (const f of formats) {
+    const finalUrl = url + (f.query || '');
+    const opts = { method: 'POST', headers: f.headers };
+    if (f.body) opts.body = f.body;
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 10000);
+    opts.signal = ctrl.signal;
     try {
-      const r = await fetch(p.url, { method: 'POST', headers, body: JSON.stringify(p.body), signal: ctrl.signal });
+      const r = await fetch(finalUrl, opts);
       const text = await r.text();
       let json = null; try { json = JSON.parse(text); } catch (e) {}
-      const line = p.url + ' ' + p.auth + ' POST => ' + r.status;
-      report.push(line);
-      if (r.status === 200 && json && !winner) {
-        winner = { url: p.url, auth: p.auth, sample: json };
+      const hasError = json && (json.ERROR || json.error);
+      report.push(f.name + ' => ' + r.status + (hasError ? ' (error)' : ' (SUCCESS)'));
+      if (r.status === 200 && json && !hasError && !winner) {
+        winner = { format: f.name, sample: json };
       }
     } catch (e) {
-      report.push(p.url + ' ' + p.auth + ' POST => error: ' + e.message);
+      report.push(f.name + ' => error: ' + e.message);
     } finally { clearTimeout(t); }
   }
   res.json({ ok: true, winner, report });
@@ -231,4 +291,4 @@ app.use((err, req, res, next) => {
   console.error('[ERR]', err.message);
   res.status(err.status || 500).json({ ok: false, error: 'Server error.' });
 });
-app.listen(PORT, () => console.log('SIERRAUNLOCK API v3.2 online on :' + PORT + ' — mode: ' + (fuReady() ? 'CONNECTED TO FASTUNLOCKERS' : 'MANUAL')));
+app.listen(PORT, () => console.log('SIERRAUNLOCK API v3.3 online on :' + PORT + ' — mode: ' + (fuReady() ? 'CONNECTED TO FASTUNLOCKERS' : 'MANUAL')));
