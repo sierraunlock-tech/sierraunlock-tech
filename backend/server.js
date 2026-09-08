@@ -180,7 +180,42 @@ async function fuFetch(p, opts) {
   return fuFetchRaw(FU.base + p, fuHeaders(), opts);
 }
 
-/* 11 • UPSTREAM SMART PROBE — founders only. GET-only. Cannot spend money.
+/* 11 • UPSTREAM SMART PROBE v3.2 — founders only. POST-safe probe.
+   FastUnlockers answers POST on /api/balance and /api/services (base without /public).
+   We POST with a JSON body; we never send an IMEI so no order is placed. */
+app.get('/api/upstream-test', strict, async (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  if (!fuReady()) return res.json({ ok: false, error: 'UNLOCK_API_URL / UNLOCK_API_KEY not set.' });
+  const root = FU.base.replace(/\/public\/?$/, '');
+  const probes = [
+    { url: root + '/api/balance',   auth: 'header', body: { command: 'balance' } },
+    { url: root + '/api/services',  auth: 'header', body: { command: 'services' } },
+    { url: root + '/api/balance?key=' + encodeURIComponent(FU.key), auth: 'query', body: { command: 'balance' } },
+    { url: root + '/api/services?key=' + encodeURIComponent(FU.key), auth: 'query', body: { command: 'services' } },
+    { url: FU.base + '/api/balance',  auth: 'header', body: { command: 'balance' } },
+    { url: FU.base + '/api/services', auth: 'header', body: { command: 'services' } }
+  ];
+  const report = [];
+  let winner = null;
+  for (const p of probes) {
+    const headers = (p.auth === 'header') ? fuHeaders() : { 'Accept': 'application/json', 'Content-Type': 'application/json' };
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 10000);
+    try {
+      const r = await fetch(p.url, { method: 'POST', headers, body: JSON.stringify(p.body), signal: ctrl.signal });
+      const text = await r.text();
+      let json = null; try { json = JSON.parse(text); } catch (e) {}
+      const line = p.url + ' ' + p.auth + ' POST => ' + r.status;
+      report.push(line);
+      if (r.status === 200 && json && !winner) {
+        winner = { url: p.url, auth: p.auth, sample: json };
+      }
+    } catch (e) {
+      report.push(p.url + ' ' + p.auth + ' POST => error: ' + e.message);
+    } finally { clearTimeout(t); }
+  }
+  res.json({ ok: true, winner, report });
+});
    Knocks on 32 candidate doors (2 bases x 8 paths x 2 auth styles) and
    reports which one opens with JSON. Run once after deploy. */
 app.get('/api/upstream-test', strict, async (req, res) => {
