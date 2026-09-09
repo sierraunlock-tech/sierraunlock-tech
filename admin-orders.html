@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Founder Orders — SIERRAUNLOCK Admin</title>
+<style>
+  :root{--green:#1EB53A;--blue:#0072C6;--navy:#0b1f33}
+  *{box-sizing:border-box;margin:0;padding:0;font-family:Segoe UI,Arial,sans-serif}
+  body{background:#0e1621;color:#e6f0f8;padding:24px}
+  h1{font-size:20px;margin-bottom:4px}
+  p.sub{color:#8fb3cc;font-size:13px;margin-bottom:16px}
+  .warn{background:#3a2b00;border:1px solid #ffb020;color:#ffd97a;border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:16px}
+  input,button{padding:11px 14px;border-radius:10px;border:1px solid #2b3d52;background:#16202e;color:#e6f0f8;font-size:14px}
+  button{cursor:pointer;font-weight:700;background:var(--green);border:0;color:#fff}
+  button.sec{background:var(--blue)}
+  button.ghost{background:#22314a}
+  table{width:100%;border-collapse:collapse;margin-top:16px;font-size:13px}
+  th,td{border:1px solid #22314a;padding:8px;text-align:left;vertical-align:top}
+  th{background:#16202e}
+  .st{font-weight:700}.queued{color:#ffd97a}.sent-to-server,.processing{color:#7cc4ff}.solved{color:#7dff9b}.failed{color:#ff8f8f}
+  pre{background:#0a121c;border:1px solid #22314a;border-radius:8px;padding:8px;font-size:11px;max-width:420px;overflow:auto;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<h1>SIERRAUNLOCK — Founder Order Desk</h1>
+<p class="sub">Confirm payment FIRST, then place the upstream order. Every click spends Alhassan's FastUnlockers balance.</p>
+<div class="warn">⚠ MONEY SAFETY: placing an order deducts the service cost from the upstream balance. Only place orders for customers who have PAID.</div>
+
+<input type="password" id="token" placeholder="Admin token" size="40">
+<button onclick="connect()">Connect</button>
+<button class="sec" onclick="loadJobs()">Refresh Jobs</button>
+
+<table id="tbl" hidden>
+<thead><tr><th>Job</th><th>Created</th><th>Service</th><th>IMEI</th><th>Customer</th><th>Status</th><th>Actions</th><th>Upstream reply</th></tr></thead>
+<tbody></tbody>
+</table>
+
+<script>
+const API='https://sierraunlock-tech-1-4um3.onrender.com';
+let TOK='';
+const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function connect(){TOK=document.getElementById('token').value.trim();sessionStorage.setItem('su_tok',TOK);loadJobs();}
+window.addEventListener('load',()=>{const t=sessionStorage.getItem('su_tok');if(t){TOK=t;document.getElementById('token').value=t;loadJobs();}});
+async function loadJobs(){
+  if(!TOK){alert('Enter admin token first.');return;}
+  const r=await fetch(API+'/api/admin/jobs',{headers:{'x-admin-token':TOK}});
+  const j=await r.json();
+  if(!j.ok){alert('Bad token.');return;}
+  document.getElementById('tbl').hidden=false;
+  document.querySelector('#tbl tbody').innerHTML=(j.jobs||[]).map(job=>`
+   <tr>
+     <td>${esc(job.id)}</td>
+     <td>${esc((job.created||'').slice(0,16).replace('T',' '))}</td>
+     <td>${esc(job.serviceName||job.service||'—')}<br><small>ID ${esc(job.serviceId||job.service||'—')}</small></td>
+     <td>${esc(job.imei)}</td>
+     <td>${esc(job.phone||job.customer||'—')}</td>
+     <td class="st ${esc(job.status)}">${esc(job.status)}</td>
+     <td>
+       ${ (job.status==='queued'||job.status==='failed') && (job.serviceId||job.service) ? `<button onclick="place('${esc(job.id)}')">Place Upstream</button><br><br>`:'' }
+       ${ job.upstreamOrderId ? `<button class="sec" onclick="check('${esc(job.id)}')">Check Status</button>`:'' }
+     </td>
+     <td>${job.live?`<pre>${esc(JSON.stringify(job.live).slice(0,400))}</pre>`:(job.upstreamOrderId?`<small>order ${esc(job.upstreamOrderId)}</small>`:'—')}</td>
+   </tr>`).join('')||'<tr><td colspan="8">No jobs yet.</td></tr>';
+}
+async function place(id){
+  if(!confirm('Customer PAID? This will spend upstream balance now.'))return;
+  const jobs=await (await fetch(API+'/api/admin/jobs',{headers:{'x-admin-token':TOK}})).json();
+  const job=(jobs.jobs||[]).find(x=>x.id===id);
+  if(!job)return alert('Job not found.');
+  const r=await fetch(API+'/api/order',{method:'POST',headers:{'Content-Type':'application/json','x-admin-token':TOK},
+    body:JSON.stringify({service:job.serviceId||job.service,imei:job.imei,brand:job.brand||'',model:job.model||'',customer:job.id})});
+  const j=await r.json();
+  alert(j.ok?('✅ Placed! Upstream order: '+(j.upstreamOrderId||'see reply')):'❌ '+(j.upstream&&j.upstream.ERROR?JSON.stringify(j.upstream.ERROR):'failed'));
+  loadJobs();
+}
+async function check(id){
+  const r=await fetch(API+'/api/order-status',{method:'POST',headers:{'Content-Type':'application/json','x-admin-token':TOK},body:JSON.stringify({id})});
+  const j=await r.json();
+  alert('Live status:\n'+JSON.stringify(j.live||j.job,null,1).slice(0,600));
+  loadJobs();
+}
+</script>
+</body>
+</html>

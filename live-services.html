@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live Unlock Services — SIERRAUNLOCK</title>
+<meta name="description" content="Live catalog of 250+ unlock, IMEI check and repair services with instant pricing in USD and Leones.">
+<style>
+  :root{--green:#1EB53A;--blue:#0072C6;--navy:#0b1f33;--ink:#12263a;--bg:#f4f8fb}
+  *{box-sizing:border-box;margin:0;padding:0;font-family:Segoe UI,Arial,sans-serif}
+  body{background:var(--bg);color:var(--ink)}
+  header{background:linear-gradient(120deg,var(--blue),var(--green));color:#fff;padding:18px 22px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap}
+  header h1{font-size:22px;letter-spacing:.5px}
+  header a{color:#fff;text-decoration:none;font-weight:600;margin-left:14px}
+  .bar{max-width:1100px;margin:18px auto;padding:0 16px;display:flex;gap:10px;flex-wrap:wrap}
+  .bar input,.bar select{flex:1;min-width:200px;padding:12px;border:2px solid #d5e3ee;border-radius:10px;font-size:15px}
+  .count{background:var(--navy);color:#fff;border-radius:10px;padding:12px 16px;font-weight:700}
+  .grid{max-width:1100px;margin:0 auto 60px;padding:0 16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
+  .card{background:#fff;border:1px solid #e1ecf4;border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:8px;box-shadow:0 2px 8px rgba(18,38,58,.06)}
+  .card h3{font-size:15px;line-height:1.35}
+  .grp{font-size:12px;color:var(--blue);font-weight:700;text-transform:uppercase}
+  .meta{font-size:12.5px;color:#5b7186}
+  .price{display:flex;gap:10px;align-items:baseline}
+  .price b{color:var(--green);font-size:18px}
+  .price span{color:var(--blue);font-weight:700}
+  button.order{margin-top:auto;background:var(--green);border:0;color:#fff;font-weight:700;padding:11px;border-radius:10px;cursor:pointer;font-size:14px}
+  button.order:hover{background:#179c31}
+  .modal{position:fixed;inset:0;background:rgba(11,31,51,.6);display:none;align-items:center;justify-content:center;padding:16px;z-index:50}
+  .modal.open{display:flex}
+  .box{background:#fff;border-radius:16px;max-width:460px;width:100%;padding:22px}
+  .box h2{font-size:18px;margin-bottom:6px}
+  .box p{font-size:13px;color:#5b7186;margin-bottom:12px}
+  .box label{font-size:12.5px;font-weight:700;display:block;margin:8px 0 4px}
+  .box input{width:100%;padding:11px;border:2px solid #d5e3ee;border-radius:10px;font-size:15px}
+  .row{display:flex;gap:10px;margin-top:16px}
+  .row button{flex:1;padding:12px;border-radius:10px;border:0;font-weight:700;cursor:pointer}
+  .go{background:var(--green);color:#fff}.cancel{background:#e5edf3;color:var(--ink)}
+  .done{background:#e9f9ee;border:2px solid var(--green);border-radius:12px;padding:14px;margin-top:12px;font-size:14px;display:none}
+  .done a{color:var(--blue);font-weight:700}
+  footer{background:var(--navy);color:#cfe3f5;text-align:center;padding:18px;font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <h1>SIERRAUNLOCK — Live Services</h1>
+  <nav><a href="index.html">Home</a><a href="services.html">Our Services</a></nav>
+</header>
+
+<div class="bar">
+  <input id="q" type="search" placeholder="Search: iPhone, AT&T, FRP, Xiaomi…">
+  <select id="grp"><option value="">All groups</option></select>
+  <div class="count" id="count">Loading…</div>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<div class="modal" id="modal">
+  <div class="box">
+    <h2 id="mName"></h2>
+    <p id="mMeta"></p>
+    <label>IMEI (15 digits — dial *#06# to see it)</label>
+    <input id="imei" inputmode="numeric" maxlength="15" placeholder="35xxxxxxxxxxxxx">
+    <label>Your WhatsApp phone number</label>
+    <input id="phone" inputmode="tel" placeholder="+232 75 …">
+    <label>Brand / Model (optional)</label>
+    <input id="model" placeholder="e.g. Apple iPhone 13">
+    <div class="done" id="done"></div>
+    <div class="row">
+      <button class="cancel" onclick="closeM()">Cancel</button>
+      <button class="go" id="send">Submit Order</button>
+    </div>
+  </div>
+</div>
+
+<footer>IT CAN ONLY BE GOD ✦ LEARN BEFORE YOU EARN — sierraunlock.com</footer>
+
+<script>
+const API='https://sierraunlock-tech-1-4um3.onrender.com';
+const WA='23275908206';
+let ALL=[],cur=null;
+const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function load(){
+  try{
+    const r=await fetch(API+'/api/services');
+    const j=await r.json();
+    if(!j.ok)throw 0;
+    ALL=j.services||[];
+    document.getElementById('count').textContent=ALL.length+' live services';
+    const gs=[...new Set(ALL.map(s=>s.group))].sort();
+    document.getElementById('grp').innerHTML='<option value="">All groups</option>'+gs.map(g=>`<option>${esc(g)}</option>`).join('');
+    render();
+  }catch(e){document.getElementById('count').textContent='Catalog offline — try again';}
+}
+function render(){
+  const q=document.getElementById('q').value.toLowerCase();
+  const g=document.getElementById('grp').value;
+  const list=ALL.filter(s=>(!g||s.group===g)&&(!q||(s.name+' '+s.group).toLowerCase().includes(q))).slice(0,300);
+  document.getElementById('grid').innerHTML=list.map(s=>`
+    <div class="card">
+      <div class="grp">${esc(s.group)}</div>
+      <h3>${esc(s.name)}</h3>
+      <div class="meta">ID ${esc(s.id)} • ⏱ ${esc(s.time)||'—'}</div>
+      <div class="price"><b>$${s.priceUsd}</b><span>Le ${s.priceSle.toLocaleString()}</span></div>
+      <button class="order" onclick='openM(${JSON.stringify(s).split("'").join("&#39;")})'>Order Now</button>
+    </div>`).join('')||'<p style="padding:20px">No match found.</p>';
+}
+function openM(s){cur=s;document.getElementById('mName').textContent=s.name;
+  document.getElementById('mMeta').textContent=`Group: ${s.group} • Price: $${s.priceUsd} (Le ${s.priceSle.toLocaleString()}) • Time: ${s.time||'—'}`;
+  document.getElementById('done').style.display='none';document.getElementById('modal').classList.add('open');}
+function closeM(){document.getElementById('modal').classList.remove('open');}
+document.getElementById('q').addEventListener('input',render);
+document.getElementById('grp').addEventListener('change',render);
+document.getElementById('send').onclick=async()=>{
+  const imei=document.getElementById('imei').value.trim();
+  const phone=document.getElementById('phone').value.trim();
+  const model=document.getElementById('model').value.trim();
+  if(!/^\d{15}$/.test(imei)){alert('IMEI must be exactly 15 digits.');return;}
+  if(phone.length<9){alert('Enter a valid WhatsApp number.');return;}
+  const brand=(model.split(' ')[0]||'Phone');
+  const r=await fetch(API+'/api/unlock',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({imei,brand,model,phone,serviceId:cur.id,serviceName:cur.name})});
+  const j=await r.json();
+  if(j.ok){
+    const msg=encodeURIComponent(`SIERRAUNLOCK order ${j.job}: ${cur.name} (ID ${cur.id}) — IMEI ${imei}. I will pay via Orange Money / Binance.`);
+    const d=document.getElementById('done');
+    d.style.display='block';
+    d.innerHTML=`✅ Order <b>${esc(j.job)}</b> received!<br>Finish on WhatsApp: <a target="_blank" href="https://wa.me/${WA}?text=${msg}">Tap to confirm & pay</a>`;
+  }else{alert('Order failed: '+(j.error||'try again'));}
+};
+load();
+</script>
+</body>
+</html>
