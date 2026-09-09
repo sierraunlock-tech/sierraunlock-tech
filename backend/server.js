@@ -1,5 +1,5 @@
 /* =====================================================================
-   SIERRAUNLOCK • BACKEND API — server.js (v3.6 • IP WHITELIST TOOL ADDED)
+   SIERRAUNLOCK • BACKEND API — server.js (v3.7 • FORMAT PROBE EXPANDED)
    ---------------------------------------------------------------------
    WHAT IS THIS FILE?
    The Node.js/Express "server brain" deployed on Render — the secure
@@ -13,13 +13,13 @@
    04   Auth helpers (admin token)
    05   Joi validation schemas
    06   Public endpoints (root banner, health, rates)
-   06b  NEW: /api/my-ip — returns our Render server's public IP
-        so the founder can whitelist it on FastUnlockers "Allowed Ips" box
+   06b  /api/my-ip — returns Render server's public IP for whitelist
    07   Customer endpoints (unlock request, job status)
    08   Admin endpoints (rate, job update)
    09   Binance webhook stub (HMAC)
    10   FastUnlockers adapter (env-only config, incl. DHRU username)
-   11   DHRU PROBE v3.5 — dumps ACTUAL error content from HTTP 200 responses
+   11   DHRU PROBE v3.7 — tries 7 different field names + body formats
+        since IP whitelist is confirmed working but auth format unknown
    12   Services proxy (cached 10 min)
    13   Upstream order placement (admin token = payment confirmed first)
    13b  Live upstream status check
@@ -30,9 +30,8 @@
    UNLOCK_API_USERNAME (account email for DHRU auth),
    optional: UNLOCK_API_KEY_HEADER, path overrides, BINANCE_WEBHOOK_SECRET
 
-   MONEY SAFETY: probe sends accountinfo/imeiservicelist ONLY (read-only).
+   MONEY SAFETY: probe sends accountinfo/balance/services ONLY (read-only).
    /api/order requires admin token — no spend without founder approval.
-   /api/my-ip is read-only — only reports our server's IP, no upstream calls.
 
    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
    ===================================================================== */
@@ -93,19 +92,15 @@ const orderSchema = Joi.object({
 });
 
 /* 06 • PUBLIC ENDPOINTS */
-app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.6.0', docs: '/api/health' }));
+app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.7.0', docs: '/api/health' }));
 app.get('/api/health', (req, res) => res.json({
-  ok: true, service: 'SIERRAUNLOCK API', version: '3.6.0',
+  ok: true, service: 'SIERRAUNLOCK API', version: '3.7.0',
   mode: fuReady() ? 'connected-to-fastunlockers' : 'manual-mode',
   time: new Date().toISOString()
 }));
 app.get('/api/rates', (req, res) => res.json({ ok: true, slePerUsd: load().rate }));
 
-/* 06b • SERVER PUBLIC IP — founders only. Returns the EXACT public IP address
-   of our Render server. This is the IP Alhassan must paste into the
-   "Allowed Ips" box on FastUnlockers.com so their firewall lets our calls in.
-   Uses ipify.org (free, no key, read-only) to discover our outbound IP.
-   Does NOT make any call to FastUnlockers itself — completely safe. */
+/* 06b • SERVER PUBLIC IP — founders only */
 app.get('/api/my-ip', strict, async (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   try {
@@ -200,60 +195,41 @@ async function fuFetch(p, opts) {
   return fuFetchRaw(FU.base + p, fuHeaders(), opts);
 }
 
-/* 11 • DHRU FUSION PROBE v3.5 — dumps ACTUAL error content from the 200 responses
-   Fixes the v3.4 bug: v3.4 marked 404 HTML pages as "(SUCCESS)" because they didn't
-   have a JSON ERROR field. v3.5 only calls HTTP 200 a success if the JSON body has
-   no ERROR field AND http=200. More importantly, it dumps the actual error message
-   from every 200 response so we can read FastUnlockers' real reply.
-   Only 2 endpoints tested now (ROOT/api/dhru + ROOT/api/index.php) because v3.4
-   proved these are the ones FastUnlockers answers on. READ-ONLY — no orders. */
+/* 11 • DHRU FUSION PROBE v3.7 — tries different field names + JSON body
+   IP whitelist confirmed working. Now testing:
+   • Field names: apiaccesskey vs api_key vs key
+   • Action names: accountinfo vs balance, imeiservicelist vs services
+   • Body format: form-encoded vs JSON
+   READ-ONLY — no orders placed. */
 app.get('/api/upstream-test', strict, async (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   if (!fuReady()) return res.json({ ok: false, error: 'UNLOCK_API_URL / UNLOCK_API_KEY not set.' });
-  const root = FU.base.replace(/\/public\/?$/, '');
-  const endpoints = [root + '/api/dhru', root + '/api/index.php'];
-  const actions = ['accountinfo', 'imeiservicelist'];
-  const users = [
-    { label: 'email', value: FU.username },
-    { label: 'key',   value: FU.key },
-    { label: 'empty', value: '' }
+  const ep = FU.base.replace(/\/public\/?$/, '') + '/api/dhru';
+  const tests = [
+    { name: 'form apiaccesskey accountinfo', headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'username=' + encodeURIComponent(FU.username) + '&apiaccesskey=' + encodeURIComponent(FU.key) + '&action=accountinfo' },
+    { name: 'form api_key accountinfo', headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'username=' + encodeURIComponent(FU.username) + '&api_key=' + encodeURIComponent(FU.key) + '&action=accountinfo' },
+    { name: 'form key accountinfo', headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'username=' + encodeURIComponent(FU.username) + '&key=' + encodeURIComponent(FU.key) + '&action=accountinfo' },
+    { name: 'form apiaccesskey balance', headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'username=' + encodeURIComponent(FU.username) + '&apiaccesskey=' + encodeURIComponent(FU.key) + '&action=balance' },
+    { name: 'JSON apiaccesskey accountinfo', headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ username: FU.username, apiaccesskey: FU.key, action: 'accountinfo' }) },
+    { name: 'JSON api_key balance', headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ username: FU.username, api_key: FU.key, action: 'balance' }) },
+    { name: 'JSON key services', headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ username: FU.username, key: FU.key, action: 'services' }) }
   ];
   const report = [];
   let winner = null;
-  for (const ep of endpoints) {
-    for (const act of actions) {
-      for (const usr of users) {
-        const body = 'username=' + encodeURIComponent(usr.value) +
-                     '&apiaccesskey=' + encodeURIComponent(FU.key) +
-                     '&action=' + encodeURIComponent(act);
-        const ctrl = new AbortController();
-        const t = setTimeout(() => ctrl.abort(), 10000);
-        try {
-          const r = await fetch(ep, {
-            method: 'POST',
-            headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: body,
-            signal: ctrl.signal
-          });
-          const text = await r.text();
-          let json = null; try { json = JSON.parse(text); } catch (e) {}
-          const hasError = json && (json.ERROR || json.error);
-          const isSuccess = (r.status === 200 && json && !hasError);
-          const label = ep.replace(root, 'ROOT') + ' ' + act + ' usr=' + usr.label;
-          report.push({
-            line: label,
-            http: r.status,
-            success: isSuccess,
-            sample: json || text.slice(0, 250)
-          });
-          if (isSuccess && !winner) {
-            winner = { endpoint: ep, action: act, usernameStyle: usr.label, sample: json };
-          }
-        } catch (e) {
-          report.push({ line: ep + ' ' + act + ' usr=' + usr.label, http: 0, success: false, sample: 'error: ' + e.message });
-        } finally { clearTimeout(t); }
-      }
-    }
+  for (const t of tests) {
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 10000);
+    try {
+      const r = await fetch(ep, { method: 'POST', headers: t.headers, body: t.body, signal: ctrl.signal });
+      const text = await r.text();
+      let json = null; try { json = JSON.parse(text); } catch (e) {}
+      const hasError = json && (json.ERROR || json.error);
+      const isSuccess = (r.status === 200 && json && !hasError);
+      report.push({ name: t.name, http: r.status, success: isSuccess, sample: json || text.slice(0, 250) });
+      if (isSuccess && !winner) winner = { format: t.name, sample: json };
+    } catch (e) {
+      report.push({ name: t.name, http: 0, success: false, sample: 'error: ' + e.message });
+    } finally { clearTimeout(timeout); }
   }
   res.json({ ok: true, winner, report });
 });
@@ -308,4 +284,4 @@ app.use((err, req, res, next) => {
   console.error('[ERR]', err.message);
   res.status(err.status || 500).json({ ok: false, error: 'Server error.' });
 });
-app.listen(PORT, () => console.log('SIERRAUNLOCK API v3.6 online on :' + PORT + ' — mode: ' + (fuReady() ? 'CONNECTED TO FASTUNLOCKERS' : 'MANUAL')));
+app.listen(PORT, () => console.log('SIERRAUNLOCK API v3.7 online on :' + PORT + ' — mode: ' + (fuReady() ? 'CONNECTED TO FASTUNLOCKERS' : 'MANUAL')));
