@@ -1,10 +1,11 @@
 /* =====================================================================
-   SIERRAUNLOCK • BACKEND API — server.js (v3.8 • LIVE GSM HUB CONNECTION)
+   SIERRAUNLOCK • BACKEND API — server.js (v3.9 • LIVE CATALOG + PRICING)
    ---------------------------------------------------------------------
    WHAT IS THIS FILE?
-   The Node.js/Express "server brain" deployed on Render. It now has
-   a CONFIRMED working connection to FastUnlockers.us (GSM Hub v3.00 API)
-   using the founder's client username Alhassan301 and API key.
+   The Node.js/Express "server brain" on Render with a CONFIRMED LIVE
+   connection to FastUnlockers.us (GSM Hub v3.00 API, user: Alhassan301).
+   v3.9 flattens the nested GSM Hub service catalog into a clean array
+   and adds customer selling prices (cost x margin) in USD + SLE.
 
    SECTION MAP:
    01   Environment + dependencies
@@ -17,23 +18,20 @@
    07   Customer endpoints (unlock request, job status)
    08   Admin endpoints (rate, job update)
    09   Binance webhook stub (HMAC)
-   10   FastUnlockers GSM Hub adapter (env-only config)
-   11   /api/upstream-test (founders only — safe diagnostic)
-   12   /api/services — REAL service list from Alhassan's account (cached)
-   13   /api/order — REAL upstream order placement (admin token required)
-   13b  /api/order-status — REAL live status check
+   10   GSM Hub adapter (confirmed winning format)
+   11   /api/upstream-test (founders only)
+   12   /api/services — FLATTENED live catalog + customer prices (cached 10 min)
+   13   /api/order — real upstream order (admin token = payment confirmed)
+   13b  /api/order-status — live status check
    14   404 + error handler + boot
 
-   WINNING FORMAT (discovered by v3.7 probe):
-   • POST https://fastunlockers.us/api/dhru
-   • Content-Type: application/x-www-form-urlencoded
-   • Body: username=Alhassan301&apiaccesskey=<KEY>&action=<ACTION>
-   • Actions: accountinfo, imeiservicelist, placeimeiorder, imeiorderstatus
+   ENV VARIABLES (Render + local .env — NEVER in frontend/Git):
+   PORT, FRONTEND_URL, ADMIN_TOKEN, UNLOCK_API_URL, UNLOCK_API_KEY,
+   UNLOCK_API_USERNAME (=Alhassan301),
+   optional: UNLOCK_MARGIN (customer price multiplier, default 1.8),
+             BINANCE_WEBHOOK_SECRET
 
-   MONEY SAFETY:
-   • /api/order requires admin token — no order (no spend) without founder
-   • Service list is read-only
-   • Balance stays exactly as Alhassan loaded it
+   MONEY SAFETY: /api/order needs admin token. Catalog is read-only.
 
    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
    ===================================================================== */
@@ -77,7 +75,9 @@ const unlockSchema = Joi.object({
   imei: Joi.string().pattern(/^\d{15}$/).required(),
   brand: Joi.string().trim().min(2).max(40).required(),
   model: Joi.string().trim().min(2).max(60).required(),
-  phone: Joi.string().trim().min(9).max(20).required()
+  phone: Joi.string().trim().min(9).max(20).required(),
+  serviceId: Joi.string().trim().max(20).optional(),
+  serviceName: Joi.string().trim().max(120).optional()
 });
 const jobStatusSchema = Joi.object({ id: Joi.string().trim().min(3).max(40).required() });
 const adminRateSchema = Joi.object({ slePerUsd: Joi.number().positive().max(100000).required() });
@@ -94,9 +94,9 @@ const orderSchema = Joi.object({
 });
 
 /* 06 • PUBLIC ENDPOINTS */
-app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.8.0', docs: '/api/health' }));
+app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.9.0', docs: '/api/health' }));
 app.get('/api/health', (req, res) => res.json({
-  ok: true, service: 'SIERRAUNLOCK API', version: '3.8.0',
+  ok: true, service: 'SIERRAUNLOCK API', version: '3.9.0',
   mode: fuReady() ? 'connected-to-fastunlockers' : 'manual-mode',
   time: new Date().toISOString()
 }));
@@ -119,9 +119,13 @@ app.post('/api/unlock', strict, async (req, res) => {
   const { error, value } = unlockSchema.validate(req.body || {});
   if (error) return res.status(400).json({ ok: false, error: error.details[0].message });
   const db = load();
-  const job = { id: 'SU-' + Date.now(), imei: value.imei, brand: value.brand, model: value.model, phone: value.phone, status: 'queued', created: new Date().toISOString() };
+  const job = {
+    id: 'SU-' + Date.now(), imei: value.imei, brand: value.brand, model: value.model,
+    phone: value.phone, serviceId: value.serviceId || '', serviceName: value.serviceName || '',
+    status: 'queued', created: new Date().toISOString()
+  };
   db.jobs.unshift(job); save(db);
-  res.json({ ok: true, job: job.id, status: job.status, note: 'Quote confirmed on WhatsApp.' });
+  res.json({ ok: true, job: job.id, status: job.status, note: 'Quote confirmed on WhatsApp or pay online; founder approves then order auto-places.' });
 });
 app.post('/api/job-status', strict, (req, res) => {
   const { error, value } = jobStatusSchema.validate(req.body || {});
@@ -151,6 +155,12 @@ app.post('/api/admin/job', strict, (req, res) => {
   res.json({ ok: true, job });
 });
 
+/* 08b • ADMIN: LIST ALL JOBS (for one-click fulfilment dashboard) */
+app.get('/api/admin/jobs', strict, (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  res.json({ ok: true, jobs: load().jobs });
+});
+
 /* 09 • BINANCE WEBHOOK STUB */
 app.post('/api/webhook/binance', express.raw({ type: '*/*' }), (req, res) => {
   const secret = process.env.BINANCE_WEBHOOK_SECRET;
@@ -164,8 +174,8 @@ app.post('/api/webhook/binance', express.raw({ type: '*/*' }), (req, res) => {
   res.json({ ok: true, received: true });
 });
 
-/* 10 • FASTUNLOCKERS GSM HUB ADAPTER — uses the CONFIRMED winning format:
-   POST /api/dhru  •  form-encoded  •  username + apiaccesskey + action */
+/* 10 • GSM HUB ADAPTER — confirmed winning format:
+   POST /api/dhru • form-encoded • username + apiaccesskey + action */
 const FU = {
   base: (process.env.UNLOCK_API_URL || '').replace(/\/+$/, ''),
   key: process.env.UNLOCK_API_KEY || '',
@@ -173,7 +183,6 @@ const FU = {
   endpoint: '/api/dhru'
 };
 function fuReady() { return !!(FU.base && FU.key && FU.username); }
-
 async function gsmCall(action, extraParams = {}) {
   if (!fuReady()) throw new Error('Upstream not configured.');
   const params = { username: FU.username, apiaccesskey: FU.key, action: action };
@@ -196,7 +205,7 @@ async function gsmCall(action, extraParams = {}) {
   } finally { clearTimeout(t); }
 }
 
-/* 11 • /api/upstream-test — founders only, read-only diagnostic */
+/* 11 • /api/upstream-test — founders only, read-only */
 app.get('/api/upstream-test', strict, async (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   const r = await gsmCall('accountinfo');
@@ -204,24 +213,50 @@ app.get('/api/upstream-test', strict, async (req, res) => {
   res.json({ ok, http: r.http, sample: r.json || r.text });
 });
 
-/* 12 • /api/services — REAL service list from Alhassan's account (cached 10 min) */
+/* 12 • /api/services — FLATTENED live catalog + customer prices (cached 10 min)
+   GSM Hub returns SUCCESS:[{MESSAGE, LIST:{group:{SERVICES:{id:{...}}}}}].
+   We flatten to: [{id, name, group, costUsd, priceUsd, priceSle, time, info}]
+   priceUsd = costUsd x UNLOCK_MARGIN (default 1.8) — YOUR profit on every order. */
 let svcCache = { ts: 0, data: null };
 app.get('/api/services', async (req, res) => {
   if (!fuReady()) return res.json({ ok: false, mode: 'manual', services: [] });
-  if (svcCache.data && Date.now() - svcCache.ts < 600000) return res.json({ ok: true, cached: true, services: svcCache.data });
+  if (svcCache.data && Date.now() - svcCache.ts < 600000) {
+    return res.json({ ok: true, cached: true, count: svcCache.data.length, services: svcCache.data });
+  }
   const r = await gsmCall('imeiservicelist');
   if (r.http === 200 && r.json && r.json.SUCCESS) {
     const raw = r.json.SUCCESS;
-    // GSM Hub returns either an array or an object; normalize to array
-    const services = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' ? Object.values(raw).flat().filter(Boolean) : []);
+    const listObj = (Array.isArray(raw) && raw[0] && raw[0].LIST) ? raw[0].LIST : (raw && raw.LIST ? raw.LIST : {});
+    const rate = load().rate;
+    const margin = parseFloat(process.env.UNLOCK_MARGIN || '1.8');
+    const services = [];
+    Object.keys(listObj).forEach(gname => {
+      const g = listObj[gname] || {};
+      const svcs = g.SERVICES || {};
+      Object.keys(svcs).forEach(sid => {
+        const s = svcs[sid] || {};
+        const credit = parseFloat(s.CREDIT || '0');
+        const priceUsd = Math.round(credit * margin * 100) / 100;
+        services.push({
+          id: String(s.SERVICEID || sid),
+          name: String(s.SERVICENAME || '').trim(),
+          group: String(gname),
+          costUsd: credit,
+          priceUsd: priceUsd,
+          priceSle: Math.round(priceUsd * rate),
+          time: String(s.TIME || ''),
+          info: String(s.INFO || '')
+        });
+      });
+    });
+    services.sort((a, b) => a.group.localeCompare(b.group) || Number(a.id) - Number(b.id));
     svcCache = { ts: Date.now(), data: services };
     return res.json({ ok: true, cached: false, count: services.length, services: services });
   }
   res.status(502).json({ ok: false, error: 'Upstream services unreachable', detail: r.json || r.text });
 });
 
-/* 13 • /api/order — REAL upstream order placement
-   Admin token = founder confirmed payment FIRST. GSM Hub action: placeimeiorder */
+/* 13 • /api/order — REAL upstream order (admin token = payment confirmed FIRST) */
 app.post('/api/order', strict, async (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   const { error, value } = orderSchema.validate(req.body || {});
@@ -239,22 +274,17 @@ app.post('/api/order', strict, async (req, res) => {
   const db = load();
   const upstreamOrderId = success ? (successBlock.orderid || successBlock.order_id || successBlock.reference || null) : null;
   const job = {
-    id: 'SU-' + Date.now(),
-    imei: value.imei,
-    service: String(value.service),
-    brand: value.brand || '',
-    model: value.model || '',
-    customer: value.customer || '',
+    id: 'SU-' + Date.now(), imei: value.imei, service: String(value.service),
+    brand: value.brand || '', model: value.model || '', customer: value.customer || '',
     status: success ? 'sent-to-server' : 'failed',
-    upstream: r.json || r.text,
-    upstreamOrderId: upstreamOrderId,
+    upstream: r.json || r.text, upstreamOrderId: upstreamOrderId,
     created: new Date().toISOString()
   };
   db.jobs.unshift(job); save(db);
   res.json({ ok: success, job: job.id, upstreamOrderId, upstream: r.json || r.text });
 });
 
-/* 13b • /api/order-status — REAL live status check via GSM Hub imeiorderstatus */
+/* 13b • /api/order-status — live status check */
 app.post('/api/order-status', strict, async (req, res) => {
   const { error, value } = jobStatusSchema.validate(req.body || {});
   if (error) return res.status(400).json({ ok: false, error: 'Invalid job id.' });
@@ -273,4 +303,4 @@ app.use((err, req, res, next) => {
   console.error('[ERR]', err.message);
   res.status(err.status || 500).json({ ok: false, error: 'Server error.' });
 });
-app.listen(PORT, () => console.log('SIERRAUNLOCK API v3.8 online on :' + PORT + ' — mode: ' + (fuReady() ? 'CONNECTED TO FASTUNLOCKERS (GSM HUB v3)' : 'MANUAL')));
+app.listen(PORT, () => console.log('SIERRAUNLOCK API v3.9 online on :' + PORT + ' — mode: ' + (fuReady() ? 'CONNECTED TO FASTUNLOCKERS (GSM HUB v3)' : 'MANUAL')));
