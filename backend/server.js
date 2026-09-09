@@ -1,10 +1,10 @@
 /* =====================================================================
-   SIERRAUNLOCK • BACKEND API — server.js (v3.7 • FORMAT PROBE EXPANDED)
+   SIERRAUNLOCK • BACKEND API — server.js (v3.8 • LIVE GSM HUB CONNECTION)
    ---------------------------------------------------------------------
    WHAT IS THIS FILE?
-   The Node.js/Express "server brain" deployed on Render — the secure
-   bridge between sierraunlock.com and the FastUnlockers.us upstream
-   unlock server (DHRU Fusion protocol: username + apiaccesskey + action).
+   The Node.js/Express "server brain" deployed on Render. It now has
+   a CONFIRMED working connection to FastUnlockers.us (GSM Hub v3.00 API)
+   using the founder's client username Alhassan301 and API key.
 
    SECTION MAP:
    01   Environment + dependencies
@@ -13,25 +13,27 @@
    04   Auth helpers (admin token)
    05   Joi validation schemas
    06   Public endpoints (root banner, health, rates)
-   06b  /api/my-ip — returns Render server's public IP for whitelist
+   06b  /api/my-ip (founders only)
    07   Customer endpoints (unlock request, job status)
    08   Admin endpoints (rate, job update)
    09   Binance webhook stub (HMAC)
-   10   FastUnlockers adapter (env-only config, incl. DHRU username)
-   11   DHRU PROBE v3.7 — tries 7 different field names + body formats
-        since IP whitelist is confirmed working but auth format unknown
-   12   Services proxy (cached 10 min)
-   13   Upstream order placement (admin token = payment confirmed first)
-   13b  Live upstream status check
+   10   FastUnlockers GSM Hub adapter (env-only config)
+   11   /api/upstream-test (founders only — safe diagnostic)
+   12   /api/services — REAL service list from Alhassan's account (cached)
+   13   /api/order — REAL upstream order placement (admin token required)
+   13b  /api/order-status — REAL live status check
    14   404 + error handler + boot
 
-   ENV VARIABLES (Render + local .env — NEVER in frontend, NEVER in Git):
-   PORT, FRONTEND_URL, ADMIN_TOKEN, UNLOCK_API_URL, UNLOCK_API_KEY,
-   UNLOCK_API_USERNAME (account email for DHRU auth),
-   optional: UNLOCK_API_KEY_HEADER, path overrides, BINANCE_WEBHOOK_SECRET
+   WINNING FORMAT (discovered by v3.7 probe):
+   • POST https://fastunlockers.us/api/dhru
+   • Content-Type: application/x-www-form-urlencoded
+   • Body: username=Alhassan301&apiaccesskey=<KEY>&action=<ACTION>
+   • Actions: accountinfo, imeiservicelist, placeimeiorder, imeiorderstatus
 
-   MONEY SAFETY: probe sends accountinfo/balance/services ONLY (read-only).
-   /api/order requires admin token — no spend without founder approval.
+   MONEY SAFETY:
+   • /api/order requires admin token — no order (no spend) without founder
+   • Service list is read-only
+   • Balance stays exactly as Alhassan loaded it
 
    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
    ===================================================================== */
@@ -92,9 +94,9 @@ const orderSchema = Joi.object({
 });
 
 /* 06 • PUBLIC ENDPOINTS */
-app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.7.0', docs: '/api/health' }));
+app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.8.0', docs: '/api/health' }));
 app.get('/api/health', (req, res) => res.json({
-  ok: true, service: 'SIERRAUNLOCK API', version: '3.7.0',
+  ok: true, service: 'SIERRAUNLOCK API', version: '3.8.0',
   mode: fuReady() ? 'connected-to-fastunlockers' : 'manual-mode',
   time: new Date().toISOString()
 }));
@@ -106,11 +108,7 @@ app.get('/api/my-ip', strict, async (req, res) => {
   try {
     const r = await fetch('https://api.ipify.org?format=json');
     const j = await r.json();
-    res.json({
-      ok: true,
-      serverPublicIp: j.ip,
-      note: 'Paste this exact IP into FastUnlockers → Edit Profile → Api Key Details → Allowed Ips box, then Submit. Do NOT press Regenerate.'
-    });
+    res.json({ ok: true, serverPublicIp: j.ip });
   } catch (e) {
     res.status(502).json({ ok: false, error: 'ipify unreachable: ' + e.message });
   }
@@ -166,113 +164,104 @@ app.post('/api/webhook/binance', express.raw({ type: '*/*' }), (req, res) => {
   res.json({ ok: true, received: true });
 });
 
-/* 10 • FASTUNLOCKERS ADAPTER — env-only config (DHRU Fusion fields) */
+/* 10 • FASTUNLOCKERS GSM HUB ADAPTER — uses the CONFIRMED winning format:
+   POST /api/dhru  •  form-encoded  •  username + apiaccesskey + action */
 const FU = {
   base: (process.env.UNLOCK_API_URL || '').replace(/\/+$/, ''),
   key: process.env.UNLOCK_API_KEY || '',
   username: process.env.UNLOCK_API_USERNAME || '',
-  keyHeader: process.env.UNLOCK_API_KEY_HEADER || 'x-api-key',
-  servicesPath: process.env.UNLOCK_API_SERVICES_PATH || '/api/services',
-  orderPath: process.env.UNLOCK_API_ORDER_PATH || '/api/order',
-  statusPath: process.env.UNLOCK_API_STATUS_PATH || '/api/order/',
-  balancePath: process.env.UNLOCK_API_BALANCE_PATH || '/api/balance'
+  endpoint: '/api/dhru'
 };
-function fuReady() { return !!(FU.base && FU.key); }
-function fuHeaders() { return { [FU.keyHeader]: FU.key, 'Accept': 'application/json', 'Content-Type': 'application/json' }; }
-async function fuFetchRaw(url, headers, opts) {
+function fuReady() { return !!(FU.base && FU.key && FU.username); }
+
+async function gsmCall(action, extraParams = {}) {
+  if (!fuReady()) throw new Error('Upstream not configured.');
+  const params = { username: FU.username, apiaccesskey: FU.key, action: action };
+  Object.keys(extraParams).forEach(k => { if (extraParams[k] != null) params[k] = extraParams[k]; });
+  const body = Object.keys(params).map(k => encodeURIComponent(k) + '=' + encodeURIComponent(params[k])).join('&');
   const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 10000);
+  const t = setTimeout(() => ctrl.abort(), 15000);
   try {
-    const r = await fetch(url, Object.assign({ headers: headers, signal: ctrl.signal }, opts || {}));
+    const r = await fetch(FU.base + FU.endpoint, {
+      method: 'POST',
+      headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body,
+      signal: ctrl.signal
+    });
     const text = await r.text();
     let json = null; try { json = JSON.parse(text); } catch (e) {}
-    return { http: r.status, json, text: text.slice(0, 400) };
+    return { http: r.status, json, text: text.slice(0, 600) };
   } catch (e) {
     return { http: 0, json: null, text: 'network error: ' + e.message };
   } finally { clearTimeout(t); }
 }
-async function fuFetch(p, opts) {
-  return fuFetchRaw(FU.base + p, fuHeaders(), opts);
-}
 
-/* 11 • DHRU FUSION PROBE v3.7 — tries different field names + JSON body
-   IP whitelist confirmed working. Now testing:
-   • Field names: apiaccesskey vs api_key vs key
-   • Action names: accountinfo vs balance, imeiservicelist vs services
-   • Body format: form-encoded vs JSON
-   READ-ONLY — no orders placed. */
+/* 11 • /api/upstream-test — founders only, read-only diagnostic */
 app.get('/api/upstream-test', strict, async (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
-  if (!fuReady()) return res.json({ ok: false, error: 'UNLOCK_API_URL / UNLOCK_API_KEY not set.' });
-  const ep = FU.base.replace(/\/public\/?$/, '') + '/api/dhru';
-  const tests = [
-    { name: 'form apiaccesskey accountinfo', headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'username=' + encodeURIComponent(FU.username) + '&apiaccesskey=' + encodeURIComponent(FU.key) + '&action=accountinfo' },
-    { name: 'form api_key accountinfo', headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'username=' + encodeURIComponent(FU.username) + '&api_key=' + encodeURIComponent(FU.key) + '&action=accountinfo' },
-    { name: 'form key accountinfo', headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'username=' + encodeURIComponent(FU.username) + '&key=' + encodeURIComponent(FU.key) + '&action=accountinfo' },
-    { name: 'form apiaccesskey balance', headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'username=' + encodeURIComponent(FU.username) + '&apiaccesskey=' + encodeURIComponent(FU.key) + '&action=balance' },
-    { name: 'JSON apiaccesskey accountinfo', headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ username: FU.username, apiaccesskey: FU.key, action: 'accountinfo' }) },
-    { name: 'JSON api_key balance', headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ username: FU.username, api_key: FU.key, action: 'balance' }) },
-    { name: 'JSON key services', headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ username: FU.username, key: FU.key, action: 'services' }) }
-  ];
-  const report = [];
-  let winner = null;
-  for (const t of tests) {
-    const ctrl = new AbortController();
-    const timeout = setTimeout(() => ctrl.abort(), 10000);
-    try {
-      const r = await fetch(ep, { method: 'POST', headers: t.headers, body: t.body, signal: ctrl.signal });
-      const text = await r.text();
-      let json = null; try { json = JSON.parse(text); } catch (e) {}
-      const hasError = json && (json.ERROR || json.error);
-      const isSuccess = (r.status === 200 && json && !hasError);
-      report.push({ name: t.name, http: r.status, success: isSuccess, sample: json || text.slice(0, 250) });
-      if (isSuccess && !winner) winner = { format: t.name, sample: json };
-    } catch (e) {
-      report.push({ name: t.name, http: 0, success: false, sample: 'error: ' + e.message });
-    } finally { clearTimeout(timeout); }
-  }
-  res.json({ ok: true, winner, report });
+  const r = await gsmCall('accountinfo');
+  const ok = r.http === 200 && r.json && r.json.SUCCESS;
+  res.json({ ok, http: r.http, sample: r.json || r.text });
 });
 
-/* 12 • SERVICES PROXY — cached 10 minutes */
+/* 12 • /api/services — REAL service list from Alhassan's account (cached 10 min) */
 let svcCache = { ts: 0, data: null };
 app.get('/api/services', async (req, res) => {
   if (!fuReady()) return res.json({ ok: false, mode: 'manual', services: [] });
   if (svcCache.data && Date.now() - svcCache.ts < 600000) return res.json({ ok: true, cached: true, services: svcCache.data });
-  const r = await fuFetchRaw(FU.base + '/api/services', fuHeaders(), { method: 'POST', body: JSON.stringify({ command: 'services' }) });
-  if (r.http === 200 && r.json) { svcCache = { ts: Date.now(), data: r.json }; return res.json({ ok: true, cached: false, services: r.json }); }
-  res.status(502).json({ ok: false, error: 'Upstream unreachable', detail: r });
+  const r = await gsmCall('imeiservicelist');
+  if (r.http === 200 && r.json && r.json.SUCCESS) {
+    const raw = r.json.SUCCESS;
+    // GSM Hub returns either an array or an object; normalize to array
+    const services = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' ? Object.values(raw).flat().filter(Boolean) : []);
+    svcCache = { ts: Date.now(), data: services };
+    return res.json({ ok: true, cached: false, count: services.length, services: services });
+  }
+  res.status(502).json({ ok: false, error: 'Upstream services unreachable', detail: r.json || r.text });
 });
 
-/* 13 • UPSTREAM ORDER PLACEMENT — admin token = founder confirmed payment FIRST */
+/* 13 • /api/order — REAL upstream order placement
+   Admin token = founder confirmed payment FIRST. GSM Hub action: placeimeiorder */
 app.post('/api/order', strict, async (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   const { error, value } = orderSchema.validate(req.body || {});
   if (error) return res.status(400).json({ ok: false, error: error.details[0].message });
   if (!fuReady()) return res.status(503).json({ ok: false, error: 'Upstream not configured.' });
-  const r = await fuFetch(FU.orderPath, { method: 'POST', body: JSON.stringify(value) });
-  const success = (r.http === 200 || r.http === 201);
+  const r = await gsmCall('placeimeiorder', {
+    service: String(value.service),
+    imei: value.imei,
+    brand: value.brand || '',
+    model: value.model || '',
+    customer: value.customer || 'SIERRAUNLOCK'
+  });
+  const successBlock = r.json && r.json.SUCCESS;
+  const success = r.http === 200 && successBlock;
   const db = load();
+  const upstreamOrderId = success ? (successBlock.orderid || successBlock.order_id || successBlock.reference || null) : null;
   const job = {
-    id: 'SU-' + Date.now(), imei: value.imei, service: String(value.service),
-    brand: value.brand || '', model: value.model || '', customer: value.customer || '',
+    id: 'SU-' + Date.now(),
+    imei: value.imei,
+    service: String(value.service),
+    brand: value.brand || '',
+    model: value.model || '',
+    customer: value.customer || '',
     status: success ? 'sent-to-server' : 'failed',
     upstream: r.json || r.text,
-    upstreamOrderId: success && r.json ? (r.json.order_id || r.json.orderid || r.json.orderId || r.json.id || null) : null,
+    upstreamOrderId: upstreamOrderId,
     created: new Date().toISOString()
   };
   db.jobs.unshift(job); save(db);
-  res.json({ ok: success, job: job.id, upstream: job.upstream });
+  res.json({ ok: success, job: job.id, upstreamOrderId, upstream: r.json || r.text });
 });
 
-/* 13b • LIVE UPSTREAM STATUS CHECK */
+/* 13b • /api/order-status — REAL live status check via GSM Hub imeiorderstatus */
 app.post('/api/order-status', strict, async (req, res) => {
   const { error, value } = jobStatusSchema.validate(req.body || {});
   if (error) return res.status(400).json({ ok: false, error: 'Invalid job id.' });
   const job = load().jobs.find(j => j.id === value.id);
   if (!job) return res.status(404).json({ ok: false, error: 'Job not found.' });
   if (fuReady() && job.upstreamOrderId) {
-    const r = await fuFetch(FU.statusPath + encodeURIComponent(job.upstreamOrderId));
+    const r = await gsmCall('imeiorderstatus', { orderid: job.upstreamOrderId });
     return res.json({ ok: true, job, live: r.json || r.text });
   }
   res.json({ ok: true, job });
@@ -284,4 +273,4 @@ app.use((err, req, res, next) => {
   console.error('[ERR]', err.message);
   res.status(err.status || 500).json({ ok: false, error: 'Server error.' });
 });
-app.listen(PORT, () => console.log('SIERRAUNLOCK API v3.7 online on :' + PORT + ' — mode: ' + (fuReady() ? 'CONNECTED TO FASTUNLOCKERS' : 'MANUAL')));
+app.listen(PORT, () => console.log('SIERRAUNLOCK API v3.8 online on :' + PORT + ' — mode: ' + (fuReady() ? 'CONNECTED TO FASTUNLOCKERS (GSM HUB v3)' : 'MANUAL')));
