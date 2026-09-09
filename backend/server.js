@@ -1,5 +1,5 @@
 /* =====================================================================
-   SIERRAUNLOCK • BACKEND API — server.js (v3.5 • DHRU REAL ERROR DUMP)
+   SIERRAUNLOCK • BACKEND API — server.js (v3.6 • IP WHITELIST TOOL ADDED)
    ---------------------------------------------------------------------
    WHAT IS THIS FILE?
    The Node.js/Express "server brain" deployed on Render — the secure
@@ -7,23 +7,23 @@
    unlock server (DHRU Fusion protocol: username + apiaccesskey + action).
 
    SECTION MAP:
-   01  Environment + dependencies
-   02  Storage helpers (data.json, capped at 500 jobs)
-   03  Global security middleware (helmet, CORS, limits, logging)
-   04  Auth helpers (admin token)
-   05  Joi validation schemas
-   06  Public endpoints (root banner, health, rates)
-   07  Customer endpoints (unlock request, job status)
-   08  Admin endpoints (rate, job update)
-   09  Binance webhook stub (HMAC)
-   10  FastUnlockers adapter (env-only config, incl. DHRU username)
-   11  DHRU PROBE v3.5 (founders only) — dumps ACTUAL error content from
-       the HTTP 200 responses so we can read FastUnlockers' real message.
-       READ-ONLY: only sends accountinfo/imeiservicelist (never orders).
-   12  Services proxy (cached 10 min)
-   13  Upstream order placement (admin token = payment confirmed first)
-   13b Live upstream status check
-   14  404 + error handler + boot
+   01   Environment + dependencies
+   02   Storage helpers (data.json, capped at 500 jobs)
+   03   Global security middleware (helmet, CORS, limits, logging)
+   04   Auth helpers (admin token)
+   05   Joi validation schemas
+   06   Public endpoints (root banner, health, rates)
+   06b  NEW: /api/my-ip — returns our Render server's public IP
+        so the founder can whitelist it on FastUnlockers "Allowed Ips" box
+   07   Customer endpoints (unlock request, job status)
+   08   Admin endpoints (rate, job update)
+   09   Binance webhook stub (HMAC)
+   10   FastUnlockers adapter (env-only config, incl. DHRU username)
+   11   DHRU PROBE v3.5 — dumps ACTUAL error content from HTTP 200 responses
+   12   Services proxy (cached 10 min)
+   13   Upstream order placement (admin token = payment confirmed first)
+   13b  Live upstream status check
+   14   404 + error handler + boot
 
    ENV VARIABLES (Render + local .env — NEVER in frontend, NEVER in Git):
    PORT, FRONTEND_URL, ADMIN_TOKEN, UNLOCK_API_URL, UNLOCK_API_KEY,
@@ -32,6 +32,7 @@
 
    MONEY SAFETY: probe sends accountinfo/imeiservicelist ONLY (read-only).
    /api/order requires admin token — no spend without founder approval.
+   /api/my-ip is read-only — only reports our server's IP, no upstream calls.
 
    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
    ===================================================================== */
@@ -92,13 +93,33 @@ const orderSchema = Joi.object({
 });
 
 /* 06 • PUBLIC ENDPOINTS */
-app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.5.0', docs: '/api/health' }));
+app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.6.0', docs: '/api/health' }));
 app.get('/api/health', (req, res) => res.json({
-  ok: true, service: 'SIERRAUNLOCK API', version: '3.5.0',
+  ok: true, service: 'SIERRAUNLOCK API', version: '3.6.0',
   mode: fuReady() ? 'connected-to-fastunlockers' : 'manual-mode',
   time: new Date().toISOString()
 }));
 app.get('/api/rates', (req, res) => res.json({ ok: true, slePerUsd: load().rate }));
+
+/* 06b • SERVER PUBLIC IP — founders only. Returns the EXACT public IP address
+   of our Render server. This is the IP Alhassan must paste into the
+   "Allowed Ips" box on FastUnlockers.com so their firewall lets our calls in.
+   Uses ipify.org (free, no key, read-only) to discover our outbound IP.
+   Does NOT make any call to FastUnlockers itself — completely safe. */
+app.get('/api/my-ip', strict, async (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  try {
+    const r = await fetch('https://api.ipify.org?format=json');
+    const j = await r.json();
+    res.json({
+      ok: true,
+      serverPublicIp: j.ip,
+      note: 'Paste this exact IP into FastUnlockers → Edit Profile → Api Key Details → Allowed Ips box, then Submit. Do NOT press Regenerate.'
+    });
+  } catch (e) {
+    res.status(502).json({ ok: false, error: 'ipify unreachable: ' + e.message });
+  }
+});
 
 /* 07 • CUSTOMER ENDPOINTS */
 app.post('/api/unlock', strict, async (req, res) => {
@@ -287,4 +308,4 @@ app.use((err, req, res, next) => {
   console.error('[ERR]', err.message);
   res.status(err.status || 500).json({ ok: false, error: 'Server error.' });
 });
-app.listen(PORT, () => console.log('SIERRAUNLOCK API v3.5 online on :' + PORT + ' — mode: ' + (fuReady() ? 'CONNECTED TO FASTUNLOCKERS' : 'MANUAL')));
+app.listen(PORT, () => console.log('SIERRAUNLOCK API v3.6 online on :' + PORT + ' — mode: ' + (fuReady() ? 'CONNECTED TO FASTUNLOCKERS' : 'MANUAL')));
