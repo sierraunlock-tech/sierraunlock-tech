@@ -1,4 +1,51 @@
 <!DOCTYPE html>
+<!--
+=====================================================================
+SIERRAUNLOCK • LIVE UNLOCK SERVICES CATALOG — live-services.html (v2.1)
+---------------------------------------------------------------------
+WHAT IS THIS FILE?
+A standalone customer-facing page that displays the REAL live catalog
+of 251+ unlock, IMEI check, and repair services pulled from Alhassan's
+FastUnlockers account via the backend API. Customers can:
+  • Browse 251+ services (iPhone, Samsung, Xiaomi, Huawei, FRP, etc.)
+  • See prices in USD AND Leones (with 1.8x margin baked in)
+  • Search and filter by service group
+  • Click "Order Now" → enter IMEI + WhatsApp → submit order
+  • Auto-receive a WhatsApp confirmation link to pay Alhassan directly
+
+HOW IT WORKS:
+1. Page loads → fetches /api/services from backend
+2. Backend calls FastUnlockers GSM Hub API (imeiservicelist action)
+3. Backend flattens nested response + applies margin pricing
+4. This page renders cards with $ price + Le price + BUY button
+5. Customer clicks Order Now → modal opens → enters IMEI + phone
+6. Form submits to /api/unlock → job created with status "queued"
+7. WhatsApp link generated → customer taps → Alhassan receives order
+8. Alhassan opens admin-orders.html → confirms payment → places upstream
+9. FastUnlockers processes → code flies back → delivered to customer
+
+AUTO-RETRY LOGIC (v2.1):
+The Render free tier sleeps after 15 minutes of inactivity. On first
+wake-up, the server takes ~50 seconds to boot. This page auto-retries
+up to 3 times (every 15 seconds) with a "Waking server…" message so
+customers don't see "Catalog offline" errors. After 3 retries, it
+shows a friendly reload link.
+
+SECURITY & PRIVACY:
+• No customer data is stored permanently (job ID + IMEI only, in memory)
+• WhatsApp numbers are sent to Alhassan's desk only (23275908206)
+• No payment processing happens here — customer pays via Orange Money
+  or Binance directly to Alhassan after order submission
+• Admin token required to actually place upstream orders (money safety)
+
+ACCESS:
+• Public: any visitor can browse catalog + submit orders
+• Admin: founders open admin-orders.html (direct URL) to fulfil orders
+• Linked: auto-injected under Services menu on every page by main.js v9
+
+OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
+=====================================================================
+-->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -89,7 +136,14 @@ async function load(){
     const gs=[...new Set(ALL.map(s=>s.group))].sort();
     document.getElementById('grp').innerHTML='<option value="">All groups</option>'+gs.map(g=>`<option>${esc(g)}</option>`).join('');
     render();
-  }catch(e){document.getElementById('count').textContent='Catalog offline — try again';}
+  }catch(e){
+    if((window.__retries=(window.__retries||0)+1)<=3){
+      document.getElementById('count').textContent='Waking server… retry '+window.__retries+'/3';
+      setTimeout(load,15000);
+    }else{
+      document.getElementById('count').innerHTML='Catalog offline — <a href="live-services.html" style="color:#7cc4ff">reload page</a>';
+    }
+  }
 }
 function render(){
   const q=document.getElementById('q').value.toLowerCase();

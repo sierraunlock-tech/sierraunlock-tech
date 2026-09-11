@@ -1,5 +1,5 @@
 /* =====================================================================
-   SIERRAUNLOCK • CORE ENGINE — main.js (v8 • SMART RETURN MODE)
+   SIERRAUNLOCK • CORE ENGINE — main.js (v9 • LIVE CATALOG LINK ADDED)
    ---------------------------------------------------------------------
    WHAT IS THIS FILE?
    The "Master Brain" that runs on EVERY page of the website. It:
@@ -9,7 +9,10 @@
    • Injects the animated rotator line into every hero
    • Injects the Tools & Services marquee under the legal strip
    • Powers the mobile hamburger menu, scroll reveal, year/version footer
-   • NEW (v8): Smart Return Mode — pages open instantly after first visit
+   • Smart Return Mode — pages open instantly after first visit
+   • NEW (v9): Auto-injects "Live Unlock Catalog (Buy Now)" under the
+     Services menu on EVERY page so customers can buy from the live
+     251-service FastUnlockers catalog directly from sierraunlock.com
 
    SECTION MAP:
    01  Central WhatsApp desk switch (all flows → Alhassan 23275908206)
@@ -19,18 +22,27 @@
    05  Number normalizer (fixes wrong numbers automatically on every page)
    06  Hero rotator injector (adds animated brand line to every hero)
    07  Nav link injectors (Resellers + Account link)
+   07b NEW: Live Catalog link injector under Services menu (site-wide)
    08  Hamburger menu (mobile nav drawer)
    09  Rotator engine (cycles brand phrases every 2.8 s)
    10  Year + version footer injector
    11  Active nav link highlighter
    12  Tools marquee injector
    13  Scroll reveal (IntersectionObserver)
-   14  Smart Return Mode (NEW v8) — animations play once per session
+   14  Smart Return Mode (animations play once per session)
 
    CRITICAL NUMBER MAP (do not change without updating the normalizer):
    • Alhassan phone / Orange Money / WhatsApp desk : +232 75 908 206
    • Alhassan Binance Pay ID (crypto ONLY)         : 754378475
    • Baimba phone / Koidu hub                      : +232 31 363 736
+
+   LIVE CATALOG NOTE (v9):
+   The Live Unlock Catalog page (live-services.html) displays 251 real
+   services from FastUnlockers with Alhassan's wholesale cost x 1.8
+   margin baked in. The link is auto-injected under Services so customers
+   on any page can jump directly to buy. The admin-orders.html page
+   (founder fulfilment desk) is intentionally NOT linked publicly —
+   founders open it by direct URL only (money safety).
 
    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
    ===================================================================== */
@@ -110,6 +122,7 @@ document.addEventListener('DOMContentLoaded', () => {
   normalizeNumbers();
   injectResellerLink();
   injectAccountLink();
+  injectLiveCatalogLink();   /* NEW v9 — puts Live Catalog under Services everywhere */
   injectPageRotator();
   initNav();
   initRotator();
@@ -182,6 +195,69 @@ function injectAccountLink() {
     ? ('👤 ' + (name || 'Account'))
     : '👤 Sign In';
   nav.appendChild(a);
+}
+
+/* 07b • LIVE CATALOG LINK INJECTOR (v9)
+   Auto-adds "Live Unlock Catalog (Buy Now)" link under the Services menu
+   on EVERY page of the site. Safe: never duplicates, never breaks existing
+   menus. Tries three strategies in order:
+     1. Find a "Services" nav link with a dropdown sibling → append into it
+     2. Find the "Services" nav link → insert link right after it
+     3. Fallback: append to #mainNav or <header>
+   Purpose: let customers on any page jump to the live 251-service catalog
+   (live-services.html) where they can buy real FastUnlockers services
+   with prices in USD and Leone. */
+function injectLiveCatalogLink() {
+  const LABEL = 'Live Unlock Catalog (Buy Now)';
+  const HREF  = 'live-services.html';
+  if (document.querySelector('a[href="' + HREF + '"]')) return; /* already there */
+
+  /* find every element that looks like the "Services" nav trigger */
+  const triggers = [].slice.call(document.querySelectorAll('a, button, span, div'))
+    .filter(function (el) {
+      return el.children.length === 0 &&
+        (el.textContent || '').trim().toLowerCase() === 'services';
+    });
+
+  let placed = false;
+
+  /* Strategy 1: inject into an existing dropdown/menu next to Services */
+  triggers.forEach(function (t) {
+    if (placed) return;
+    const parent = t.closest('li, .dropdown, [class*="drop"], nav') || t.parentElement;
+    if (!parent) return;
+    const menu = parent.querySelector(
+      'ul, .dropdown-content, .dropdown-menu, [class*="menu"], [class*="content"]'
+    );
+    if (menu && menu !== t && menu !== parent) {
+      const a = document.createElement('a');
+      a.href = HREF; a.textContent = LABEL;
+      if (menu.firstElementChild) a.className = menu.firstElementChild.className || '';
+      menu.appendChild(a);
+      placed = true;
+    }
+  });
+
+  /* Strategy 2: insert link as sibling right after the Services trigger */
+  if (!placed && triggers.length) {
+    const t2 = triggers[0];
+    const a2 = document.createElement('a');
+    a2.href = HREF; a2.textContent = 'Live Services';
+    if (t2.className) a2.className = t2.className;
+    t2.parentNode.insertBefore(a2, t2.nextSibling);
+    placed = true;
+  }
+
+  /* Strategy 3: last-resort append into <nav> or <header> */
+  if (!placed) {
+    const nav = document.querySelector('#mainNav, nav, header');
+    if (nav) {
+      const a3 = document.createElement('a');
+      a3.href = HREF; a3.textContent = 'Live Services';
+      a3.className = 'nav-link';
+      nav.appendChild(a3);
+    }
+  }
 }
 
 /* 08 • HAMBURGER MENU — mobile nav drawer */
