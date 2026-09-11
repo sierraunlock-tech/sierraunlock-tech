@@ -1,68 +1,57 @@
 /* =====================================================================
-   SIERRAUNLOCK • CORE ENGINE — main.js (v9 • LIVE CATALOG LINK ADDED)
+   SIERRAUNLOCK • CORE ENGINE — main.js (v9.4 • PROFESSIONAL MEGA MENU)
    ---------------------------------------------------------------------
    WHAT IS THIS FILE?
-   The "Master Brain" that runs on EVERY page of the website. It:
-   • Routes every WhatsApp flow to Alhassan's correct business desk
-   • Normalizes wrong/outdated phone numbers automatically on load
-   • Blocks unauthenticated users from buying/selling/listing (account gate)
-   • Injects the animated rotator line into every hero
-   • Injects the Tools & Services marquee under the legal strip
-   • Powers the mobile hamburger menu, scroll reveal, year/version footer
-   • Smart Return Mode — pages open instantly after first visit
-   • NEW (v9): Auto-injects "Live Unlock Catalog (Buy Now)" under the
-     Services menu on EVERY page so customers can buy from the live
-     251-service FastUnlockers catalog directly from sierraunlock.com
+   The "Master Brain" on EVERY page. v9.4 replaces the old single link
+   with a PROFESSIONAL 3-COLUMN MEGA MENU under "Services", mirroring
+   the FastUnlockers client-area structure (Place Order / IMEI Service /
+   File Service / Server Service / Order History / My Account) but
+   branded for SIERRAUNLOCK customers:
+     COLUMN 1 — Unlock Services (Live Catalog, Network, FRP/iCloud,
+                IMEI Checks, Tool Licenses)
+     COLUMN 2 — Order Tools (Place Order, Track Order, Order History,
+                File Service, Server Service)
+     COLUMN 3 — My Account (Sign In, Reseller, Payments, Help)
+   • Animated fade/slide, hover + keyboard accessible
+   • Mobile: stacks inside the hamburger drawer (tap Services to open)
+   • Fits phones, tablets, laptops, desktops (responsive grid)
+   • Also keeps: WhatsApp desk switch, account gate, number normalizer,
+     hero rotator, tools marquee, scroll reveal, smart return mode
 
    SECTION MAP:
-   01  Central WhatsApp desk switch (all flows → Alhassan 23275908206)
-   02  Account gate (sign-in required for protected forms)
-   03  Constants: site version, tool catalog, rotator phrases
-   04  Boot: DOMContentLoaded handlers + number normalization
-   05  Number normalizer (fixes wrong numbers automatically on every page)
-   06  Hero rotator injector (adds animated brand line to every hero)
-   07  Nav link injectors (Resellers + Account link)
-   07b NEW: Live Catalog link injector under Services menu (site-wide)
-   08  Hamburger menu (mobile nav drawer)
-   09  Rotator engine (cycles brand phrases every 2.8 s)
-   10  Year + version footer injector
-   11  Active nav link highlighter
-   12  Tools marquee injector
-   13  Scroll reveal (IntersectionObserver)
-   14  Smart Return Mode (animations play once per session)
+   01 WhatsApp desk switch      08 Hamburger menu
+   02 Account gate              09 Rotator engine
+   03 Constants                 10 Year + version footer
+   04 Boot                      11 Active nav highlighter
+   05 Number normalizer         12 Tools marquee injector
+   06 Hero rotator injector     13 Scroll reveal
+   07 Nav injectors             14 Smart Return Mode
+   07b SERVICES MEGA MENU (v9.4) + stray-link cleanup
 
-   CRITICAL NUMBER MAP (do not change without updating the normalizer):
-   • Alhassan phone / Orange Money / WhatsApp desk : +232 75 908 206
-   • Alhassan Binance Pay ID (crypto ONLY)         : 754378475
-   • Baimba phone / Koidu hub                      : +232 31 363 736
-
-   LIVE CATALOG NOTE (v9):
-   The Live Unlock Catalog page (live-services.html) displays 251 real
-   services from FastUnlockers with Alhassan's wholesale cost x 1.8
-   margin baked in. The link is auto-injected under Services so customers
-   on any page can jump directly to buy. The admin-orders.html page
-   (founder fulfilment desk) is intentionally NOT linked publicly —
-   founders open it by direct URL only (money safety).
+   CRITICAL NUMBER MAP:
+   • Alhassan desk / Orange Money / WhatsApp : +232 75 908 206
+   • Binance Pay ID (crypto ONLY)            : 754378475
+   • Baimba / Koidu hub                      : +232 31 363 736
 
    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
    ===================================================================== */
 'use strict';
 
-/* 01 • CENTRAL WHATSAPP DESK SWITCH — forces all wa.me flows to Alhassan's real phone */
+/* 01 • CENTRAL WHATSAPP DESK SWITCH */
 (function () {
   const orig = window.open.bind(window);
   window.open = function (url, ...rest) {
     if (typeof url === 'string') {
       url = url
-        .replace('wa.me/23231363736',  'wa.me/23275908206')   /* Baimba → Alhassan desk */
-        .replace('wa.me/232754378475', 'wa.me/23275908206')   /* Binance ID misused as phone → Alhassan */
-        .replace('wa.me/23233469056',  'wa.me/23275908206');  /* legacy number → Alhassan */
+        .replace('wa.me/23231363736',  'wa.me/23275908206')
+        .replace('wa.me/232754378475', 'wa.me/23275908206')
+        .replace('wa.me/23233469056',  'wa.me/23275908206');
     }
     return orig(url, ...rest);
   };
 })();
 
-/* 02 • ACCOUNT GATE — blocks gated forms until user signs in */
+/* 02 • ACCOUNT GATE */
 (function () {
   const GATED = ['unlockForm', 'repairForm', 'sellForm', 'shopForm', 'resForm', 'bizForm'];
   const user = () => sessionStorage.getItem('su_user');
@@ -83,8 +72,8 @@
   }, true);
 })();
 
-/* 03 • CONSTANTS — site version, tool catalog, rotator phrases */
-const SITE_VERSION = localStorage.getItem('su_version') || 'v2.0.0 • build 2026-09-06';
+/* 03 • CONSTANTS */
+const SITE_VERSION = localStorage.getItem('su_version') || 'v2.1.0 • build 2026-09-12';
 
 const TOOLS = [
   { icon:'🔓', name:'Unlock Codes',        tag:'All Brands',      img:null },
@@ -109,20 +98,18 @@ const ROTATOR_PHRASES = [
   'Legal. Certified. Trusted.'
 ];
 
-/* 04 • BOOT — runs once the DOM is ready */
+/* 04 • BOOT */
 document.addEventListener('DOMContentLoaded', () => {
-  /* first thing: fix any leftover wrong WhatsApp links in the HTML */
   document.querySelectorAll('a[href*="wa.me/"]').forEach(a => {
     a.href = a.href
       .replace('23231363736',  '23275908206')
       .replace('232754378475', '23275908206')
       .replace('23233469056',  '23275908206');
   });
-
   normalizeNumbers();
   injectResellerLink();
   injectAccountLink();
-  injectLiveCatalogLink();   /* NEW v9 — puts Live Catalog under Services everywhere */
+  injectServicesMegaMenu();   /* v9.4 — professional dropdown */
   injectPageRotator();
   initNav();
   initRotator();
@@ -132,18 +119,15 @@ document.addEventListener('DOMContentLoaded', () => {
   initReveal();
 });
 
-/* 05 • NUMBER NORMALIZER — fixes wrong tel: links AND visible text automatically */
+/* 05 • NUMBER NORMALIZER */
 function normalizeNumbers() {
-  /* fix tel: hrefs */
   const HREF_MAP = [
-    ['tel:+232754378475', 'tel:+23275908206'],   /* Binance ID misused as phone */
-    ['tel:+23233469056',  'tel:+23275908206']    /* legacy removed number */
+    ['tel:+232754378475', 'tel:+23275908206'],
+    ['tel:+23233469056',  'tel:+23275908206']
   ];
   document.querySelectorAll('a[href^="tel:"]').forEach(a => {
     HREF_MAP.forEach(([f, t]) => { if (a.getAttribute('href') === f) a.setAttribute('href', t); });
   });
-
-  /* fix visible text across the whole page */
   const TEXT_MAP = [
     ['+232 75 437 8475', '+232 75 908 206'],
     ['+232 33 469 056',  '+232 75 908 206']
@@ -160,9 +144,9 @@ function normalizeNumbers() {
   });
 }
 
-/* 06 • HERO ROTATOR INJECTOR — adds animated brand line to every hero (except index) */
+/* 06 • HERO ROTATOR INJECTOR */
 function injectPageRotator() {
-  if (document.getElementById('rotatorText')) return;   /* index already has it */
+  if (document.getElementById('rotatorText')) return;
   const h1 = document.querySelector('section[class*="hero"] h1');
   if (!h1) return;
   const br = document.createElement('br');
@@ -174,7 +158,7 @@ function injectPageRotator() {
   h1.appendChild(span);
 }
 
-/* 07 • NAV LINK INJECTORS — Resellers + Account (sign in / profile) */
+/* 07 • NAV LINK INJECTORS — Resellers + Account */
 function injectResellerLink() {
   const nav = document.getElementById('mainNav');
   if (!nav || nav.querySelector('[href="reseller.html"]')) return;
@@ -197,70 +181,95 @@ function injectAccountLink() {
   nav.appendChild(a);
 }
 
-/* 07b • LIVE CATALOG LINK INJECTOR (v9)
-   Auto-adds "Live Unlock Catalog (Buy Now)" link under the Services menu
-   on EVERY page of the site. Safe: never duplicates, never breaks existing
-   menus. Tries three strategies in order:
-     1. Find a "Services" nav link with a dropdown sibling → append into it
-     2. Find the "Services" nav link → insert link right after it
-     3. Fallback: append to #mainNav or <header>
-   Purpose: let customers on any page jump to the live 251-service catalog
-   (live-services.html) where they can buy real FastUnlockers services
-   with prices in USD and Leone. */
-function injectLiveCatalogLink() {
-  const LABEL = 'Live Unlock Catalog (Buy Now)';
-  const HREF  = 'live-services.html';
-  if (document.querySelector('a[href="' + HREF + '"]')) return; /* already there */
+/* 07b • SERVICES MEGA MENU (v9.4)
+   Builds a professional 3-column dropdown under the Services nav item:
+     col 1 Unlock Services  •  col 2 Order Tools  •  col 3 My Account
+   Mirrors FastUnlockers client-area concepts (Place Order, IMEI/File/
+   Server Service, Order History, My Account) in customer language.
+   • Injects its own CSS once (animated, responsive, accessible)
+   • Desktop: opens on hover / keyboard focus
+   • Mobile: tap Services toggles it inside the hamburger drawer
+   • Cleans stray old "Live Services" links from v9.0 first */
+function injectServicesMegaMenu() {
+  const HREF = 'live-services.html';
 
-  /* find every element that looks like the "Services" nav trigger */
-  const triggers = [].slice.call(document.querySelectorAll('a, button, span, div'))
-    .filter(function (el) {
-      return el.children.length === 0 &&
-        (el.textContent || '').trim().toLowerCase() === 'services';
-    });
+  /* cleanup strays from older versions */
+  document.querySelectorAll('a[href="' + HREF + '"]').forEach(function (a) {
+    if (!a.closest('#mainNav')) a.remove();
+  });
+  const old = document.getElementById('suMegaMenu');
+  if (old) old.remove();
 
-  let placed = false;
+  /* inject CSS once */
+  if (!document.getElementById('suMegaCss')) {
+    const css = document.createElement('style');
+    css.id = 'suMegaCss';
+    css.textContent = [
+      '.su-wrap{position:relative}',
+      '.su-mega{display:none;position:absolute;top:calc(100% + 6px);left:50%;transform:translateX(-50%);background:#ffffff;border:1px solid #e1ecf4;border-radius:16px;box-shadow:0 18px 50px rgba(11,31,51,.18);padding:20px;grid-template-columns:repeat(3,minmax(210px,1fr));gap:20px;z-index:999;min-width:660px;animation:suMegaIn .18s ease}',
+      '@keyframes suMegaIn{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}',
+      '.su-wrap:hover .su-mega,.su-wrap:focus-within .su-mega,.su-wrap.open .su-mega{display:grid}',
+      '.su-mega h4{font-size:11.5px;letter-spacing:.8px;text-transform:uppercase;color:#0072C6;margin:0 0 10px;font-weight:800}',
+      '.su-mega a{display:block;padding:8px 10px;border-radius:9px;color:#12263a;text-decoration:none;font-size:13.5px;line-height:1.3;transition:background .15s,color .15s}',
+      '.su-mega a:hover,.su-mega a:focus{background:#eef6ff;color:#0072C6}',
+      '.su-mega .hot{background:linear-gradient(120deg,#1EB53A,#0072C6);color:#fff;font-weight:700}',
+      '.su-mega .hot:hover{filter:brightness(1.08);color:#fff}',
+      '@media(max-width:900px){.su-mega{position:static;min-width:0;transform:none;grid-template-columns:1fr;padding:10px;box-shadow:none;border:0;animation:none}.su-wrap.open .su-mega{display:grid}.su-wrap:hover .su-mega{display:none}.su-wrap.open .su-mega{display:grid}}'
+    ].join('');
+    document.head.appendChild(css);
+  }
 
-  /* Strategy 1: inject into an existing dropdown/menu next to Services */
-  triggers.forEach(function (t) {
-    if (placed) return;
-    const parent = t.closest('li, .dropdown, [class*="drop"], nav') || t.parentElement;
-    if (!parent) return;
-    const menu = parent.querySelector(
-      'ul, .dropdown-content, .dropdown-menu, [class*="menu"], [class*="content"]'
-    );
-    if (menu && menu !== t && menu !== parent) {
-      const a = document.createElement('a');
-      a.href = HREF; a.textContent = LABEL;
-      if (menu.firstElementChild) a.className = menu.firstElementChild.className || '';
-      menu.appendChild(a);
-      placed = true;
+  const nav = document.getElementById('mainNav');
+  if (!nav) return;
+
+  /* find the Services trigger inside the navbar */
+  const nodes = [].slice.call(nav.querySelectorAll('li, div, a, button, span'));
+  const trigger = nodes.find(function (el) {
+    const t = (el.textContent || '').trim().toLowerCase();
+    return t === 'services' || t === 'services ▾' || t.indexOf('services') === 0;
+  });
+  if (!trigger) return;
+
+  /* the container that will hold the mega menu (li / div.dropdown / trigger itself) */
+  const wrap = (trigger.closest('li, div.dropdown, [class*="drop"]') || trigger);
+  wrap.classList.add('su-wrap');
+
+  const mega = document.createElement('div');
+  mega.className = 'su-mega';
+  mega.id = 'suMegaMenu';
+  mega.innerHTML =
+    '<div class="su-col"><h4>🔓 Unlock Services</h4>' +
+      '<a class="hot" href="live-services.html">⚡ Live Catalog — Buy Now</a>' +
+      '<a href="live-services.html#g=network">🌐 Network & Carrier Unlock</a>' +
+      '<a href="live-services.html#g=frp">🧠 FRP / iCloud / Passcode Bypass</a>' +
+      '<a href="live-services.html#g=checks">✅ IMEI & Info Checks</a>' +
+      '<a href="live-services.html#g=tools">🧰 Tool Licenses (CM2, iAPro, iRemove)</a>' +
+    '</div>' +
+    '<div class="su-col"><h4>📦 Order Tools</h4>' +
+      '<a href="live-services.html">🛒 Place Order (IMEI Service)</a>' +
+      '<a href="track.html">📍 Track My Order</a>' +
+      '<a href="auth.html">📜 Order History (Sign In)</a>' +
+      '<a href="services.html">📁 File Service (Firmware / Flashing)</a>' +
+      '<a href="reseller.html">🖥 Server Service (Reseller Credits)</a>' +
+    '</div>' +
+    '<div class="su-col"><h4>👤 My Account</h4>' +
+      '<a href="auth.html">🔐 Sign In / Create Account</a>' +
+      '<a href="reseller.html">🤝 Become a Reseller</a>' +
+      '<a href="payments.html">💳 Payments (OM • Binance • Cash)</a>' +
+      '<a href="faq.html">❓ Help & FAQ</a>' +
+    '</div>';
+  wrap.appendChild(mega);
+
+  /* mobile: tap Services toggles the mega inside the drawer */
+  trigger.addEventListener('click', function (e) {
+    if (window.innerWidth <= 900) {
+      e.preventDefault();
+      wrap.classList.toggle('open');
     }
   });
-
-  /* Strategy 2: insert link as sibling right after the Services trigger */
-  if (!placed && triggers.length) {
-    const t2 = triggers[0];
-    const a2 = document.createElement('a');
-    a2.href = HREF; a2.textContent = 'Live Services';
-    if (t2.className) a2.className = t2.className;
-    t2.parentNode.insertBefore(a2, t2.nextSibling);
-    placed = true;
-  }
-
-  /* Strategy 3: last-resort append into <nav> or <header> */
-  if (!placed) {
-    const nav = document.querySelector('#mainNav, nav, header');
-    if (nav) {
-      const a3 = document.createElement('a');
-      a3.href = HREF; a3.textContent = 'Live Services';
-      a3.className = 'nav-link';
-      nav.appendChild(a3);
-    }
-  }
 }
 
-/* 08 • HAMBURGER MENU — mobile nav drawer */
+/* 08 • HAMBURGER MENU */
 function initNav() {
   const toggle = document.getElementById('navToggle');
   const nav = document.getElementById('mainNav');
@@ -271,6 +280,7 @@ function initNav() {
     toggle.textContent = open ? '✕' : '☰';
   });
   nav.querySelectorAll('a').forEach(a => a.addEventListener('click', () => {
+    if (a.closest('.su-mega')) return;           /* mega links close drawer below */
     nav.classList.remove('open');
     toggle.setAttribute('aria-expanded', 'false');
     toggle.textContent = '☰';
@@ -282,7 +292,7 @@ function initNav() {
   });
 }
 
-/* 09 • ROTATOR ENGINE — cycles brand phrases every 2.8 seconds */
+/* 09 • ROTATOR ENGINE */
 function initRotator() {
   const el = document.getElementById('rotatorText');
   if (!el) return;
@@ -295,7 +305,7 @@ function initRotator() {
   }, 2800);
 }
 
-/* 10 • YEAR + VERSION FOOTER INJECTOR */
+/* 10 • YEAR + VERSION FOOTER */
 function initYearVersion() {
   const y = document.getElementById('year');
   const v = document.getElementById('siteVersion');
@@ -303,7 +313,7 @@ function initYearVersion() {
   if (v) v.textContent = SITE_VERSION;
 }
 
-/* 11 • ACTIVE NAV LINK HIGHLIGHTER — highlights the current page */
+/* 11 • ACTIVE NAV HIGHLIGHTER */
 function initActiveNav() {
   const page = (location.pathname.split('/').pop() || 'index.html');
   document.querySelectorAll('.nav-link').forEach(a => {
@@ -311,7 +321,7 @@ function initActiveNav() {
   });
 }
 
-/* 12 • TOOLS MARQUEE INJECTOR — auto-inserts under the legal strip */
+/* 12 • TOOLS MARQUEE INJECTOR */
 function initToolsMarquee() {
   const anchor = document.querySelector('.legal-strip');
   if (!anchor || document.getElementById('toolsSection')) return;
@@ -348,7 +358,7 @@ function initToolsMarquee() {
   [...TOOLS, ...TOOLS].forEach(t => track.appendChild(buildCard(t)));
 }
 
-/* 13 • SCROLL REVEAL — fades elements in as they enter the viewport */
+/* 13 • SCROLL REVEAL */
 function initReveal() {
   const targets = document.querySelectorAll(
     '.card, .founder-card, .stat, .section-head, .badge, .tool-card, .philosophy-card, .timeline-item, .reveal'
@@ -368,11 +378,11 @@ function initReveal() {
   targets.forEach(el => io.observe(el));
 }
 
-/* 14 • SMART RETURN MODE — animations play once per session; return visits open instantly */
+/* 14 • SMART RETURN MODE */
 (function () {
   if (sessionStorage.getItem('su_seen') === '1') {
-    document.documentElement.classList.add('su-returning');   /* skip entrance replays */
+    document.documentElement.classList.add('su-returning');
   } else {
-    sessionStorage.setItem('su_seen', '1');                   /* first visit: play the show */
+    sessionStorage.setItem('su_seen', '1');
   }
 })();
