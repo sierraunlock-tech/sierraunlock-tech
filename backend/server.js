@@ -1,14 +1,20 @@
 /* =====================================================================
-   SIERRAUNLOCK • BACKEND API — server.js (v3.11 • FLAT MARGIN + DUAL DOMAIN)
+   SIERRAUNLOCK • BACKEND API — server.js (v3.12 • TRACK ENDPOINT ADDED)
    ---------------------------------------------------------------------
    WHAT IS THIS FILE?
    The Node.js/Express "server brain" on Render. It is the secure bridge
    between sierraunlock.com + sierraunlock.live (both now authorized) and
    the FastUnlockers upstream server (GSM Hub v3.00, user: Alhassan301).
 
-   v3.11 CHANGES (founder profit + exchange policy):
+   v3.12 CHANGES (Pack 3 addition):
+   • NEW public /api/track/:id endpoint — customers can fetch their own
+     job status live. Returns sanitized data: job ID, service name,
+     masked IMEI, status, and (when solved) the unlock code/message.
+     NO wholesale cost, NO admin data, NO raw upstream JSON exposed.
+     Feeds the track.html page which auto-refreshes every 10 seconds.
+
+   v3.11 FEATURES (still active):
    • PRICING ENGINE = cost + flat $2 (NOT a multiplier anymore)
-     Examples:
        wholesale $0.10  → customer $2.10  → profit $2.00
        wholesale $10.00 → customer $12.00 → profit $2.00
        wholesale $60.00 → customer $62.00 → profit $2.00
@@ -22,19 +28,18 @@
        Alhassan earns $0.50 (commission per business)
      Configurable via UNLOCK_COMMISSION_SPLIT env (e.g. "0.75,0.25").
    • DUAL DOMAIN CORS = both sierraunlock.com AND sierraunlock.live
-     (plus their www variants) are authorized origins — no blocked
-     requests when customers arrive from either domain.
+     (plus their www variants) are authorized origins.
    • COST PRIVACY = /api/services (public) NEVER exposes wholesale cost;
      only /api/admin/services (founder-only) shows cost + commission.
 
    SECTION MAP:
    01 Env + deps            08 Admin endpoints        13 Upstream order
    02 Storage helpers       08b Admin jobs list       13b Order status
-   03 Security + CORS       09 Binance webhook stub   14 404 + boot
-   04 Auth helpers          10 GSM Hub adapter
+   03 Security + CORS       09 Binance webhook stub   13c NEW: public /api/track/:id
+   04 Auth helpers          10 GSM Hub adapter        14 404 + boot
    05 Joi schemas           11 upstream-test (founders)
    06 Public endpoints      12 Services (PUBLIC, cost hidden)
-   06b my-ip (founders)     12b Services (ADMIN, with cost + commission)
+   06b my-ip (founders)     12b Services (ADMIN, cost + commission)
    07 Customer endpoints
 
    ENV VARIABLES (Render — never in frontend / never in Git):
@@ -50,7 +55,7 @@
      → founder confirms → /api/order spends wholesale from Alhassan's
        FastUnlockers balance
      → $2 margin splits automatically: 75% SIERRAUNLOCK, 25% Alhassan
-     → code/result delivered to customer
+     → code/result delivered to customer (via track.html or WhatsApp)
 
    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
    ===================================================================== */
@@ -140,9 +145,9 @@ const orderSchema = Joi.object({
 });
 
 /* 06 • PUBLIC ENDPOINTS */
-app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.11.0', docs: '/api/health' }));
+app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.12.0', docs: '/api/health' }));
 app.get('/api/health', (req, res) => res.json({
-  ok: true, service: 'SIERRAUNLOCK API', version: '3.11.0',
+  ok: true, service: 'SIERRAUNLOCK API', version: '3.12.0',
   mode: fuReady() ? 'connected-to-fastunlockers' : 'manual-mode',
   rate: load().rate,
   time: new Date().toISOString()
@@ -385,6 +390,67 @@ app.post('/api/order-status', strict, async (req, res) => {
   res.json({ ok: true, job });
 });
 
+/* 13c • /api/track/:id — PUBLIC customer tracking endpoint (NEW in v3.12)
+   Returns sanitized job data for the customer:
+     • job ID, service name, IMEI, created date, status
+     • when status = 'solved' → includes the unlock CODE (extracted from upstream)
+     • NO wholesale cost, NO admin data, NO raw upstream JSON exposed
+   Auto-parses FastUnlockers reply to extract:
+     SUCCESS.code / SUCCESS.unlock_code / SUCCESS.message / ERROR.message
+   Rate-limited (standard 60/min) — customers can check freely.
+   Feeds track.html which auto-refreshes every 10 seconds. */
+app.get('/api/track/:id', async (req, res) => {
+  const id = String(req.params.id || '').trim();
+  if (!id || id.length < 3 || id.length > 60) {
+    return res.status(400).json({ ok: false, error: 'Invalid job ID.' });
+  }
+  const job = load().jobs.find(j => j.id === id);
+  if (!job) return res.status(404).json({ ok: false, error: 'Job not found.' });
+
+  /* Extract the customer-facing result from upstream JSON */
+  let code = null, message = null, failed = false;
+  if (job.upstream && typeof job.upstream === 'object') {
+    const up = job.upstream;
+    const s = up.SUCCESS || up.success || null;
+    const e = up.ERROR   || up.error   || null;
+    if (s && typeof s === 'object') {
+      code    = s.code || s.unlock_code || s.CODE || s.UNLOCK_CODE || null;
+      message = s.message || s.MESSAGE || null;
+    } else if (typeof s === 'string') {
+      code = s;
+    }
+    if (e && typeof e === 'object') {
+      failed = true;
+      message = e.message || e.MESSAGE || JSON.stringify(e);
+    } else if (typeof e === 'string') {
+      failed = true; message = e;
+    }
+  }
+
+  /* Mask IMEI for privacy: show only first 6 + last 3 digits */
+  const maskedImei = job.imei
+    ? job.imei.slice(0, 6) + '******' + job.imei.slice(-3)
+    : '';
+
+  res.json({
+    ok: true,
+    job: {
+      id: job.id,
+      serviceName: job.serviceName || job.service || '—',
+      imei: maskedImei,
+      status: job.status,
+      failed: failed,
+      code: (job.status === 'solved' || code) ? (code || message) : null,
+      message: message,
+      created: job.created,
+      upstreamOrderId: job.upstreamOrderId || null,
+      eta: (job.status === 'queued' || job.status === 'sent-to-server' || job.status === 'processing')
+        ? 'In progress — this page refreshes automatically.'
+        : null
+    }
+  });
+});
+
 /* 14 • 404 + ERROR HANDLER + BOOT */
 app.use((req, res) => res.status(404).json({ ok: false, error: 'Not found.' }));
 app.use((err, req, res, next) => {
@@ -393,7 +459,8 @@ app.use((err, req, res, next) => {
 });
 app.listen(PORT, () => {
   const mode = fuReady() ? 'CONNECTED TO FASTUNLOCKERS (GSM HUB v3)' : 'MANUAL';
-  console.log(`SIERRAUNLOCK API v3.11 online on :${PORT} — mode: ${mode}`);
+  console.log(`SIERRAUNLOCK API v3.12 online on :${PORT} — mode: ${mode}`);
   console.log(`  Policy: cost + $${process.env.UNLOCK_FLAT_FEE || '2'} flat • rate 1 USD = ${load().rate} SLE • split ${(process.env.UNLOCK_COMMISSION_SPLIT || '0.75,0.25')}`);
   console.log(`  Authorized origins: ${ALLOWED.join(', ')}`);
+  console.log(`  Public tracking: /api/track/:id (feeds track.html)`);
 });
