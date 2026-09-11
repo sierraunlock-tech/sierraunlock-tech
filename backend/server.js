@@ -1,37 +1,56 @@
 /* =====================================================================
-   SIERRAUNLOCK • BACKEND API — server.js (v3.9 • LIVE CATALOG + PRICING)
+   SIERRAUNLOCK • BACKEND API — server.js (v3.11 • FLAT MARGIN + DUAL DOMAIN)
    ---------------------------------------------------------------------
    WHAT IS THIS FILE?
-   The Node.js/Express "server brain" on Render with a CONFIRMED LIVE
-   connection to FastUnlockers.us (GSM Hub v3.00 API, user: Alhassan301).
-   v3.9 flattens the nested GSM Hub service catalog into a clean array
-   and adds customer selling prices (cost x margin) in USD + SLE.
+   The Node.js/Express "server brain" on Render. It is the secure bridge
+   between sierraunlock.com + sierraunlock.live (both now authorized) and
+   the FastUnlockers upstream server (GSM Hub v3.00, user: Alhassan301).
+
+   v3.11 CHANGES (founder profit + exchange policy):
+   • PRICING ENGINE = cost + flat $2 (NOT a multiplier anymore)
+     Examples:
+       wholesale $0.10  → customer $2.10  → profit $2.00
+       wholesale $10.00 → customer $12.00 → profit $2.00
+       wholesale $60.00 → customer $62.00 → profit $2.00
+     (matches founder rule: "company gives 10 → we sell 12")
+   • EXCHANGE RATE = 1 USD = 26 Leones (default). Founder updates
+     anytime via /api/admin/rate if rate rises or falls; all services
+     auto-recalculate within 10 minutes (cache refresh).
+   • COMMISSION SPLIT = SIERRAUNLOCK 75% + Alhassan 25% of the $2 margin
+     (founder view only). Example on a $2 margin:
+       SIERRAUNLOCK keeps $1.50 (ops, platform, support)
+       Alhassan earns $0.50 (commission per business)
+     Configurable via UNLOCK_COMMISSION_SPLIT env (e.g. "0.75,0.25").
+   • DUAL DOMAIN CORS = both sierraunlock.com AND sierraunlock.live
+     (plus their www variants) are authorized origins — no blocked
+     requests when customers arrive from either domain.
+   • COST PRIVACY = /api/services (public) NEVER exposes wholesale cost;
+     only /api/admin/services (founder-only) shows cost + commission.
 
    SECTION MAP:
-   01   Environment + dependencies
-   02   Storage helpers (data.json, capped at 500 jobs)
-   03   Global security middleware (helmet, CORS, limits, logging)
-   04   Auth helpers (admin token)
-   05   Joi validation schemas
-   06   Public endpoints (root banner, health, rates)
-   06b  /api/my-ip (founders only)
-   07   Customer endpoints (unlock request, job status)
-   08   Admin endpoints (rate, job update)
-   09   Binance webhook stub (HMAC)
-   10   GSM Hub adapter (confirmed winning format)
-   11   /api/upstream-test (founders only)
-   12   /api/services — FLATTENED live catalog + customer prices (cached 10 min)
-   13   /api/order — real upstream order (admin token = payment confirmed)
-   13b  /api/order-status — live status check
-   14   404 + error handler + boot
+   01 Env + deps            08 Admin endpoints        13 Upstream order
+   02 Storage helpers       08b Admin jobs list       13b Order status
+   03 Security + CORS       09 Binance webhook stub   14 404 + boot
+   04 Auth helpers          10 GSM Hub adapter
+   05 Joi schemas           11 upstream-test (founders)
+   06 Public endpoints      12 Services (PUBLIC, cost hidden)
+   06b my-ip (founders)     12b Services (ADMIN, with cost + commission)
+   07 Customer endpoints
 
-   ENV VARIABLES (Render + local .env — NEVER in frontend/Git):
-   PORT, FRONTEND_URL, ADMIN_TOKEN, UNLOCK_API_URL, UNLOCK_API_KEY,
-   UNLOCK_API_USERNAME (=Alhassan301),
-   optional: UNLOCK_MARGIN (customer price multiplier, default 1.8),
-             BINANCE_WEBHOOK_SECRET
+   ENV VARIABLES (Render — never in frontend / never in Git):
+   PORT, FRONTEND_URL (comma-separated allowed origins), ADMIN_TOKEN,
+   UNLOCK_API_URL, UNLOCK_API_KEY, UNLOCK_API_USERNAME (=Alhassan301),
+   optional:
+     UNLOCK_FLAT_FEE           (default 2       — USD added to every cost)
+     UNLOCK_COMMISSION_SPLIT   (default 0.75,0.25 — SIERRAUNLOCK, Alhassan)
+     BINANCE_WEBHOOK_SECRET
 
-   MONEY SAFETY: /api/order needs admin token. Catalog is read-only.
+   MONEY FLOW (no payment processing here — see founder policy):
+     customer pays SIERRAUNLOCK desk first (OM / Binance / cash)
+     → founder confirms → /api/order spends wholesale from Alhassan's
+       FastUnlockers balance
+     → $2 margin splits automatically: 75% SIERRAUNLOCK, 25% Alhassan
+     → code/result delivered to customer
 
    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
    ===================================================================== */
@@ -53,15 +72,42 @@ const PORT = process.env.PORT || 3000;
 const DATA = path.join(__dirname, 'data.json');
 app.set('trust proxy', 1);
 
-/* 02 • STORAGE HELPERS */
-const load = () => { try { return JSON.parse(fs.readFileSync(DATA, 'utf8')); } catch (e) { return { jobs: [], rate: 22.5 }; } };
+/* 02 • STORAGE HELPERS (rate default = 26 SLE/USD) */
+const DEFAULT_RATE = 26.0;
+const load = () => { try { return JSON.parse(fs.readFileSync(DATA, 'utf8')); } catch (e) { return { jobs: [], rate: DEFAULT_RATE }; } };
 const save = (d) => { d.jobs = (d.jobs || []).slice(0, 500); fs.writeFileSync(DATA, JSON.stringify(d, null, 2)); };
-if (!fs.existsSync(DATA)) save({ jobs: [], rate: 22.5 });
+if (!fs.existsSync(DATA)) save({ jobs: [], rate: DEFAULT_RATE });
+else {
+  /* ensure default rate is 26 if a legacy file has 22.5 */
+  const db = load();
+  if (!db.rate || db.rate < 20) { db.rate = DEFAULT_RATE; save(db); }
+}
 
-/* 03 • GLOBAL SECURITY MIDDLEWARE */
+/* 03 • SECURITY + CORS (dual-domain authorized)
+   Reads FRONTEND_URL from env. If empty, allows the canonical list of
+   origins covering BOTH sierraunlock.com AND sierraunlock.live
+   (plus www variants and the Render preview domain). */
 app.use(helmet());
-const ORIGIN = process.env.FRONTEND_URL || '*';
-app.use(cors({ origin: ORIGIN === '*' ? true : ORIGIN.split(',') }));
+const FALLBACK_ORIGINS = [
+  'https://sierraunlock.com',
+  'https://www.sierraunlock.com',
+  'http://sierraunlock.com',
+  'https://sierraunlock.live',
+  'https://www.sierraunlock.live',
+  'http://sierraunlock.live',
+  'https://sierraunlock-tech.github.io'
+];
+const ALLOWED = process.env.FRONTEND_URL
+  ? process.env.FRONTEND_URL.split(',').map(s => s.trim()).filter(Boolean)
+  : FALLBACK_ORIGINS;
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true);            /* curl / mobile apps / same-origin */
+    if (ALLOWED.some(o => origin === o || origin.startsWith(o))) return cb(null, true);
+    cb(new Error('Not allowed by CORS'));
+  },
+  credentials: false
+}));
 app.use(express.json({ limit: '100kb' }));
 app.use(morgan('dev'));
 app.use(rateLimit({ windowMs: 60 * 1000, max: 60 }));
@@ -94,10 +140,11 @@ const orderSchema = Joi.object({
 });
 
 /* 06 • PUBLIC ENDPOINTS */
-app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.9.0', docs: '/api/health' }));
+app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.11.0', docs: '/api/health' }));
 app.get('/api/health', (req, res) => res.json({
-  ok: true, service: 'SIERRAUNLOCK API', version: '3.9.0',
+  ok: true, service: 'SIERRAUNLOCK API', version: '3.11.0',
   mode: fuReady() ? 'connected-to-fastunlockers' : 'manual-mode',
+  rate: load().rate,
   time: new Date().toISOString()
 }));
 app.get('/api/rates', (req, res) => res.json({ ok: true, slePerUsd: load().rate }));
@@ -125,7 +172,7 @@ app.post('/api/unlock', strict, async (req, res) => {
     status: 'queued', created: new Date().toISOString()
   };
   db.jobs.unshift(job); save(db);
-  res.json({ ok: true, job: job.id, status: job.status, note: 'Quote confirmed on WhatsApp or pay online; founder approves then order auto-places.' });
+  res.json({ ok: true, job: job.id, status: job.status, note: 'Quote received. Pay via Orange Money / Binance / cash, then we fulfil automatically.' });
 });
 app.post('/api/job-status', strict, (req, res) => {
   const { error, value } = jobStatusSchema.validate(req.body || {});
@@ -141,6 +188,7 @@ app.post('/api/admin/rate', strict, (req, res) => {
   const { error, value } = adminRateSchema.validate(req.body || {});
   if (error) return res.status(400).json({ ok: false, error: 'Invalid rate.' });
   const db = load(); db.rate = value.slePerUsd; save(db);
+  svcCache.ts = 0; /* force catalog refresh with new rate */
   res.json({ ok: true, slePerUsd: value.slePerUsd });
 });
 app.post('/api/admin/job', strict, (req, res) => {
@@ -155,7 +203,7 @@ app.post('/api/admin/job', strict, (req, res) => {
   res.json({ ok: true, job });
 });
 
-/* 08b • ADMIN: LIST ALL JOBS (for one-click fulfilment dashboard) */
+/* 08b • ADMIN: LIST ALL JOBS */
 app.get('/api/admin/jobs', strict, (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   res.json({ ok: true, jobs: load().jobs });
@@ -174,8 +222,7 @@ app.post('/api/webhook/binance', express.raw({ type: '*/*' }), (req, res) => {
   res.json({ ok: true, received: true });
 });
 
-/* 10 • GSM HUB ADAPTER — confirmed winning format:
-   POST /api/dhru • form-encoded • username + apiaccesskey + action */
+/* 10 • GSM HUB ADAPTER — confirmed winning format */
 const FU = {
   base: (process.env.UNLOCK_API_URL || '').replace(/\/+$/, ''),
   key: process.env.UNLOCK_API_KEY || '',
@@ -213,22 +260,27 @@ app.get('/api/upstream-test', strict, async (req, res) => {
   res.json({ ok, http: r.http, sample: r.json || r.text });
 });
 
-/* 12 • /api/services — FLATTENED live catalog + customer prices (cached 10 min)
-   GSM Hub returns SUCCESS:[{MESSAGE, LIST:{group:{SERVICES:{id:{...}}}}}].
-   We flatten to: [{id, name, group, costUsd, priceUsd, priceSle, time, info}]
-   priceUsd = costUsd x UNLOCK_MARGIN (default 1.8) — YOUR profit on every order. */
+/* 12 • /api/services — PUBLIC catalog (cost HIDDEN from customers)
+   Price formula v3.11:
+     priceUsd = wholesale_cost + UNLOCK_FLAT_FEE (default 2)
+     priceSle = priceUsd  × live rate (default 26)
+   Examples with flat fee = $2 and rate = 26:
+     cost $0.10  → customer $2.10 → Le 55
+     cost $10.00 → customer $12.00 → Le 312
+     cost $60.00 → customer $62.00 → Le 1612
+   Cached 10 minutes. Customers see ONLY selling price in USD + Leone. */
 let svcCache = { ts: 0, data: null };
-app.get('/api/services', async (req, res) => {
-  if (!fuReady()) return res.json({ ok: false, mode: 'manual', services: [] });
-  if (svcCache.data && Date.now() - svcCache.ts < 600000) {
-    return res.json({ ok: true, cached: true, count: svcCache.data.length, services: svcCache.data });
-  }
+async function fetchCatalog() {
+  if (svcCache.data && Date.now() - svcCache.ts < 600000) return svcCache.data;
   const r = await gsmCall('imeiservicelist');
   if (r.http === 200 && r.json && r.json.SUCCESS) {
     const raw = r.json.SUCCESS;
     const listObj = (Array.isArray(raw) && raw[0] && raw[0].LIST) ? raw[0].LIST : (raw && raw.LIST ? raw.LIST : {});
     const rate = load().rate;
-    const margin = parseFloat(process.env.UNLOCK_MARGIN || '1.8');
+    const flat = parseFloat(process.env.UNLOCK_FLAT_FEE || '2');
+    const splitStr = (process.env.UNLOCK_COMMISSION_SPLIT || '0.75,0.25').split(',');
+    const suShare = Math.max(0, Math.min(1, parseFloat(splitStr[0]) || 0.75));
+    const alShare = Math.max(0, Math.min(1, parseFloat(splitStr[1]) || 0.25));
     const services = [];
     Object.keys(listObj).forEach(gname => {
       const g = listObj[gname] || {};
@@ -236,13 +288,17 @@ app.get('/api/services', async (req, res) => {
       Object.keys(svcs).forEach(sid => {
         const s = svcs[sid] || {};
         const credit = parseFloat(s.CREDIT || '0');
-        const priceUsd = Math.round(credit * margin * 100) / 100;
+        const priceUsd = Math.round((credit + flat) * 100) / 100;
+        const profit = priceUsd - credit;
         services.push({
           id: String(s.SERVICEID || sid),
           name: String(s.SERVICENAME || '').trim(),
           group: String(gname),
           costUsd: credit,
           priceUsd: priceUsd,
+          profitUsd: Math.round(profit * 100) / 100,
+          sierraunlockShareUsd: Math.round(profit * suShare * 100) / 100,
+          alhassanShareUsd: Math.round(profit * alShare * 100) / 100,
           priceSle: Math.round(priceUsd * rate),
           time: String(s.TIME || ''),
           info: String(s.INFO || '')
@@ -251,9 +307,41 @@ app.get('/api/services', async (req, res) => {
     });
     services.sort((a, b) => a.group.localeCompare(b.group) || Number(a.id) - Number(b.id));
     svcCache = { ts: Date.now(), data: services };
-    return res.json({ ok: true, cached: false, count: services.length, services: services });
+    return services;
   }
-  res.status(502).json({ ok: false, error: 'Upstream services unreachable', detail: r.json || r.text });
+  return null;
+}
+app.get('/api/services', async (req, res) => {
+  if (!fuReady()) return res.json({ ok: false, mode: 'manual', services: [] });
+  const services = await fetchCatalog();
+  if (!services) return res.status(502).json({ ok: false, error: 'Upstream services unreachable' });
+  /* PUBLIC view: cost + commission hidden — business secrets */
+  const pub = services.map(s => ({
+    id: s.id, name: s.name, group: s.group,
+    priceUsd: s.priceUsd, priceSle: s.priceSle,
+    time: s.time, info: s.info
+  }));
+  res.json({ ok: true, cached: (Date.now() - svcCache.ts) < 600000, count: pub.length, services: pub });
+});
+
+/* 12b • /api/admin/services — FOUNDERS ONLY (cost + commission visible) */
+app.get('/api/admin/services', strict, async (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  if (!fuReady()) return res.json({ ok: false, mode: 'manual', services: [] });
+  const services = await fetchCatalog();
+  if (!services) return res.status(502).json({ ok: false, error: 'Upstream services unreachable' });
+  const splitStr = (process.env.UNLOCK_COMMISSION_SPLIT || '0.75,0.25').split(',');
+  res.json({
+    ok: true,
+    count: services.length,
+    policy: {
+      flatFeeUsd: parseFloat(process.env.UNLOCK_FLAT_FEE || '2'),
+      sierraunlockShare: parseFloat(splitStr[0]) || 0.75,
+      alhassanShare: parseFloat(splitStr[1]) || 0.25,
+      rateSlePerUsd: load().rate
+    },
+    services: services
+  });
 });
 
 /* 13 • /api/order — REAL upstream order (admin token = payment confirmed FIRST) */
@@ -303,4 +391,9 @@ app.use((err, req, res, next) => {
   console.error('[ERR]', err.message);
   res.status(err.status || 500).json({ ok: false, error: 'Server error.' });
 });
-app.listen(PORT, () => console.log('SIERRAUNLOCK API v3.9 online on :' + PORT + ' — mode: ' + (fuReady() ? 'CONNECTED TO FASTUNLOCKERS (GSM HUB v3)' : 'MANUAL')));
+app.listen(PORT, () => {
+  const mode = fuReady() ? 'CONNECTED TO FASTUNLOCKERS (GSM HUB v3)' : 'MANUAL';
+  console.log(`SIERRAUNLOCK API v3.11 online on :${PORT} — mode: ${mode}`);
+  console.log(`  Policy: cost + $${process.env.UNLOCK_FLAT_FEE || '2'} flat • rate 1 USD = ${load().rate} SLE • split ${(process.env.UNLOCK_COMMISSION_SPLIT || '0.75,0.25')}`);
+  console.log(`  Authorized origins: ${ALLOWED.join(', ')}`);
+});
