@@ -1,61 +1,31 @@
 /* =====================================================================
-   SIERRAUNLOCK • BACKEND API — server.js (v3.12 • TRACK ENDPOINT ADDED)
+   SIERRAUNLOCK • BACKEND API — server.js (v3.13 • PAYMENT AUTOMATION)
    ---------------------------------------------------------------------
    WHAT IS THIS FILE?
-   The Node.js/Express "server brain" on Render. It is the secure bridge
-   between sierraunlock.com + sierraunlock.live (both now authorized) and
-   the FastUnlockers upstream server (GSM Hub v3.00, user: Alhassan301).
+   The Node.js/Express "server brain" on Render. v3.13 adds:
+   • Payment automation: founder marks paid → auto-fulfil upstream
+   • Binance webhook: auto-detect payment + auto-fulfil (30-sec processing)
+   • Refund lock: once paid, customer cannot reverse (crypto/OM/cash final)
+   • Payment status tracking: unpaid → paid → refunded (visible on track.html)
 
-   v3.12 CHANGES (Pack 3 addition):
-   • NEW public /api/track/:id endpoint — customers can fetch their own
-     job status live. Returns sanitized data: job ID, service name,
-     masked IMEI, status, and (when solved) the unlock code/message.
-     NO wholesale cost, NO admin data, NO raw upstream JSON exposed.
-     Feeds the track.html page which auto-refreshes every 10 seconds.
+   v3.13 CHANGES (Pack 4):
+   • NEW job fields: payment_status, payment_method, paid_at, refunded_at
+   • NEW /api/admin/pay — marks job paid + auto-fulfils upstream
+   • NEW /api/admin/refund — marks job refunded (founder-only, requires reason)
+   • IMPROVED /api/webhook/binance — now triggers auto-pay + auto-fulfil
+   • Job timeline: queued → paid → sent-to-server → processing → solved
 
-   v3.11 FEATURES (still active):
-   • PRICING ENGINE = cost + flat $2 (NOT a multiplier anymore)
-       wholesale $0.10  → customer $2.10  → profit $2.00
-       wholesale $10.00 → customer $12.00 → profit $2.00
-       wholesale $60.00 → customer $62.00 → profit $2.00
-     (matches founder rule: "company gives 10 → we sell 12")
-   • EXCHANGE RATE = 1 USD = 26 Leones (default). Founder updates
-     anytime via /api/admin/rate if rate rises or falls; all services
-     auto-recalculate within 10 minutes (cache refresh).
-   • COMMISSION SPLIT = SIERRAUNLOCK 75% + Alhassan 25% of the $2 margin
-     (founder view only). Example on a $2 margin:
-       SIERRAUNLOCK keeps $1.50 (ops, platform, support)
-       Alhassan earns $0.50 (commission per business)
-     Configurable via UNLOCK_COMMISSION_SPLIT env (e.g. "0.75,0.25").
-   • DUAL DOMAIN CORS = both sierraunlock.com AND sierraunlock.live
-     (plus their www variants) are authorized origins.
-   • COST PRIVACY = /api/services (public) NEVER exposes wholesale cost;
-     only /api/admin/services (founder-only) shows cost + commission.
+   v3.12 FEATURES (still active):
+   • /api/track/:id — public customer tracking
+   • Flat +$2 margin, 26 SLE rate, dual-domain CORS, commission split
 
-   SECTION MAP:
-   01 Env + deps            08 Admin endpoints        13 Upstream order
-   02 Storage helpers       08b Admin jobs list       13b Order status
-   03 Security + CORS       09 Binance webhook stub   13c NEW: public /api/track/:id
-   04 Auth helpers          10 GSM Hub adapter        14 404 + boot
-   05 Joi schemas           11 upstream-test (founders)
-   06 Public endpoints      12 Services (PUBLIC, cost hidden)
-   06b my-ip (founders)     12b Services (ADMIN, cost + commission)
-   07 Customer endpoints
-
-   ENV VARIABLES (Render — never in frontend / never in Git):
-   PORT, FRONTEND_URL (comma-separated allowed origins), ADMIN_TOKEN,
-   UNLOCK_API_URL, UNLOCK_API_KEY, UNLOCK_API_USERNAME (=Alhassan301),
-   optional:
-     UNLOCK_FLAT_FEE           (default 2       — USD added to every cost)
-     UNLOCK_COMMISSION_SPLIT   (default 0.75,0.25 — SIERRAUNLOCK, Alhassan)
-     BINANCE_WEBHOOK_SECRET
-
-   MONEY FLOW (no payment processing here — see founder policy):
-     customer pays SIERRAUNLOCK desk first (OM / Binance / cash)
-     → founder confirms → /api/order spends wholesale from Alhassan's
-       FastUnlockers balance
-     → $2 margin splits automatically: 75% SIERRAUNLOCK, 25% Alhassan
-     → code/result delivered to customer (via track.html or WhatsApp)
+   MONEY FLOW:
+   1. Customer orders → job created with payment_status = 'unpaid'
+   2. Customer pays via OM/Binance/cash (manual) OR Binance webhook auto-detects
+   3. Founder marks paid (or webhook auto-marks) → system auto-fulfils upstream
+   4. FastUnlockers deducts from Alhassan's balance → delivers code
+   5. Customer sees code on track.html automatically
+   6. Refunds: founder-only via /api/admin/refund (fraud review required)
 
    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
    ===================================================================== */
@@ -83,15 +53,11 @@ const load = () => { try { return JSON.parse(fs.readFileSync(DATA, 'utf8')); } c
 const save = (d) => { d.jobs = (d.jobs || []).slice(0, 500); fs.writeFileSync(DATA, JSON.stringify(d, null, 2)); };
 if (!fs.existsSync(DATA)) save({ jobs: [], rate: DEFAULT_RATE });
 else {
-  /* ensure default rate is 26 if a legacy file has 22.5 */
   const db = load();
   if (!db.rate || db.rate < 20) { db.rate = DEFAULT_RATE; save(db); }
 }
 
-/* 03 • SECURITY + CORS (dual-domain authorized)
-   Reads FRONTEND_URL from env. If empty, allows the canonical list of
-   origins covering BOTH sierraunlock.com AND sierraunlock.live
-   (plus www variants and the Render preview domain). */
+/* 03 • SECURITY + CORS (dual-domain authorized) */
 app.use(helmet());
 const FALLBACK_ORIGINS = [
   'https://sierraunlock.com',
@@ -107,7 +73,7 @@ const ALLOWED = process.env.FRONTEND_URL
   : FALLBACK_ORIGINS;
 app.use(cors({
   origin: (origin, cb) => {
-    if (!origin) return cb(null, true);            /* curl / mobile apps / same-origin */
+    if (!origin) return cb(null, true);
     if (ALLOWED.some(o => origin === o || origin.startsWith(o))) return cb(null, true);
     cb(new Error('Not allowed by CORS'));
   },
@@ -143,11 +109,19 @@ const orderSchema = Joi.object({
   model: Joi.string().trim().max(60).optional(),
   customer: Joi.string().trim().max(60).optional()
 });
+const adminPaySchema = Joi.object({
+  id: Joi.string().trim().min(3).max(40).required(),
+  method: Joi.string().valid('orange_money', 'binance', 'cash').required()
+});
+const adminRefundSchema = Joi.object({
+  id: Joi.string().trim().min(3).max(40).required(),
+  reason: Joi.string().trim().min(5).max(500).required()
+});
 
 /* 06 • PUBLIC ENDPOINTS */
-app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.12.0', docs: '/api/health' }));
+app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.13.0', docs: '/api/health' }));
 app.get('/api/health', (req, res) => res.json({
-  ok: true, service: 'SIERRAUNLOCK API', version: '3.12.0',
+  ok: true, service: 'SIERRAUNLOCK API', version: '3.13.0',
   mode: fuReady() ? 'connected-to-fastunlockers' : 'manual-mode',
   rate: load().rate,
   time: new Date().toISOString()
@@ -174,10 +148,16 @@ app.post('/api/unlock', strict, async (req, res) => {
   const job = {
     id: 'SU-' + Date.now(), imei: value.imei, brand: value.brand, model: value.model,
     phone: value.phone, serviceId: value.serviceId || '', serviceName: value.serviceName || '',
-    status: 'queued', created: new Date().toISOString()
+    status: 'queued',
+    payment_status: 'unpaid',
+    payment_method: null,
+    paid_at: null,
+    refunded_at: null,
+    refund_reason: null,
+    created: new Date().toISOString()
   };
   db.jobs.unshift(job); save(db);
-  res.json({ ok: true, job: job.id, status: job.status, note: 'Quote received. Pay via Orange Money / Binance / cash, then we fulfil automatically.' });
+  res.json({ ok: true, job: job.id, status: job.status, note: 'Order received. Please complete payment to start processing.' });
 });
 app.post('/api/job-status', strict, (req, res) => {
   const { error, value } = jobStatusSchema.validate(req.body || {});
@@ -193,7 +173,7 @@ app.post('/api/admin/rate', strict, (req, res) => {
   const { error, value } = adminRateSchema.validate(req.body || {});
   if (error) return res.status(400).json({ ok: false, error: 'Invalid rate.' });
   const db = load(); db.rate = value.slePerUsd; save(db);
-  svcCache.ts = 0; /* force catalog refresh with new rate */
+  svcCache.ts = 0;
   res.json({ ok: true, slePerUsd: value.slePerUsd });
 });
 app.post('/api/admin/job', strict, (req, res) => {
@@ -214,8 +194,95 @@ app.get('/api/admin/jobs', strict, (req, res) => {
   res.json({ ok: true, jobs: load().jobs });
 });
 
-/* 09 • BINANCE WEBHOOK STUB */
-app.post('/api/webhook/binance', express.raw({ type: '*/*' }), (req, res) => {
+/* 08c • ADMIN: MARK PAID + AUTO-FULFIL (v3.13)
+   When founder confirms payment, system auto-places upstream order.
+   Refund lock: once paid, customer cannot reverse (crypto/OM/cash final). */
+app.post('/api/admin/pay', strict, async (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  const { error, value } = adminPaySchema.validate(req.body || {});
+  if (error) return res.status(400).json({ ok: false, error: error.details[0].message });
+  
+  const db = load();
+  const job = db.jobs.find(j => j.id === value.id);
+  if (!job) return res.status(404).json({ ok: false, error: 'Job not found.' });
+  
+  /* Refund lock: cannot re-pay already paid jobs */
+  if (job.payment_status === 'paid') {
+    return res.status(400).json({ ok: false, error: 'Job already paid. Use /api/admin/refund to reverse.' });
+  }
+  
+  /* Mark paid */
+  job.payment_status = 'paid';
+  job.payment_method = value.method;
+  job.paid_at = new Date().toISOString();
+  job.status = 'sent-to-server';
+  
+  /* Auto-fulfil: place upstream order */
+  if (!fuReady()) {
+    save(db);
+    return res.json({ ok: true, job: job.id, warning: 'Payment marked but upstream not configured. Manual fulfilment required.' });
+  }
+  
+  const r = await gsmCall('placeimeiorder', {
+    service: String(job.serviceId || job.service),
+    imei: job.imei,
+    brand: job.brand || '',
+    model: job.model || '',
+    customer: job.id
+  });
+  
+  const successBlock = r.json && r.json.SUCCESS;
+  const success = r.http === 200 && successBlock;
+  const upstreamOrderId = success ? (successBlock.orderid || successBlock.order_id || successBlock.reference || null) : null;
+  
+  if (success) {
+    job.upstream = r.json;
+    job.upstreamOrderId = upstreamOrderId;
+  } else {
+    job.status = 'failed';
+    job.upstream = r.json || r.text;
+  }
+  
+  save(db);
+  res.json({
+    ok: success,
+    job: job.id,
+    payment_status: job.payment_status,
+    upstreamOrderId,
+    upstream: r.json || r.text
+  });
+});
+
+/* 08d • ADMIN: REFUND (v3.13)
+   Founder-only refund after fraud review. Requires reason.
+   Refund lock: only paid jobs can be refunded. */
+app.post('/api/admin/refund', strict, (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  const { error, value } = adminRefundSchema.validate(req.body || {});
+  if (error) return res.status(400).json({ ok: false, error: error.details[0].message });
+  
+  const db = load();
+  const job = db.jobs.find(j => j.id === value.id);
+  if (!job) return res.status(404).json({ ok: false, error: 'Job not found.' });
+  
+  /* Refund lock: only paid jobs can be refunded */
+  if (job.payment_status !== 'paid') {
+    return res.status(400).json({ ok: false, error: 'Only paid jobs can be refunded.' });
+  }
+  
+  job.payment_status = 'refunded';
+  job.refunded_at = new Date().toISOString();
+  job.refund_reason = value.reason;
+  job.status = 'failed';
+  
+  save(db);
+  res.json({ ok: true, job: job.id, payment_status: job.payment_status, refund_reason: job.refund_reason });
+});
+
+/* 09 • BINANCE WEBHOOK (v3.13 — AUTO-PAY + AUTO-FULFIL)
+   When Binance Pay payment is confirmed, auto-mark paid + auto-fulfil.
+   Customer must include job ID in payment note (e.g. "SU-1234567890"). */
+app.post('/api/webhook/binance', express.raw({ type: '*/*' }), async (req, res) => {
   const secret = process.env.BINANCE_WEBHOOK_SECRET;
   if (secret) {
     const sig = req.get('x-binance-signature') || '';
@@ -224,7 +291,61 @@ app.post('/api/webhook/binance', express.raw({ type: '*/*' }), (req, res) => {
     try { ok = sig.length === hmac.length && crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(hmac)); } catch (e) { ok = false; }
     if (!ok) return res.status(401).json({ ok: false, error: 'Bad signature.' });
   }
-  res.json({ ok: true, received: true });
+  
+  /* Parse Binance payload */
+  let payload = null;
+  try { payload = JSON.parse(req.body.toString()); } catch (e) {}
+  if (!payload) return res.status(400).json({ ok: false, error: 'Invalid payload.' });
+  
+  /* Extract job ID from payment note (customer included it) */
+  const note = payload.note || payload.remark || '';
+  const jobIdMatch = note.match(/SU-\d+/);
+  if (!jobIdMatch) {
+    return res.json({ ok: true, received: true, warning: 'No job ID in payment note. Manual processing required.' });
+  }
+  
+  const jobId = jobIdMatch[0];
+  const db = load();
+  const job = db.jobs.find(j => j.id === jobId);
+  if (!job) {
+    return res.json({ ok: true, received: true, warning: 'Job ID not found. Manual processing required.' });
+  }
+  
+  /* Refund lock: cannot re-pay already paid jobs */
+  if (job.payment_status === 'paid') {
+    return res.json({ ok: true, received: true, warning: 'Job already paid.' });
+  }
+  
+  /* Auto-mark paid + auto-fulfil */
+  job.payment_status = 'paid';
+  job.payment_method = 'binance';
+  job.paid_at = new Date().toISOString();
+  job.status = 'sent-to-server';
+  
+  if (fuReady()) {
+    const r = await gsmCall('placeimeiorder', {
+      service: String(job.serviceId || job.service),
+      imei: job.imei,
+      brand: job.brand || '',
+      model: job.model || '',
+      customer: job.id
+    });
+    
+    const successBlock = r.json && r.json.SUCCESS;
+    const success = r.http === 200 && successBlock;
+    const upstreamOrderId = success ? (successBlock.orderid || successBlock.order_id || successBlock.reference || null) : null;
+    
+    if (success) {
+      job.upstream = r.json;
+      job.upstreamOrderId = upstreamOrderId;
+    } else {
+      job.status = 'failed';
+      job.upstream = r.json || r.text;
+    }
+  }
+  
+  save(db);
+  res.json({ ok: true, received: true, job: jobId, auto_fulfilled: true });
 });
 
 /* 10 • GSM HUB ADAPTER — confirmed winning format */
@@ -265,15 +386,7 @@ app.get('/api/upstream-test', strict, async (req, res) => {
   res.json({ ok, http: r.http, sample: r.json || r.text });
 });
 
-/* 12 • /api/services — PUBLIC catalog (cost HIDDEN from customers)
-   Price formula v3.11:
-     priceUsd = wholesale_cost + UNLOCK_FLAT_FEE (default 2)
-     priceSle = priceUsd  × live rate (default 26)
-   Examples with flat fee = $2 and rate = 26:
-     cost $0.10  → customer $2.10 → Le 55
-     cost $10.00 → customer $12.00 → Le 312
-     cost $60.00 → customer $62.00 → Le 1612
-   Cached 10 minutes. Customers see ONLY selling price in USD + Leone. */
+/* 12 • /api/services — PUBLIC catalog (cost HIDDEN from customers) */
 let svcCache = { ts: 0, data: null };
 async function fetchCatalog() {
   if (svcCache.data && Date.now() - svcCache.ts < 600000) return svcCache.data;
@@ -320,7 +433,6 @@ app.get('/api/services', async (req, res) => {
   if (!fuReady()) return res.json({ ok: false, mode: 'manual', services: [] });
   const services = await fetchCatalog();
   if (!services) return res.status(502).json({ ok: false, error: 'Upstream services unreachable' });
-  /* PUBLIC view: cost + commission hidden — business secrets */
   const pub = services.map(s => ({
     id: s.id, name: s.name, group: s.group,
     priceUsd: s.priceUsd, priceSle: s.priceSle,
@@ -390,15 +502,7 @@ app.post('/api/order-status', strict, async (req, res) => {
   res.json({ ok: true, job });
 });
 
-/* 13c • /api/track/:id — PUBLIC customer tracking endpoint (NEW in v3.12)
-   Returns sanitized job data for the customer:
-     • job ID, service name, IMEI, created date, status
-     • when status = 'solved' → includes the unlock CODE (extracted from upstream)
-     • NO wholesale cost, NO admin data, NO raw upstream JSON exposed
-   Auto-parses FastUnlockers reply to extract:
-     SUCCESS.code / SUCCESS.unlock_code / SUCCESS.message / ERROR.message
-   Rate-limited (standard 60/min) — customers can check freely.
-   Feeds track.html which auto-refreshes every 10 seconds. */
+/* 13c • /api/track/:id — PUBLIC customer tracking endpoint */
 app.get('/api/track/:id', async (req, res) => {
   const id = String(req.params.id || '').trim();
   if (!id || id.length < 3 || id.length > 60) {
@@ -407,7 +511,6 @@ app.get('/api/track/:id', async (req, res) => {
   const job = load().jobs.find(j => j.id === id);
   if (!job) return res.status(404).json({ ok: false, error: 'Job not found.' });
 
-  /* Extract the customer-facing result from upstream JSON */
   let code = null, message = null, failed = false;
   if (job.upstream && typeof job.upstream === 'object') {
     const up = job.upstream;
@@ -427,7 +530,6 @@ app.get('/api/track/:id', async (req, res) => {
     }
   }
 
-  /* Mask IMEI for privacy: show only first 6 + last 3 digits */
   const maskedImei = job.imei
     ? job.imei.slice(0, 6) + '******' + job.imei.slice(-3)
     : '';
@@ -439,6 +541,7 @@ app.get('/api/track/:id', async (req, res) => {
       serviceName: job.serviceName || job.service || '—',
       imei: maskedImei,
       status: job.status,
+      payment_status: job.payment_status || 'unpaid',
       failed: failed,
       code: (job.status === 'solved' || code) ? (code || message) : null,
       message: message,
@@ -459,8 +562,9 @@ app.use((err, req, res, next) => {
 });
 app.listen(PORT, () => {
   const mode = fuReady() ? 'CONNECTED TO FASTUNLOCKERS (GSM HUB v3)' : 'MANUAL';
-  console.log(`SIERRAUNLOCK API v3.12 online on :${PORT} — mode: ${mode}`);
+  console.log(`SIERRAUNLOCK API v3.13 online on :${PORT} — mode: ${mode}`);
   console.log(`  Policy: cost + $${process.env.UNLOCK_FLAT_FEE || '2'} flat • rate 1 USD = ${load().rate} SLE • split ${(process.env.UNLOCK_COMMISSION_SPLIT || '0.75,0.25')}`);
   console.log(`  Authorized origins: ${ALLOWED.join(', ')}`);
-  console.log(`  Public tracking: /api/track/:id (feeds track.html)`);
+  console.log(`  Payment automation: /api/admin/pay (founder) + /api/webhook/binance (auto)`);
+  console.log(`  Refund lock: /api/admin/refund (founder-only, requires reason)`);
 });

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 =====================================================================
-SIERRAUNLOCK • LIVE UNLOCK SERVICES CATALOG — live-services.html (v2.2)
+SIERRAUNLOCK • LIVE UNLOCK SERVICES CATALOG — live-services.html (v2.3)
 ---------------------------------------------------------------------
 WHAT IS THIS FILE?
 A standalone customer-facing page that displays the REAL live catalog
@@ -18,23 +18,31 @@ Customers can:
         live-services.html#g=checks    (IMEI & info checkers)
         live-services.html#g=tools     (tool licenses: CM2, iAPro…)
   • Click "Order Now" → enter IMEI + WhatsApp → submit order
-  • Auto-receive a WhatsApp confirmation link to pay and finish
+  • After submission: see clear PAYMENT INSTRUCTIONS (Orange Money /
+    Binance / Cash) + track link + WhatsApp confirmation link
+
+v2.3 CHANGES (Pack 4):
+• Order success modal now shows full payment instructions:
+  🟠 Orange Money: +232 75 908 206 (Alhassan)
+  🟡 Binance Pay: ID 754378475 (include job ID in note for auto-detect)
+  💵 Cash: Visit Waterloo or Koidu hub
+• Track-your-order link included in success modal
+• WhatsApp confirm link for payment verification
 
 HOW IT WORKS:
 1. Page loads → fetches /api/services from the Render backend
 2. Backend calls FastUnlockers GSM Hub API (imeiservicelist action)
 3. Backend flattens the nested reply + applies the founder profit
-   formula (wholesale cost + flat margin; cost hidden from public)
+   formula (wholesale cost + $2 flat; cost hidden from public)
 4. This page renders cards with $ price + Le price + BUY button
 5. Customer clicks Order Now → modal opens → enters IMEI + phone
 6. Form submits to /api/unlock → job created with status "queued"
-7. WhatsApp link generated → customer taps → SIERRAUNLOCK desk
-   receives the order (+232 75 908 206)
-8. Founder opens admin-orders.html → confirms payment → one click
-   "Place Upstream" → FastUnlockers delivers the result
-9. Result/code returned to customer via WhatsApp / tracking page
+   and payment_status = "unpaid"
+7. Payment instructions shown → customer pays via OM/Binance/cash
+8. Founder opens admin-orders.html → confirms payment → auto-fulfil
+9. Result/code returned to customer via track.html + WhatsApp
 
-DEEP-LINK GROUP FILTER (NEW v2.2):
+DEEP-LINK GROUP FILTER:
 The Services mega-menu (main.js v9.4) links here with #g= hashes.
 On load, the page reads the hash and pre-selects the matching group
 in the filter dropdown so customers land exactly where they clicked.
@@ -88,7 +96,7 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
   button.order:hover{background:#179c31}
   .modal{position:fixed;inset:0;background:rgba(11,31,51,.6);display:none;align-items:center;justify-content:center;padding:16px;z-index:50}
   .modal.open{display:flex}
-  .box{background:#fff;border-radius:16px;max-width:460px;width:100%;padding:22px}
+  .box{background:#fff;border-radius:16px;max-width:520px;width:100%;padding:22px;max-height:90vh;overflow-y:auto}
   .box h2{font-size:18px;margin-bottom:6px}
   .box p{font-size:13px;color:#5b7186;margin-bottom:12px}
   .box label{font-size:12.5px;font-weight:700;display:block;margin:8px 0 4px}
@@ -96,8 +104,14 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
   .row{display:flex;gap:10px;margin-top:16px}
   .row button{flex:1;padding:12px;border-radius:10px;border:0;font-weight:700;cursor:pointer}
   .go{background:var(--green);color:#fff}.cancel{background:#e5edf3;color:var(--ink)}
-  .done{background:#e9f9ee;border:2px solid var(--green);border-radius:12px;padding:14px;margin-top:12px;font-size:14px;display:none}
-  .done a{color:var(--blue);font-weight:700}
+  .done{background:#e9f9ee;border:2px solid var(--green);border-radius:12px;padding:16px;margin-top:12px;font-size:14px;display:none;line-height:1.6}
+  .done a{color:var(--blue);font-weight:700;text-decoration:none}
+  .done a:hover{text-decoration:underline}
+  .pay-method{padding:12px;background:#f4f8fb;border-radius:10px;margin:6px 0;border-left:4px solid var(--blue)}
+  .pay-method b{color:var(--navy)}
+  .pay-method .detail{font-family:'Courier New',monospace;font-weight:700;color:var(--blue);font-size:14px}
+  .pay-note{background:#fff6d6;border:1px solid #ffb020;border-radius:8px;padding:10px;font-size:12.5px;margin-top:8px;color:#7a5c00}
+  .job-id-display{background:var(--navy);color:#fff;padding:10px 14px;border-radius:8px;font-family:'Courier New',monospace;font-weight:700;letter-spacing:1px;text-align:center;margin:10px 0;font-size:15px}
   footer{background:var(--navy);color:#cfe3f5;text-align:center;padding:18px;font-size:13px}
 </style>
 </head>
@@ -141,7 +155,7 @@ const WA='23275908206';
 let ALL=[],cur=null;
 const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-/* DEEP-LINK GROUP FILTER (v2.2) — reads #g=network / #g=frp / #g=checks / #g=tools
+/* DEEP-LINK GROUP FILTER — reads #g=network / #g=frp / #g=checks / #g=tools
    from the URL (sent by the Services mega-menu) and pre-selects the matching
    group once the catalog finishes loading. */
 (function(){
@@ -166,7 +180,6 @@ async function load(){
     document.getElementById('count').textContent=ALL.length+' live services';
     const gs=[...new Set(ALL.map(s=>s.group))].sort();
     document.getElementById('grp').innerHTML='<option value="">All groups</option>'+gs.map(g=>`<option>${esc(g)}</option>`).join('');
-    /* v2.2: honour the deep-link hash by pre-selecting the matching group */
     if(window.__groupFilter){
       const hit=gs.find(g=>{const gl=g.toLowerCase();return window.__groupFilter.some(k=>gl.includes(k));});
       if(hit)document.getElementById('grp').value=hit;
@@ -181,6 +194,7 @@ async function load(){
     }
   }
 }
+
 function render(){
   const q=document.getElementById('q').value.toLowerCase();
   const g=document.getElementById('grp').value;
@@ -194,12 +208,22 @@ function render(){
       <button class="order" onclick='openM(${JSON.stringify(s).split("'").join("&#39;")})'>Order Now</button>
     </div>`).join('')||'<p style="padding:20px">No match found.</p>';
 }
-function openM(s){cur=s;document.getElementById('mName').textContent=s.name;
+
+function openM(s){
+  cur=s;
+  document.getElementById('mName').textContent=s.name;
   document.getElementById('mMeta').textContent=`Group: ${s.group} • Price: $${s.priceUsd} (Le ${s.priceSle.toLocaleString()}) • Time: ${s.time||'—'}`;
-  document.getElementById('done').style.display='none';document.getElementById('modal').classList.add('open');}
-function closeM(){document.getElementById('modal').classList.remove('open');}
+  document.getElementById('done').style.display='none';
+  document.getElementById('modal').classList.add('open');
+}
+
+function closeM(){
+  document.getElementById('modal').classList.remove('open');
+}
+
 document.getElementById('q').addEventListener('input',render);
 document.getElementById('grp').addEventListener('change',render);
+
 document.getElementById('send').onclick=async()=>{
   const imei=document.getElementById('imei').value.trim();
   const phone=document.getElementById('phone').value.trim();
@@ -207,18 +231,57 @@ document.getElementById('send').onclick=async()=>{
   if(!/^\d{15}$/.test(imei)){alert('IMEI must be exactly 15 digits.');return;}
   if(phone.length<9){alert('Enter a valid WhatsApp number.');return;}
   const brand=(model.split(' ')[0]||'Phone');
-  const r=await fetch(API+'/api/unlock',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({imei,brand,model,phone,serviceId:cur.id,serviceName:cur.name})});
-  const j=await r.json();
-  if(j.ok){
-    const msg=encodeURIComponent(`SIERRAUNLOCK order ${j.job}: ${cur.name} (ID ${cur.id}) — IMEI ${imei}. I will pay via Orange Money / Binance.`);
-    const d=document.getElementById('done');
-    d.style.display='block';
-    d.innerHTML=`✅ Order <b>${esc(j.job)}</b> received!<br>`+
-      `📍 <a href="track.html?id=${encodeURIComponent(j.job)}" style="color:var(--blue);font-weight:700">Track your order live</a><br>`+
-      `💬 <a target="_blank" href="https://wa.me/${WA}?text=${msg}">Tap to confirm & pay on WhatsApp</a>`;
-  }else{alert('Order failed: '+(j.error||'try again'));}
+
+  const btn = document.getElementById('send');
+  btn.disabled = true;
+  btn.textContent = 'Submitting…';
+
+  try{
+    const r=await fetch(API+'/api/unlock',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({imei,brand,model,phone,serviceId:cur.id,serviceName:cur.name})});
+    const j=await r.json();
+    if(j.ok){
+      const jobId = j.job;
+      const msg=encodeURIComponent(`SIERRAUNLOCK order ${jobId}: ${cur.name} (ID ${cur.id}) — IMEI ${imei}. I have completed payment.`);
+      const d=document.getElementById('done');
+      d.style.display='block';
+      d.innerHTML=
+        `<b>✅ Order <span style="color:var(--green)">${esc(jobId)}</span> received!</b><br><br>`+
+
+        `<div class="job-id-display">📋 Your Job ID: ${esc(jobId)}</div>`+
+        `<div class="pay-note">⚠️ <b>Include this Job ID in your Binance payment note</b> for automatic processing.</div><br>`+
+
+        `<b>💳 PAYMENT INSTRUCTIONS:</b><br>`+
+        `<div class="pay-method">`+
+          `🟠 <b>Orange Money</b><br>`+
+          `<span class="detail">+232 75 908 206</span><br>`+
+          `<small>Name: Alhassan Mansaray</small>`+
+        `</div>`+
+        `<div class="pay-method">`+
+          `🟡 <b>Binance Pay</b> <small>(auto-detect)</small><br>`+
+          `<span class="detail">ID: 754378475</span><br>`+
+          `<small>Note: "${esc(jobId)}" — auto-fulfils in ~30 seconds</small>`+
+        `</div>`+
+        `<div class="pay-method">`+
+          `💵 <b>Cash</b><br>`+
+          `<small>Visit Waterloo hub (Tombo Park) or Koidu hub</small>`+
+        `</div><br>`+
+
+        `<div style="display:flex;flex-direction:column;gap:8px">`+
+          `📍 <a href="track.html?id=${encodeURIComponent(jobId)}" target="_blank">Track your order live →</a>`+
+          `💬 <a target="_blank" href="https://wa.me/${WA}?text=${msg}">Confirm payment on WhatsApp →</a>`+
+        `</div>`;
+    }else{
+      alert('Order failed: '+(j.error||'try again'));
+    }
+  }catch(e){
+    alert('Network error: '+(e.message||'try again'));
+  }finally{
+    btn.disabled = false;
+    btn.textContent = 'Submit Order';
+  }
 };
+
 load();
 </script>
 </body>

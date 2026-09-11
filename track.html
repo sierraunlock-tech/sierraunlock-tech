@@ -1,13 +1,18 @@
 <!DOCTYPE html>
 <!--
 =====================================================================
-SIERRAUNLOCK • CUSTOMER ORDER TRACKING — track.html (v1.0)
+SIERRAUNLOCK • CUSTOMER ORDER TRACKING — track.html (v1.1)
 ---------------------------------------------------------------------
 WHAT IS THIS FILE?
 A customer-facing page where the customer enters their SIERRAUNLOCK
 job ID (e.g. SU-1757xxxxxxxxx) and sees live, automatic updates
 about their order — including the unlock code the moment it is solved.
 NO HUMAN COPYING OF IMEI OR CODES ANYWHERE in the flow.
+
+v1.1 CHANGES (Pack 4):
+• Payment status tracking (unpaid / paid / refunded)
+• Color-coded payment banner showing payment state
+• Timeline includes payment confirmation step
 
 FLOW:
 1. Customer orders on live-services.html → receives job ID via modal
@@ -97,6 +102,10 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
   .fail-box h4{margin-bottom:8px}
   .refresh-notice{display:flex;align-items:center;gap:8px;justify-content:center;font-size:13px;color:#5b7186;margin-top:12px;padding:8px;background:#f4f8fb;border-radius:8px}
   .refresh-notice .dot{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse 1s infinite}
+  .payment-banner{padding:16px;border-radius:12px;margin-top:16px;font-weight:700;text-align:center}
+  .payment-unpaid{background:#fff6d6;color:#7a5c00;border:2px solid #ffb020}
+  .payment-paid{background:#d8f4dd;color:#0e5c23;border:2px solid var(--green)}
+  .payment-refunded{background:#fdecec;color:#7a1a1a;border:2px solid var(--err)}
   footer{background:var(--navy);color:#cfe3f5;text-align:center;padding:18px;font-size:13px}
   footer a{color:#7cc4ff;text-decoration:none}
   .track-again{text-align:center;margin-top:20px}
@@ -135,6 +144,8 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
         <div class="info-item"><div class="lbl">Placed</div><div class="val" id="jDate">—</div></div>
         <div class="info-item"><div class="lbl">Upstream Order</div><div class="val" id="jUpstream">—</div></div>
       </div>
+
+      <div id="paymentBanner" class="payment-banner" style="display:none"></div>
 
       <div class="timeline" id="timeline">
         <div class="step" data-step="queued">Order received</div>
@@ -181,6 +192,11 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 const STEP_ORDER = ['queued','paid','sent-to-server','processing','solved'];
+const PAYMENT_LABELS = {
+  'unpaid':'⏳ Awaiting Payment',
+  'paid':'✅ Payment Confirmed',
+  'refunded':'❌ Refunded'
+};
 const STATUS_LABELS = {
   'queued':'⏳ Queued',
   'paid':'💳 Payment Confirmed',
@@ -203,7 +219,6 @@ async function trackOrder(){
     currentJob = j.job;
     renderJob(j.job);
     startAutoRefresh(j.job);
-    /* update URL without reload so the link is shareable */
     const url = new URL(location.href);
     url.searchParams.set('id', id);
     history.replaceState({},'',url.toString());
@@ -224,6 +239,19 @@ function renderJob(job){
   $('jImei').textContent = job.imei || '—';
   $('jDate').textContent = job.created ? new Date(job.created).toLocaleString() : '—';
   $('jUpstream').textContent = job.upstreamOrderId || 'Not yet placed';
+
+  /* Payment status banner (NEW v1.1) */
+  const payStatus = job.payment_status || 'unpaid';
+  const payBanner = $('paymentBanner');
+  payBanner.style.display = 'block';
+  payBanner.className = 'payment-banner payment-' + payStatus;
+  if(payStatus === 'unpaid'){
+    payBanner.innerHTML = '⏳ Awaiting Payment — Please complete payment to start processing';
+  } else if(payStatus === 'paid'){
+    payBanner.innerHTML = '✅ Payment Confirmed — Processing started automatically';
+  } else if(payStatus === 'refunded'){
+    payBanner.innerHTML = '❌ Refunded — Contact support for details';
+  }
 
   const status = job.status || 'queued';
   const badge = $('statusBadge');
@@ -322,10 +350,8 @@ function resetTrack(){
   $('jobId').focus();
 }
 
-/* Enter key triggers track */
 $('jobId').addEventListener('keydown', e => { if(e.key==='Enter') trackOrder(); });
 
-/* Auto-track from URL ?id=SU-xxx */
 window.addEventListener('DOMContentLoaded', () => {
   const params = new URLSearchParams(location.search);
   const id = params.get('id');

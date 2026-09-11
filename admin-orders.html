@@ -1,4 +1,35 @@
 <!DOCTYPE html>
+<!--
+=====================================================================
+SIERRAUNLOCK • FOUNDER ORDER DESK — admin-orders.html (v2.0)
+---------------------------------------------------------------------
+WHAT IS THIS FILE?
+The founder-only control panel for managing customer orders. v2.0 adds:
+• Payment status tracking (unpaid / paid / refunded)
+• "Mark Paid" button — marks job paid + auto-fulfils upstream (no separate
+  "Place Upstream" click needed)
+• "Refund" button — founder-only refund after fraud review (requires reason)
+• Payment method selector (Orange Money / Binance / Cash)
+
+FLOW:
+1. Customer orders → job created with payment_status = 'unpaid'
+2. Founder sees job in admin desk → clicks "Mark Paid" → selects method
+3. System auto-places upstream order → status = 'sent-to-server'
+4. FastUnlockers delivers code → customer sees on track.html
+5. If fraud: founder clicks "Refund" → enters reason → status = 'refunded'
+
+SECURITY:
+• Admin token required (founder-only access)
+• Refund lock: once paid, customer cannot reverse (crypto/OM/cash final)
+• Only founders can refund via admin token + reason
+
+ACCESS:
+• Founders: direct URL + admin token (bookmark this page)
+• Customers: never see this page
+
+OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
+=====================================================================
+-->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -11,37 +42,82 @@
   h1{font-size:20px;margin-bottom:4px}
   p.sub{color:#8fb3cc;font-size:13px;margin-bottom:16px}
   .warn{background:#3a2b00;border:1px solid #ffb020;color:#ffd97a;border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:16px}
-  input,button{padding:11px 14px;border-radius:10px;border:1px solid #2b3d52;background:#16202e;color:#e6f0f8;font-size:14px}
+  input,button,select{padding:11px 14px;border-radius:10px;border:1px solid #2b3d52;background:#16202e;color:#e6f0f8;font-size:14px}
   button{cursor:pointer;font-weight:700;background:var(--green);border:0;color:#fff}
   button.sec{background:var(--blue)}
+  button.danger{background:#e74c3c}
   button.ghost{background:#22314a}
   table{width:100%;border-collapse:collapse;margin-top:16px;font-size:13px}
   th,td{border:1px solid #22314a;padding:8px;text-align:left;vertical-align:top}
   th{background:#16202e}
   .st{font-weight:700}.queued{color:#ffd97a}.sent-to-server,.processing{color:#7cc4ff}.solved{color:#7dff9b}.failed{color:#ff8f8f}
+  .pay{font-weight:700}.unpaid{color:#ffd97a}.paid{color:#7dff9b}.refunded{color:#ff8f8f}
   pre{background:#0a121c;border:1px solid #22314a;border-radius:8px;padding:8px;font-size:11px;max-width:420px;overflow:auto;white-space:pre-wrap}
+  .modal{position:fixed;inset:0;background:rgba(11,31,51,.8);display:none;align-items:center;justify-content:center;padding:16px;z-index:50}
+  .modal.open{display:flex}
+  .box{background:#16202e;border-radius:16px;max-width:460px;width:100%;padding:22px}
+  .box h2{font-size:18px;margin-bottom:6px}
+  .box p{font-size:13px;color:#8fb3cc;margin-bottom:12px}
+  .box label{font-size:12.5px;font-weight:700;display:block;margin:8px 0 4px}
+  .box input,.box select,.box textarea{width:100%;padding:11px;border:2px solid #2b3d52;border-radius:10px;font-size:15px;background:#0e1621;color:#e6f0f8}
+  .box textarea{min-height:80px;resize:vertical}
+  .row{display:flex;gap:10px;margin-top:16px}
+  .row button{flex:1;padding:12px;border-radius:10px;border:0;font-weight:700;cursor:pointer}
+  .go{background:var(--green);color:#fff}.cancel{background:#22314a;color:#e6f0f8}
 </style>
 </head>
 <body>
 <h1>SIERRAUNLOCK — Founder Order Desk</h1>
-<p class="sub">Confirm payment FIRST, then place the upstream order. Every click spends Alhassan's FastUnlockers balance.</p>
-<div class="warn">⚠ MONEY SAFETY: placing an order deducts the service cost from the upstream balance. Only place orders for customers who have PAID.</div>
+<p class="sub">Confirm payment → auto-fulfil upstream. Refunds require fraud review.</p>
+<div class="warn">⚠ MONEY SAFETY: Once marked paid, customer cannot reverse (crypto/OM/cash are final). Only founders can refund via admin token + reason.</div>
 
 <input type="password" id="token" placeholder="Admin token" size="40">
 <button onclick="connect()">Connect</button>
 <button class="sec" onclick="loadJobs()">Refresh Jobs</button>
 
 <table id="tbl" hidden>
-<thead><tr><th>Job</th><th>Created</th><th>Service</th><th>IMEI</th><th>Customer</th><th>Status</th><th>Actions</th><th>Upstream reply</th></tr></thead>
+<thead><tr><th>Job</th><th>Created</th><th>Service</th><th>IMEI</th><th>Customer</th><th>Payment</th><th>Status</th><th>Actions</th><th>Upstream reply</th></tr></thead>
 <tbody></tbody>
 </table>
 
+<div class="modal" id="payModal">
+  <div class="box">
+    <h2>Mark Payment Received</h2>
+    <p>Confirm customer has paid via selected method. System will auto-fulfil upstream.</p>
+    <label>Payment Method</label>
+    <select id="payMethod">
+      <option value="orange_money">Orange Money (+232 75 908 206)</option>
+      <option value="binance">Binance Pay (ID 754378475)</option>
+      <option value="cash">Cash (Waterloo / Koidu hub)</option>
+    </select>
+    <div class="row">
+      <button class="cancel" onclick="closePayModal()">Cancel</button>
+      <button class="go" onclick="confirmPay()">Mark Paid + Auto-Fulfil</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="refundModal">
+  <div class="box">
+    <h2>Issue Refund</h2>
+    <p>Refunds are final. Enter reason for fraud review records.</p>
+    <label>Reason for Refund</label>
+    <textarea id="refundReason" placeholder="e.g. Service failed, IMEI not supported, customer requested cancellation..."></textarea>
+    <div class="row">
+      <button class="cancel" onclick="closeRefundModal()">Cancel</button>
+      <button class="danger" onclick="confirmRefund()">Confirm Refund</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const API='https://sierraunlock-tech-1-4um3.onrender.com';
-let TOK='';
+let TOK='', currentJobId=null;
 const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
 function connect(){TOK=document.getElementById('token').value.trim();sessionStorage.setItem('su_tok',TOK);loadJobs();}
 window.addEventListener('load',()=>{const t=sessionStorage.getItem('su_tok');if(t){TOK=t;document.getElementById('token').value=t;loadJobs();}});
+
 async function loadJobs(){
   if(!TOK){alert('Enter admin token first.');return;}
   const r=await fetch(API+'/api/admin/jobs',{headers:{'x-admin-token':TOK}});
@@ -55,25 +131,54 @@ async function loadJobs(){
      <td>${esc(job.serviceName||job.service||'—')}<br><small>ID ${esc(job.serviceId||job.service||'—')}</small></td>
      <td>${esc(job.imei)}</td>
      <td>${esc(job.phone||job.customer||'—')}</td>
+     <td class="pay ${esc(job.payment_status||'unpaid')}">${esc((job.payment_status||'unpaid').toUpperCase())}</td>
      <td class="st ${esc(job.status)}">${esc(job.status)}</td>
      <td>
-       ${ (job.status==='queued'||job.status==='failed') && (job.serviceId||job.service) ? `<button onclick="place('${esc(job.id)}')">Place Upstream</button><br><br>`:'' }
-       ${ job.upstreamOrderId ? `<button class="sec" onclick="check('${esc(job.id)}')">Check Status</button>`:'' }
+       ${ (job.payment_status||'unpaid')==='unpaid' ? `<button onclick="openPayModal('${esc(job.id)}')">Mark Paid</button>`:'' }
+       ${ (job.payment_status||'unpaid')==='paid' ? `<button class="danger" onclick="openRefundModal('${esc(job.id)}')">Refund</button>`:'' }
+       ${ job.upstreamOrderId ? `<br><br><button class="sec" onclick="check('${esc(job.id)}')">Check Status</button>`:'' }
      </td>
      <td>${job.live?`<pre>${esc(JSON.stringify(job.live).slice(0,400))}</pre>`:(job.upstreamOrderId?`<small>order ${esc(job.upstreamOrderId)}</small>`:'—')}</td>
-   </tr>`).join('')||'<tr><td colspan="8">No jobs yet.</td></tr>';
+   </tr>`).join('')||'<tr><td colspan="9">No jobs yet.</td></tr>';
 }
-async function place(id){
-  if(!confirm('Customer PAID? This will spend upstream balance now.'))return;
-  const jobs=await (await fetch(API+'/api/admin/jobs',{headers:{'x-admin-token':TOK}})).json();
-  const job=(jobs.jobs||[]).find(x=>x.id===id);
-  if(!job)return alert('Job not found.');
-  const r=await fetch(API+'/api/order',{method:'POST',headers:{'Content-Type':'application/json','x-admin-token':TOK},
-    body:JSON.stringify({service:job.serviceId||job.service,imei:job.imei,brand:job.brand||'',model:job.model||'',customer:job.id})});
+
+function openPayModal(id){currentJobId=id;document.getElementById('payModal').classList.add('open');}
+function closePayModal(){document.getElementById('payModal').classList.remove('open');currentJobId=null;}
+
+async function confirmPay(){
+  if(!currentJobId)return;
+  const method=document.getElementById('payMethod').value;
+  const r=await fetch(API+'/api/admin/pay',{method:'POST',headers:{'Content-Type':'application/json','x-admin-token':TOK},
+    body:JSON.stringify({id:currentJobId,method:method})});
   const j=await r.json();
-  alert(j.ok?('✅ Placed! Upstream order: '+(j.upstreamOrderId||'see reply')):'❌ '+(j.upstream&&j.upstream.ERROR?JSON.stringify(j.upstream.ERROR):'failed'));
+  if(j.ok){
+    alert('✅ Payment marked + upstream order placed!\n\nOrder ID: '+(j.upstreamOrderId||'see reply'));
+  }else{
+    alert('❌ '+(j.error||'failed'));
+  }
+  closePayModal();
   loadJobs();
 }
+
+function openRefundModal(id){currentJobId=id;document.getElementById('refundModal').classList.add('open');}
+function closeRefundModal(){document.getElementById('refundModal').classList.remove('open');currentJobId=null;}
+
+async function confirmRefund(){
+  if(!currentJobId)return;
+  const reason=document.getElementById('refundReason').value.trim();
+  if(reason.length<5){alert('Please enter a reason (min 5 characters).');return;}
+  const r=await fetch(API+'/api/admin/refund',{method:'POST',headers:{'Content-Type':'application/json','x-admin-token':TOK},
+    body:JSON.stringify({id:currentJobId,reason:reason})});
+  const j=await r.json();
+  if(j.ok){
+    alert('✅ Refund issued.\n\nReason: '+j.refund_reason);
+  }else{
+    alert('❌ '+(j.error||'failed'));
+  }
+  closeRefundModal();
+  loadJobs();
+}
+
 async function check(id){
   const r=await fetch(API+'/api/order-status',{method:'POST',headers:{'Content-Type':'application/json','x-admin-token':TOK},body:JSON.stringify({id})});
   const j=await r.json();
