@@ -486,10 +486,31 @@ async function gsmCall(action, extraParams = {}) {
 }
 
 /* ACTION MAPS (v3.17 — extended probes for full coverage incl. Chimera) */
+/* v3.18: EXTENDED list probes — includes tool-specific actions so Chimera,
+   Octoplus, UMT, DC-Unlocker, Avengers, NCK, Infinity, Pandora, UnlockTool
+   all appear in the catalog. FastUnlockers uses both generic AND tool-specific
+   action names depending on the service type. */
 const LIST_ACTIONS = {
   imei: ['imeiservicelist'],
   file: ['fileservicelist', 'filelist', 'fileandservicelist', 'servicelistfile'],
-  server: ['serverservicelist', 'serverlist', 'creditservicelist', 'servicelistserver', 'serverandservicelist']
+  server: [
+    'serverservicelist', 'serverlist', 'creditservicelist',
+    'servicelistserver', 'serverandservicelist',
+    /* tool-specific probes — FastUnlockers returns each tool as its own group */
+    'chimeralist', 'chimera',
+    'octopluslist', 'octoplus',
+    'umtlist', 'umt', 'ultimatemultitool',
+    'dcunlockerlist', 'dcunlocker', 'dchculist',
+    'avengerslist', 'avengers',
+    'ncklist', 'nckbox',
+    'infinitylist', 'infinity', 'infinitybox',
+    'unlocktoollist', 'unlocktool', 'utlist',
+    'pandoralist', 'pandora',
+    'tsmlist', 'tsmtool',
+    'cheetahlist', 'cheetah',
+    'borneolist', 'borneo',
+    'gsmserverlist', 'gsmserver'
+  ]
 };
 const ORDER_ACTIONS = {
   imei: ['placeimeiorder'],
@@ -610,6 +631,35 @@ app.get('/api/admin/probe', strict, async (req, res) => {
 
 /* 12 • PUBLIC CATALOG (imei+file+server merged, cost hidden) */
 let svcCache = { ts: 0, data: null };
+
+/* v3.18: cache-buster + debug endpoint for founders */
+app.post('/api/admin/refresh-catalog', strict, (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  svcCache.ts = 0; /* invalidate cache — next call re-fetches from upstream */
+  res.json({ ok: true, note: 'Catalog cache cleared. Next /api/services call will re-fetch from FastUnlockers.' });
+});
+app.get('/api/admin/debug-catalog', strict, async (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  svcCache.ts = 0; /* force fresh */
+  const services = await fetchCatalog();
+  if (!services) return res.json({ ok: false, error: 'No services returned' });
+  /* group summary: how many services per group (find Chimera etc.) */
+  const groups = {};
+  const types = { imei: 0, file: 0, server: 0 };
+  services.forEach(s => {
+    groups[s.group] = (groups[s.group] || 0) + 1;
+    types[s.type] = (types[s.type] || 0) + 1;
+  });
+  res.json({
+    ok: true,
+    total: services.length,
+    byType: types,
+    byGroup: groups,
+    sampleChimera: services.filter(s => /chimera/i.test(s.name + ' ' + s.group)).slice(0, 3),
+    sampleOctoplus: services.filter(s => /octoplus/i.test(s.name + ' ' + s.group)).slice(0, 3),
+    sampleUMT: services.filter(s => /umt|ultimate/i.test(s.name + ' ' + s.group)).slice(0, 3)
+  });
+});
 async function fetchCatalog() {
   if (svcCache.data && Date.now() - svcCache.ts < 600000) return svcCache.data;
   const [imei, file, server] = await Promise.all([fetchList('imei'), fetchList('file'), fetchList('server')]);
@@ -745,7 +795,7 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ ok: false, error: 'Server error.' });
 });
 app.listen(PORT, () => {
-  console.log(`SIERRAUNLOCK API v3.17 online on :${PORT} — mode: ${fuReady() ? 'CONNECTED (IMEI+FILE+SERVER+CHIMERA UNION)' : 'MANUAL'}`);
+  console.log(`SIERRAUNLOCK API v3.18 online on :${PORT} — mode: ${fuReady() ? 'CONNECTED (IMEI+FILE+SERVER+CHIMERA UNION)' : 'MANUAL'}`);
   console.log(`  Policy: cost + $${process.env.UNLOCK_FLAT_FEE || '2'} • rate ${load().rate} SLE • split ${process.env.UNLOCK_COMMISSION_SPLIT || '0.75,0.25'}`);
   console.log(`  CDR webhook: /api/webhook/cdr ${process.env.CDR_REPLY_KEY ? '(key set)' : '(no key set)'}`);
   console.log(`  Wallet: /api/wallet/:phone + topup + pay (auto-refund on failure)`);
