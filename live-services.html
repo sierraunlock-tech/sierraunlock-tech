@@ -95,6 +95,11 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
     <input id="phone" inputmode="tel" placeholder="+232 75 …">
     <label>Brand / Model (optional)</label>
     <input id="model" placeholder="e.g. Apple iPhone 13">
+    <label>Payment method</label>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <label style="flex:1;min-width:150px;background:#f4f8fb;border:2px solid var(--blue);border-radius:10px;padding:10px;font-size:13px;cursor:pointer;text-align:center;font-weight:700"><input type="radio" name="paymethod" value="whatsapp" checked style="width:auto;margin-right:6px">WhatsApp / OM / Binance</label>
+      <label style="flex:1;min-width:150px;background:#f4f8fb;border:2px solid #d5e3ee;border-radius:10px;padding:10px;font-size:13px;cursor:pointer;text-align:center;font-weight:700"><input type="radio" name="paymethod" value="wallet" style="width:auto;margin-right:6px">💰 Pay from my balance</label>
+    </div>
     <div class="done" id="done"></div>
     <div class="row">
       <button class="cancel" onclick="closeM()">Cancel</button>
@@ -207,6 +212,23 @@ document.getElementById('send').onclick=async()=>{
   const btn=document.getElementById('send');
   btn.disabled=true; btn.textContent='Submitting…';
   try{
+    const payMethod=(document.querySelector('input[name="paymethod"]:checked')||{}).value||'whatsapp';
+    if(payMethod==='wallet'){
+      const rw=await fetch(API+'/api/wallet/pay',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({type,imei,details,brand,model,phone,serviceId:cur.id})});
+      const jw=await rw.json();
+      if(jw.ok){
+        const d=document.getElementById('done');
+        d.style.display='block';
+        d.innerHTML=`<b>✅ Paid from balance — order placed automatically!</b>`+
+          `<div class="job-id-display">📋 Job: ${esc(jw.job)}</div>`+
+          `💰 Remaining balance: <b>$${Number(jw.balance).toFixed(2)}</b><br>`+
+          `📍 <a href="track.html?id=${encodeURIComponent(jw.job)}" target="_blank">Track your order live →</a> · `+
+          `<a href="wallet.html?phone=${encodeURIComponent(phone)}">View wallet →</a>`;
+      }else{ alert(jw.error||'Wallet payment failed.'); }
+      btn.disabled=false; btn.textContent='Submit Order';
+      return;
+    }
     const r=await fetch(API+'/api/unlock',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({type,imei,details,brand,model,phone,serviceId:cur.id,serviceName:cur.name})});
     const j=await r.json();

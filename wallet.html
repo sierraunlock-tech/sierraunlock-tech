@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<!--
+=====================================================================
+SIERRAUNLOCK • CUSTOMER WALLET — wallet.html (v1.0)
+---------------------------------------------------------------------
+WHAT IS THIS FILE?
+A FastUnlockers-style balance dashboard for OUR customers:
+  • See Available Balance (USD + Leones)
+  • Add Fund via Orange Money or Binance Pay (founder approves)
+  • See every credit / debit after purchases (full history)
+  • Pending top-ups status
+Wallet key = customer's WhatsApp phone number (digits only).
+Backend: /api/wallet/:phone, /api/wallet/topup (server.js v3.15).
+SECURITY: balances live server-side only; top-ups need founder
+approval; pay-from-balance verifies price on the server.
+OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
+=====================================================================
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Wallet — SIERRAUNLOCK</title>
+<meta name="description" content="View your SIERRAUNLOCK balance, add funds via Orange Money or Binance, and see your spending history.">
+<style>
+  :root{--green:#1EB53A;--blue:#0072C6;--navy:#0b1f33;--ink:#12263a;--bg:#f4f8fb}
+  *{box-sizing:border-box;margin:0;padding:0;font-family:Segoe UI,Arial,sans-serif}
+  body{background:var(--bg);color:var(--ink);min-height:100vh;display:flex;flex-direction:column}
+  header{background:linear-gradient(120deg,var(--blue),var(--green));color:#fff;padding:18px 22px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap}
+  header h1{font-size:22px}
+  header a{color:#fff;text-decoration:none;font-weight:600;margin-left:14px}
+  main{flex:1;max-width:980px;width:100%;margin:0 auto;padding:24px 16px}
+  .hero{text-align:center;margin-bottom:20px}
+  .hero h2{font-size:26px;color:var(--navy)}
+  .hero p{color:#5b7186;font-size:14px;margin-top:6px}
+  .box{background:#fff;border-radius:16px;padding:20px;box-shadow:0 4px 20px rgba(18,38,58,.08);margin-bottom:18px}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  .row input,.row select{flex:1;min-width:160px;padding:12px;border:2px solid #d5e3ee;border-radius:10px;font-size:15px}
+  .row button{background:var(--blue);color:#fff;border:0;padding:12px 24px;border-radius:10px;font-weight:700;cursor:pointer}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:18px}
+  .stat{background:#fff;border-radius:14px;padding:18px;box-shadow:0 4px 20px rgba(18,38,58,.08);text-align:center}
+  .stat .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:#5b7186;font-weight:700}
+  .stat .val{font-size:26px;font-weight:800;color:var(--navy);margin-top:6px}
+  .stat .sub{font-size:12px;color:var(--blue);font-weight:700;margin-top:4px}
+  .stat.green .val{color:var(--green)}
+  h3{font-size:16px;color:var(--navy);margin-bottom:12px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{border:1px solid #e1ecf4;padding:8px;text-align:left}
+  th{background:#f4f8fb}
+  .credit{color:var(--green);font-weight:700}
+  .debit{color:#e74c3c;font-weight:700}
+  .notice{background:#e9f9ee;border:2px solid var(--green);border-radius:12px;padding:14px;margin-top:12px;font-size:14px;display:none;line-height:1.6}
+  .notice b{color:var(--navy)}
+  label{font-size:12.5px;font-weight:700;display:block;margin:8px 0 4px}
+  footer{background:var(--navy);color:#cfe3f5;text-align:center;padding:18px;font-size:13px}
+  footer a{color:#7cc4ff}
+  @media(max-width:600px){.stat .val{font-size:20px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>SIERRAUNLOCK — My Wallet</h1>
+  <nav><a href="index.html">Home</a><a href="live-services.html">Live Catalog</a></nav>
+</header>
+
+<main>
+  <div class="hero">
+    <h2>💰 My Balance & Top-Ups</h2>
+    <p>Enter the WhatsApp number you use for orders to see your balance, add funds, and review spending.</p>
+  </div>
+
+  <div class="box">
+    <div class="row">
+      <input id="phone" inputmode="tel" placeholder="+232 75 … (your order phone number)">
+      <button onclick="viewBalance()">View My Balance</button>
+    </div>
+  </div>
+
+  <div id="dash" style="display:none">
+    <div class="stats">
+      <div class="stat green"><div class="lbl">Available Balance</div><div class="val" id="sBal">$0.00</div><div class="sub" id="sBalSle">Le 0</div></div>
+      <div class="stat"><div class="lbl">Total Added</div><div class="val" id="sAdded">$0.00</div></div>
+      <div class="stat"><div class="lbl">Total Spent</div><div class="val" id="sSpent">$0.00</div></div>
+      <div class="stat"><div class="lbl">Pending Top-Ups</div><div class="val" id="sPend">0</div></div>
+    </div>
+
+    <div class="box">
+      <h3>➕ Add Fund to My Wallet</h3>
+      <label>Amount (USD)</label>
+      <input id="amt" type="number" min="1" step="0.01" placeholder="e.g. 10">
+      <label>Payment method</label>
+      <select id="method">
+        <option value="orange_money">🟠 Orange Money</option>
+        <option value="binance">🟡 Binance Pay</option>
+      </select>
+      <label>Payment reference (optional — Orange Money / Binance transaction ID)</label>
+      <input id="ref" placeholder="e.g. OM txn ID or Binance order ID">
+      <div class="row" style="margin-top:12px">
+        <button onclick="addFund()">Create Top-Up Request</button>
+      </div>
+      <div class="notice" id="topNotice"></div>
+    </div>
+
+    <div class="box">
+      <h3>🕓 Pending Top-Ups</h3>
+      <table><thead><tr><th>ID</th><th>Amount</th><th>Method</th><th>Status</th></tr></thead>
+      <tbody id="pendBody"></tbody></table>
+    </div>
+
+    <div class="box">
+      <h3>📜 Transaction History</h3>
+      <table><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
+      <tbody id="txBody"></tbody></table>
+    </div>
+  </div>
+</main>
+
+<footer>
+  IT CAN ONLY BE GOD ✦ LEARN BEFORE YOU EARN —
+  <a href="https://sierraunlock.com">sierraunlock.com</a> •
+  <a href="live-services.html">Live Catalog</a> •
+  <a href="track.html">Track Order</a>
+</footer>
+
+<script>
+const API='https://sierraunlock-tech-1-4um3.onrender.com';
+let PHONE=null, RATE=26, timer=null;
+const $=id=>document.getElementById(id);
+const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+fetch(API+'/api/rates').then(r=>r.json()).then(j=>{ if(j&&j.slePerUsd) RATE=j.slePerUsd; }).catch(()=>{});
+
+async function viewBalance(){
+  const digits=($('phone').value||'').replace(/\D/g,'');
+  if(digits.length<9){ alert('Enter your full WhatsApp number.'); return; }
+  PHONE=digits;
+  const url=new URL(location.href); url.searchParams.set('phone',digits); history.replaceState({},'',url.toString());
+  await refresh();
+  $('dash').style.display='block';
+  if(!timer) timer=setInterval(refresh,15000);
+}
+
+async function refresh(){
+  if(!PHONE) return;
+  try{
+    const r=await fetch(API+'/api/wallet/'+PHONE);
+    const j=await r.json();
+    if(!j.ok) return;
+    const bal=Number(j.balance||0);
+    $('sBal').textContent='$'+bal.toFixed(2);
+    $('sBalSle').textContent='Le '+Math.round(bal*RATE).toLocaleString();
+    let added=0, spent=0;
+    (j.tx||[]).forEach(t=>{ if(t.type==='credit') added+=Number(t.amount||0); else spent+=Number(t.amount||0); });
+    $('sAdded').textContent='$'+added.toFixed(2);
+    $('sSpent').textContent='$'+spent.toFixed(2);
+    $('sPend').textContent=(j.pending||[]).length;
+    $('pendBody').innerHTML=(j.pending||[]).map(t=>
+      `<tr><td>${esc(t.id)}</td><td>$${Number(t.amount).toFixed(2)}</td><td>${esc(t.method)}</td><td>⏳ awaiting approval</td></tr>`
+    ).join('')||'<tr><td colspan="4">No pending top-ups.</td></tr>';
+    $('txBody').innerHTML=(j.tx||[]).map(t=>
+      `<tr><td>${esc((t.date||'').slice(0,16).replace('T',' '))}</td>`+
+      `<td class="${t.type==='credit'?'credit':'debit'}">${t.type==='credit'?'➕ Added':'➖ Spent'}</td>`+
+      `<td class="${t.type==='credit'?'credit':'debit'}">$${Number(t.amount).toFixed(2)}</td>`+
+      `<td>${esc(t.ref||'—')}</td></tr>`
+    ).join('')||'<tr><td colspan="4">No transactions yet.</td></tr>';
+  }catch(e){}
+}
+
+async function addFund(){
+  if(!PHONE){ alert('View your balance first.'); return; }
+  const amount=parseFloat($('amt').value);
+  if(!amount||amount<=0){ alert('Enter a valid amount.'); return; }
+  const method=$('method').value;
+  const ref=$('ref').value.trim();
+  const r=await fetch(API+'/api/wallet/topup',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({phone:PHONE,amount,method,ref})});
+  const j=await r.json();
+  if(j.ok){
+    const n=$('topNotice');
+    n.style.display='block';
+    n.innerHTML=`✅ Top-Up <b>${esc(j.topup)}</b> created for <b>$${amount.toFixed(2)}</b>.<br>`+
+      `💳 Send the money now to: <b>${esc(j.pay_to)}</b><br>`+
+      `📝 Include reference: <b>${esc(j.topup)}</b> in your payment note.<br>`+
+      `⏳ Your balance updates automatically once a founder approves (usually within minutes).`;
+    $('amt').value=''; $('ref').value='';
+    refresh();
+  }else{ alert(j.error||'Top-up failed.'); }
+}
+
+window.addEventListener('DOMContentLoaded',()=>{
+  const p=new URLSearchParams(location.search).get('phone');
+  if(p){ $('phone').value=p; setTimeout(viewBalance,300); }
+});
+</script>
+</body>
+</html>

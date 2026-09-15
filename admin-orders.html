@@ -75,6 +75,14 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
 <button onclick="connect()">Connect</button>
 <button class="sec" onclick="loadJobs()">Refresh Jobs</button>
 
+<div id="walletSection" style="margin-top:18px" hidden>
+  <h2 style="font-size:16px;margin-bottom:8px">💰 Wallet Top-Up Approvals (confirm money received FIRST)</h2>
+  <table id="wtbl">
+    <thead><tr><th>Top-Up ID</th><th>Phone</th><th>Amount</th><th>Method</th><th>Ref</th><th>Status</th><th>Actions</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
 <table id="tbl" hidden>
 <thead><tr><th>Job</th><th>Created</th><th>Service</th><th>IMEI</th><th>Customer</th><th>Payment</th><th>Status</th><th>Actions</th><th>Upstream reply</th></tr></thead>
 <tbody></tbody>
@@ -124,6 +132,7 @@ async function loadJobs(){
   const j=await r.json();
   if(!j.ok){alert('Bad token.');return;}
   document.getElementById('tbl').hidden=false;
+  loadWallets();
   document.querySelector('#tbl tbody').innerHTML=(j.jobs||[]).map(job=>`
    <tr>
      <td>${esc(job.id)}</td>
@@ -179,6 +188,34 @@ async function confirmRefund(){
   loadJobs();
 }
 
+async function loadWallets(){
+  if(!TOK)return;
+  const r=await fetch(API+'/api/admin/wallet/topups',{headers:{'x-admin-token':TOK}});
+  const j=await r.json();
+  if(!j.ok)return;
+  document.getElementById('walletSection').hidden=false;
+  document.querySelector('#wtbl tbody').innerHTML=(j.topups||[]).map(t=>`
+    <tr>
+      <td>${esc(t.id)}</td><td>${esc(t.phone)}</td><td>$${Number(t.amount).toFixed(2)}</td>
+      <td>${esc(t.method)}</td><td>${esc(t.ref||'—')}</td><td>${esc(t.status)}</td>
+      <td>${t.status==='pending'?`<button onclick="approveTp('${esc(t.id)}')">Approve</button> <button class="ghost" onclick="rejectTp('${esc(t.id)}')">Reject</button>`:'—'}</td>
+    </tr>`).join('')||'<tr><td colspan="7">No top-ups yet.</td></tr>';
+}
+async function approveTp(id){
+  if(!confirm('Confirm you RECEIVED the money before approving!'))return;
+  const r=await fetch(API+'/api/admin/wallet/approve',{method:'POST',headers:{'Content-Type':'application/json','x-admin-token':TOK},body:JSON.stringify({id})});
+  const j=await r.json();
+  alert(j.ok?('✅ Approved. Customer new balance: $'+Number(j.balance).toFixed(2)):('❌ '+(j.error||'failed')));
+  loadWallets();
+}
+async function rejectTp(id){
+  const reason=prompt('Reason for rejection:');
+  if(!reason)return;
+  const r=await fetch(API+'/api/admin/wallet/reject',{method:'POST',headers:{'Content-Type':'application/json','x-admin-token':TOK},body:JSON.stringify({id,reason})});
+  const j=await r.json();
+  alert(j.ok?'✅ Rejected.':'❌ '+(j.error||'failed'));
+  loadWallets();
+}
 async function check(id){
   const r=await fetch(API+'/api/order-status',{method:'POST',headers:{'Content-Type':'application/json','x-admin-token':TOK},body:JSON.stringify({id})});
   const j=await r.json();
