@@ -1,113 +1,195 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="robots" content="noindex">
-  <title>Sign In / Create Account | SIERRAUNLOCK</title>
-  <!--
-    =====================================================================
-    SIERRAUNLOCK • SIGN IN / CREATE ACCOUNT — auth.html (v2 • DOCUMENTED)
-    ---------------------------------------------------------------------
-    WHAT IS THIS FILE?
-    The customer authentication gateway. Users create a free account or
-    sign in here. A verified account is required by the "Account Gate"
-    (in main.js) to buy tools, sell spare parts, list a shop on the map,
-    or submit a reseller application.
-
-    SECTION MAP:
-    01  Meta tags (noindex so Google doesn't index the login page)
-    02  Fonts & Core CSS
-    03  Page-specific styles (auth card, tabs, demo box)
-    04  Motto bar
-    05  Auth card (Create Account tab + Sign In tab)
-    06  EmailJS CDN + Security + Auth engine scripts
-
-    SECURITY NOTES:
-    • Protected by `meta name="robots" content="noindex"`.
-    • OTP verification via EmailJS (real email delivery).
-    • Brute-force protection & rate limits handled in auth.js.
-    • Honeypot fields auto-injected by security.js.
-
-    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
-    =====================================================================
-  -->
-  <link rel="icon" type="image/png" href="assets/images/brand/favicon.png">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/style.css">
-  <style>
-    /* Auth-specific styles — keeps the login card clean and centered */
-    .auth-wrap{min-height:80vh;display:grid;place-items:center;padding:2.5rem 1rem;background:radial-gradient(900px 420px at 10% 0%,rgba(30,181,58,.25),transparent 60%),radial-gradient(900px 420px at 90% 100%,rgba(0,114,198,.3),transparent 60%),var(--paper)}
-    .auth-card{background:#fff;border-radius:var(--radius-lg);box-shadow:var(--shadow-2);max-width:460px;width:100%;padding:2.2rem;border-top:6px solid var(--sl-green)}
-    .auth-card h2{text-align:center;margin-bottom:.3rem}
-    .auth-sub{text-align:center;color:var(--ink-soft);font-size:.88rem;margin-bottom:1.4rem}
-    .auth-tabs{display:flex;gap:.6rem;margin-bottom:1.4rem}
-    .auth-tabs button{flex:1;padding:.7rem;border-radius:12px;border:1.5px solid var(--line);background:#fff;font-family:var(--font-head);font-weight:800;font-size:.85rem;cursor:pointer}
-    .auth-tabs button.active{background:var(--grad-brand);color:#fff;border-color:transparent}
-    .a-field{margin-bottom:.9rem}
-    .a-field label{display:block;font-size:.75rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:.3rem}
-    .a-field input{width:100%;padding:.75rem .9rem;border-radius:12px;border:1.5px solid var(--line);font-family:var(--font-body);font-size:.95rem;background:var(--paper)}
-    .a-field input:focus{outline:none;border-color:var(--sl-blue);box-shadow:0 0 0 3px rgba(0,114,198,.15)}
-    .demo-box{background:#FFF8E6;border:1.5px dashed #D97706;border-radius:12px;padding:.8rem;text-align:center;font-size:.85rem;color:#92400E;margin-bottom:.9rem}
-    .demo-box b{font-size:1.3rem;letter-spacing:.4em;display:block;margin-top:.2rem}
-    .why{margin-top:1.3rem;font-size:.8rem;color:var(--ink-soft)}
-    .why li{margin:.3rem 0;padding-left:1.3rem;position:relative}
-    .why li::before{content:"✔";position:absolute;left:0;color:var(--sl-green-dark)}
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign In / Register — SIERRAUNLOCK</title>
+<style>
+  :root{--green:#1EB53A;--blue:#0072C6;--navy:#0b1f33;--ink:#12263a;--bg:#f4f8fb;--err:#e74c3c}
+  *{box-sizing:border-box;margin:0;padding:0;font-family:Segoe UI,Arial,sans-serif}
+  body{background:var(--bg);color:var(--ink);min-height:100vh;display:flex;flex-direction:column}
+  header{background:linear-gradient(120deg,var(--blue),var(--green));color:#fff;padding:16px 22px;display:flex;justify-content:space-between;align-items:center}
+  header h1{font-size:20px}
+  header a{color:#fff;text-decoration:none;font-weight:600;margin-left:14px}
+  main{flex:1;max-width:480px;width:100%;margin:30px auto;padding:0 16px}
+  .box{background:#fff;border-radius:16px;padding:28px;box-shadow:0 4px 24px rgba(18,38,58,.1)}
+  .tabs{display:flex;gap:6px;margin-bottom:22px;background:#f4f8fb;padding:4px;border-radius:10px}
+  .tabs button{flex:1;background:transparent;border:0;padding:10px;border-radius:8px;font-weight:700;cursor:pointer;color:#5b7186}
+  .tabs button.on{background:#fff;color:var(--blue);box-shadow:0 2px 6px rgba(0,0,0,.06)}
+  h2{font-size:20px;color:var(--navy);margin-bottom:4px}
+  p.sub{font-size:13px;color:#5b7186;margin-bottom:18px}
+  label{font-size:12.5px;font-weight:700;display:block;margin:10px 0 4px}
+  input{width:100%;padding:12px;border:2px solid #d5e3ee;border-radius:10px;font-size:15px}
+  input:focus{border-color:var(--blue);outline:none}
+  .go{background:var(--green);color:#fff;border:0;padding:13px;border-radius:10px;font-weight:700;cursor:pointer;width:100%;margin-top:14px;font-size:15px}
+  .go:hover{background:#179c31}
+  .ghost{background:transparent;border:0;color:var(--blue);cursor:pointer;font-weight:600;font-size:13px;margin-top:10px}
+  .msg{padding:12px;border-radius:10px;font-size:13.5px;margin-top:14px;display:none;line-height:1.5}
+  .msg.ok{background:#e9f9ee;border:1px solid var(--green);color:#0e5c23}
+  .msg.err{background:#fdecec;border:1px solid var(--err);color:#8b1e1e}
+  .code-box{display:flex;gap:8px;justify-content:center;margin:16px 0}
+  .code-box input{width:48px;height:58px;text-align:center;font-size:24px;font-weight:800}
+  footer{background:var(--navy);color:#cfe3f5;text-align:center;padding:18px;font-size:13px}
+</style>
 </head>
 <body>
-  <!-- 04 • MOTTO BAR -->
-  <div class="motto-bar">
-    <span>IT CAN ONLY BE GOD</span><span class="motto-divider">✦</span><span>LEARN BEFORE YOU EARN</span>
-  </div>
+<header>
+  <h1>SIERRAUNLOCK</h1>
+  <nav><a href="index.html">Home</a><a href="live-services.html">Catalog</a></nav>
+</header>
 
-  <!-- 05 • AUTH CARD (Create Account + Sign In tabs) -->
-  <div class="auth-wrap">
-    <div class="auth-card">
-      <h2>🔐 SIERRAUNLOCK Account</h2>
-      <p class="auth-sub">One free account to buy tools, sell parts, list your shop and track every order.</p>
-      
-      <div class="auth-tabs" id="authTabs">
-        <button id="tabReg" class="active">Create Account</button>
-        <button id="tabIn">Sign In</button>
+<main>
+  <div class="box">
+    <div class="tabs">
+      <button id="tabLogin" class="on" onclick="switchTab('login')">Sign In</button>
+      <button id="tabRegister" onclick="switchTab('register')">Register</button>
+    </div>
+
+    <!-- LOGIN -->
+    <div id="sec-login">
+      <h2>Welcome back 👋</h2>
+      <p class="sub">Sign in to view your orders, wallet, and place new ones.</p>
+      <label>Email or phone number</label>
+      <input id="li_emailOrPhone" autocomplete="username" placeholder="you@email.com or +232...">
+      <label>Password</label>
+      <input id="li_password" type="password" autocomplete="current-password" placeholder="••••••••">
+      <button class="go" onclick="doLogin()">Sign In</button>
+      <div class="msg" id="li_msg"></div>
+    </div>
+
+    <!-- REGISTER -->
+    <div id="sec-register" style="display:none">
+      <h2>Create your account ✨</h2>
+      <p class="sub">Free, takes 30 seconds. Required to place orders.</p>
+      <label>Full name</label>
+      <input id="rg_name" placeholder="Your full name">
+      <label>Email address</label>
+      <input id="rg_email" type="email" placeholder="you@email.com">
+      <label>WhatsApp phone number</label>
+      <input id="rg_phone" inputmode="tel" placeholder="+232 75 ...">
+      <label>Password (min 6 chars)</label>
+      <input id="rg_password" type="password" placeholder="••••••••">
+      <button class="go" onclick="doRegister()">Send Verification Code</button>
+      <div class="msg" id="rg_msg"></div>
+    </div>
+
+    <!-- VERIFY -->
+    <div id="sec-verify" style="display:none">
+      <h2>Check your email 📧</h2>
+      <p class="sub">We sent a 6-digit code to <b id="vr_email"></b>. Enter it below.</p>
+      <div class="code-box">
+        <input maxlength="1" inputmode="numeric" data-i="0">
+        <input maxlength="1" inputmode="numeric" data-i="1">
+        <input maxlength="1" inputmode="numeric" data-i="2">
+        <input maxlength="1" inputmode="numeric" data-i="3">
+        <input maxlength="1" inputmode="numeric" data-i="4">
+        <input maxlength="1" inputmode="numeric" data-i="5">
       </div>
-
-      <!-- Create Account Panel -->
-      <div id="regPanel">
-        <div class="a-field"><label>Full Name *</label><input id="rName" placeholder="e.g. Abdul Kamara"></div>
-        <div class="a-field"><label>Phone / WhatsApp *</label><input id="rPhone" placeholder="+232 ..."></div>
-        <div class="a-field"><label>Email *</label><input id="rEmail" type="email" placeholder="you@example.com"></div>
-        <div class="a-field"><label>Password (4+ chars) *</label><input id="rPass" type="password" placeholder="••••••"></div>
-        <button class="btn btn-brand" id="sendCodeBtn" style="width:100%">SEND VERIFICATION CODE</button>
-
-        <div id="codeStep" hidden style="margin-top:1rem">
-          <div class="demo-box" id="demoBox" hidden> DEMO MODE (until EmailJS is connected) — your code:<b id="demoCode"></b></div>
-          <div class="a-field"><label>Enter 6-Digit Code</label><input id="rCode" inputmode="numeric" maxlength="6" placeholder="••••••"></div>
-          <button class="btn btn-whatsapp" id="verifyBtn" style="width:100%">VERIFY &amp; CREATE ACCOUNT</button>
-        </div>
-      </div>
-
-      <!-- Sign In Panel -->
-      <div id="inPanel" hidden>
-        <div class="a-field"><label>Email</label><input id="iEmail" type="email" placeholder="you@example.com"></div>
-        <div class="a-field"><label>Password</label><input id="iPass" type="password" placeholder="••••••"></div>
-        <button class="btn btn-brand" id="signInBtn" style="width:100%">SIGN IN</button>
-      </div>
-
-      <!-- Why create an account? -->
-      <ul class="why">
-        <li>Verification code protects your account from fraud.</li>
-        <li>Receipts &amp; order history tied to your phone/email.</li>
-        <li>Required for buying tools, selling parts &amp; listing shops.</li>
-      </ul>
+      <button class="go" onclick="doVerify()">Verify & Sign In</button>
+      <button class="ghost" onclick="doResend()">Didn't receive it? Resend code</button>
+      <div class="msg" id="vr_msg"></div>
     </div>
   </div>
+</main>
 
-  <!-- 06 • SCRIPTS (EmailJS CDN + Security + Auth engine) -->
-  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
-  <script src="assets/js/security.js"></script>
-  <script src="assets/js/auth.js"></script>
+<footer>IT CAN ONLY BE GOD ✦ LEARN BEFORE YOU EARN — sierraunlock.com</footer>
+
+<script>
+const API='https://sierraunlock-tech-1-4um3.onrender.com';
+let pendingPhone=null;
+const $=id=>document.getElementById(id);
+const msg=(el,text,ok)=>{ el.className='msg '+(ok?'ok':'err'); el.style.display='block'; el.textContent=text; };
+
+function switchTab(t){
+  $('tabLogin').classList.toggle('on',t==='login');
+  $('tabRegister').classList.toggle('on',t==='register');
+  $('sec-login').style.display=t==='login'?'block':'none';
+  $('sec-register').style.display=t==='register'?'block':'none';
+  $('sec-verify').style.display='none';
+}
+
+/* 6-digit code inputs auto-advance */
+document.querySelectorAll('.code-box input').forEach(inp=>{
+  inp.addEventListener('input',()=>{
+    inp.value=inp.value.replace(/\D/g,'');
+    if(inp.value && inp.dataset.i<5) document.querySelector(`.code-box input[data-i="${Number(inp.dataset.i)+1}"]`).focus();
+  });
+  inp.addEventListener('keydown',(e)=>{
+    if(e.key==='Backspace' && !inp.value && inp.dataset.i>0){
+      document.querySelector(`.code-box input[data-i="${Number(inp.dataset.i)-1}"]`).focus();
+    }
+  });
+});
+function getCode(){ return [...document.querySelectorAll('.code-box input')].map(i=>i.value).join(''); }
+function clearCode(){ document.querySelectorAll('.code-box input').forEach(i=>i.value=''); document.querySelector('.code-box input[data-i="0"]').focus(); }
+
+async function doLogin(){
+  const emailOrPhone=$('li_emailOrPhone').value.trim();
+  const password=$('li_password').value;
+  if(!emailOrPhone||!password){ msg($('li_msg'),'Fill both fields.',false); return; }
+  try{
+    const r=await fetch(API+'/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({emailOrPhone,password})});
+    const j=await r.json();
+    if(j.ok){
+      sessionStorage.setItem('su_token',j.token);
+      sessionStorage.setItem('su_user',j.user.phone);
+      localStorage.setItem('su_profile',JSON.stringify(j.user));
+      const next=new URLSearchParams(location.search).get('next')||'account.html';
+      location.href=next;
+    }else msg($('li_msg'),j.error||'Login failed.',false);
+  }catch(e){ msg($('li_msg'),'Network error.',false); }
+}
+
+async function doRegister(){
+  const name=$('rg_name').value.trim();
+  const email=$('rg_email').value.trim();
+  const phone=$('rg_phone').value.trim();
+  const password=$('rg_password').value;
+  if(!name||!email||!phone||!password){ msg($('rg_msg'),'Fill all fields.',false); return; }
+  try{
+    const r=await fetch(API+'/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,phone,password})});
+    const j=await r.json();
+    if(j.ok){
+      pendingPhone=j.phone;
+      $('vr_email').textContent=email;
+      $('sec-register').style.display='none';
+      $('sec-verify').style.display='block';
+      clearCode();
+      msg($('vr_msg'),'Code sent! Check your inbox (and spam folder).',true);
+    }else msg($('rg_msg'),j.error||'Register failed.',false);
+  }catch(e){ msg($('rg_msg'),'Network error.',false); }
+}
+
+async function doVerify(){
+  const code=getCode();
+  if(code.length!==6){ msg($('vr_msg'),'Enter all 6 digits.',false); return; }
+  try{
+    const r=await fetch(API+'/api/auth/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:pendingPhone,code})});
+    const j=await r.json();
+    if(j.ok){
+      sessionStorage.setItem('su_token',j.token);
+      sessionStorage.setItem('su_user',j.user.phone);
+      localStorage.setItem('su_profile',JSON.stringify(j.user));
+      const next=new URLSearchParams(location.search).get('next')||'account.html';
+      location.href=next;
+    }else msg($('vr_msg'),j.error||'Verification failed.',false);
+  }catch(e){ msg($('vr_msg'),'Network error.',false); }
+}
+
+async function doResend(){
+  if(!pendingPhone) return;
+  try{
+    const r=await fetch(API+'/api/auth/resend',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:pendingPhone})});
+    const j=await r.json();
+    msg($('vr_msg'),j.ok?'New code sent! Check your email.':('❌ '+j.error), j.ok);
+  }catch(e){}
+}
+
+/* Auto-redirect if already logged in */
+if(sessionStorage.getItem('su_token')){
+  const next=new URLSearchParams(location.search).get('next')||'account.html';
+  setTimeout(()=>location.href=next,100);
+}
+</script>
 </body>
 </html>

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Account — SIERRAUNLOCK</title>
+<style>
+  :root{--green:#1EB53A;--blue:#0072C6;--navy:#0b1f33;--ink:#12263a;--bg:#f4f8fb}
+  *{box-sizing:border-box;margin:0;padding:0;font-family:Segoe UI,Arial,sans-serif}
+  body{background:var(--bg);color:var(--ink);min-height:100vh;display:flex;flex-direction:column}
+  header{background:linear-gradient(120deg,var(--blue),var(--green));color:#fff;padding:16px 22px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap}
+  header h1{font-size:20px}
+  header nav a{color:#fff;text-decoration:none;font-weight:600;margin-left:14px}
+  header button{background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.4);padding:8px 14px;border-radius:8px;cursor:pointer;font-weight:600;margin-left:10px}
+  main{flex:1;max-width:900px;width:100%;margin:0 auto;padding:24px 16px}
+  .profile{background:#fff;border-radius:16px;padding:22px;box-shadow:0 4px 20px rgba(18,38,58,.08);display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin-bottom:18px}
+  .avatar{width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,var(--green),var(--blue));color:#fff;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:800}
+  .who{flex:1;min-width:200px}
+  .who .nm{font-size:20px;font-weight:800;color:var(--navy)}
+  .who .ph{font-size:13px;color:#5b7186;margin-top:2px}
+  .badge{background:#d8f4dd;color:#0e5c23;font-weight:800;font-size:11px;letter-spacing:.6px;padding:6px 12px;border-radius:14px;text-transform:uppercase}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-bottom:18px}
+  .stat{background:#fff;border-radius:14px;padding:18px;box-shadow:0 4px 20px rgba(18,38,58,.08)}
+  .stat .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:#5b7186;font-weight:700}
+  .stat .val{font-size:24px;font-weight:800;color:var(--navy);margin-top:6px}
+  .stat.green .val{color:var(--green)}
+  .section{background:#fff;border-radius:14px;padding:20px;box-shadow:0 4px 20px rgba(18,38,58,.08);margin-bottom:18px}
+  .section h3{font-size:16px;color:var(--navy);margin-bottom:12px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{border:1px solid #e1ecf4;padding:8px;text-align:left}
+  th{background:#f4f8fb}
+  .st{font-weight:700}
+  .st.solved{color:var(--green)}.st.failed{color:#e74c3c}.st.processing,.st.sent-to-server{color:var(--blue)}.st.queued{color:#b8860b}
+  .empty{padding:20px;text-align:center;color:#5b7186}
+  footer{background:var(--navy);color:#cfe3f5;text-align:center;padding:18px;font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <h1>SIERRAUNLOCK — My Account</h1>
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="live-services.html">Catalog</a>
+    <a href="wallet.html">Wallet</a>
+    <button onclick="doLogout()">Sign Out</button>
+  </nav>
+</header>
+
+<main>
+  <div class="profile">
+    <div class="avatar" id="pAvatar">?</div>
+    <div class="who">
+      <div class="nm" id="pName">Loading…</div>
+      <div class="ph" id="pMeta"></div>
+    </div>
+    <span class="badge">● Active</span>
+  </div>
+
+  <div class="grid">
+    <div class="stat green"><div class="lbl">Wallet Balance</div><div class="val" id="sBal">$0.00</div></div>
+    <div class="stat"><div class="lbl">Total Orders</div><div class="val" id="sOrders">0</div></div>
+    <div class="stat"><div class="lbl">Member Since</div><div class="val" id="sSince">—</div></div>
+  </div>
+
+  <div class="section">
+    <h3>📜 Order History</h3>
+    <div id="ordersBox"><div class="empty">Loading…</div></div>
+  </div>
+</main>
+
+<footer>IT CAN ONLY BE GOD ✦ LEARN BEFORE YOU EARN — sierraunlock.com</footer>
+
+<script>
+const API='https://sierraunlock-tech-1-4um3.onrender.com';
+const $=id=>document.getElementById(id);
+const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const tok=sessionStorage.getItem('su_token');
+if(!tok){ location.href='auth.html?next=account.html'; }
+
+async function loadMe(){
+  try{
+    const r=await fetch(API+'/api/auth/me',{headers:{'x-user-token':tok}});
+    const j=await r.json();
+    if(!j.ok){ sessionStorage.clear(); location.href='auth.html'; return; }
+    const u=j.user, w=j.wallet, o=j.orders||[];
+    $('pName').textContent=u.name;
+    $('pAvatar').textContent=(u.name[0]||'?').toUpperCase();
+    $('pMeta').innerHTML=esc(u.email)+' · +'+esc(u.phone);
+    $('sBal').textContent='$'+Number(w.balance||0).toFixed(2);
+    $('sOrders').textContent=o.length;
+    $('sSince').textContent=(u.createdAt||'').slice(0,10);
+    if(!o.length){ $('ordersBox').innerHTML='<div class="empty">No orders yet. <a href="live-services.html" style="color:var(--blue);font-weight:700">Browse catalog →</a></div>'; return; }
+    $('ordersBox').innerHTML='<table><thead><tr><th>Job</th><th>Service</th><th>Date</th><th>Status</th><th></th></tr></thead><tbody>'+
+      o.map(job=>`<tr>
+        <td>${esc(job.id)}</td>
+        <td>${esc(job.serviceName||job.service||'—')}</td>
+        <td>${esc((job.created||'').slice(0,16).replace('T',' '))}</td>
+        <td class="st ${esc(job.status)}">${esc(job.status)}</td>
+        <td><a href="track.html?id=${encodeURIComponent(job.id)}" style="color:var(--blue);font-weight:700">Track →</a></td>
+      </tr>`).join('')+
+      '</tbody></table>';
+  }catch(e){ $('ordersBox').innerHTML='<div class="empty">Failed to load.</div>'; }
+}
+
+async function doLogout(){
+  try{ await fetch(API+'/api/auth/logout',{method:'POST',headers:{'x-user-token':tok}}); }catch(e){}
+  sessionStorage.removeItem('su_token'); sessionStorage.removeItem('su_user'); localStorage.removeItem('su_profile');
+  location.href='index.html';
+}
+loadMe();
+</script>
+</body>
+</html>
