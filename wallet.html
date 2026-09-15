@@ -1,18 +1,34 @@
 <!DOCTYPE html>
 <!--
 =====================================================================
-SIERRAUNLOCK • CUSTOMER WALLET — wallet.html (v1.0)
+SIERRAUNLOCK • CUSTOMER WALLET — wallet.html (v2.1 • DUAL CURRENCY)
 ---------------------------------------------------------------------
 WHAT IS THIS FILE?
 A FastUnlockers-style balance dashboard for OUR customers:
-  • See Available Balance (USD + Leones)
+  • See Available Balance (USD + Leones — both shown automatically)
   • Add Fund via Orange Money or Binance Pay (founder approves)
+    - Customer can type amount in USD OR Leones — live conversion
+      preview shows the other currency using the live server rate
+    - Server always stores USD (single source of truth, no rounding
+      drift) and converts Leones input using the same live rate
   • See every credit / debit after purchases (full history)
   • Pending top-ups status
+  • Auto-loads balance while typing phone number (no button needed)
+  • Remembers last phone number (localStorage)
+
 Wallet key = customer's WhatsApp phone number (digits only).
-Backend: /api/wallet/:phone, /api/wallet/topup (server.js v3.15).
-SECURITY: balances live server-side only; top-ups need founder
-approval; pay-from-balance verifies price on the server.
+Backend endpoints used:
+  GET  /api/rates          → live SLE/USD exchange rate
+  GET  /api/wallet/:phone  → balance + tx + pending
+  POST /api/wallet/topup   → creates pending top-up (founder approves)
+
+SECURITY:
+  • Balances live server-side only (never in browser)
+  • Top-ups need founder approval before balance credits
+  • Pay-from-balance verifies price on the server (no cheating)
+  • Withdrawal endpoint does NOT exist (funds can only be spent
+    on services inside SIERRAUNLOCK — fraud lock)
+
 OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
 =====================================================================
 -->
@@ -21,7 +37,7 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>My Wallet — SIERRAUNLOCK</title>
-<meta name="description" content="View your SIERRAUNLOCK balance, add funds via Orange Money or Binance, and see your spending history.">
+<meta name="description" content="View your SIERRAUNLOCK balance, add funds in USD or Leones via Orange Money or Binance, and see your spending history.">
 <style>
   :root{--green:#1EB53A;--blue:#0072C6;--navy:#0b1f33;--ink:#12263a;--bg:#f4f8fb}
   *{box-sizing:border-box;margin:0;padding:0;font-family:Segoe UI,Arial,sans-serif}
@@ -52,6 +68,10 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
   .notice{background:#e9f9ee;border:2px solid var(--green);border-radius:12px;padding:14px;margin-top:12px;font-size:14px;display:none;line-height:1.6}
   .notice b{color:var(--navy)}
   label{font-size:12.5px;font-weight:700;display:block;margin:8px 0 4px}
+  .cur-row{display:flex;gap:8px}
+  .cur-row input{flex:1}
+  .cur-row select{width:130px;flex:0 0 130px}
+  .conv-prev{font-size:12.5px;color:var(--blue);font-weight:700;margin-top:6px;min-height:16px}
   footer{background:var(--navy);color:#cfe3f5;text-align:center;padding:18px;font-size:13px}
   footer a{color:#7cc4ff}
   @media(max-width:600px){.stat .val{font-size:20px}}
@@ -60,13 +80,13 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
 <body>
 <header>
   <h1>SIERRAUNLOCK — My Wallet</h1>
-  <nav><a href="index.html">Home</a><a href="live-services.html">Live Catalog</a></nav>
+  <nav><a href="index.html">Home</a><a href="live-services.html">Live Catalog</a><a href="account.html">My Account</a></nav>
 </header>
 
 <main>
   <div class="hero">
     <h2>💰 My Balance & Top-Ups</h2>
-    <p>Enter the WhatsApp number you use for orders to see your balance, add funds, and review spending.</p>
+    <p>Enter the WhatsApp number you use for orders to see your balance, add funds (in USD or Leones), and review spending.</p>
   </div>
 
   <div class="box">
@@ -76,7 +96,7 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
     </div>
   </div>
 
-  <div id="dash" style="display:none">
+  <div id="dash">
     <div class="stats">
       <div class="stat green"><div class="lbl">Available Balance</div><div class="val" id="sBal">$0.00</div><div class="sub" id="sBalSle">Le 0</div></div>
       <div class="stat"><div class="lbl">Total Added</div><div class="val" id="sAdded">$0.00</div></div>
@@ -86,8 +106,15 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
 
     <div class="box">
       <h3>➕ Add Fund to My Wallet</h3>
-      <label>Amount (USD)</label>
-      <input id="amt" type="number" min="1" step="0.01" placeholder="e.g. 10">
+      <label>Amount</label>
+      <div class="cur-row">
+        <input id="amt" type="number" min="1" step="0.01" placeholder="e.g. 10 or 260" oninput="previewConvert()">
+        <select id="cur" onchange="previewConvert()">
+          <option value="usd">USD $</option>
+          <option value="sle">Leones Le</option>
+        </select>
+      </div>
+      <div class="conv-prev" id="convPrev"></div>
       <label>Payment method</label>
       <select id="method">
         <option value="orange_money">🟠 Orange Money</option>
@@ -128,12 +155,41 @@ let PHONE=null, RATE=26, timer=null;
 const $=id=>document.getElementById(id);
 const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-fetch(API+'/api/rates').then(r=>r.json()).then(j=>{ if(j&&j.slePerUsd) RATE=j.slePerUsd; }).catch(()=>{});
+/* Load live rate from server (default 26 Le/USD) */
+fetch(API+'/api/rates').then(r=>r.json()).then(j=>{ if(j&&j.slePerUsd) RATE=j.slePerUsd; previewConvert(); }).catch(()=>{});
+
+/* Live conversion preview — shows both currencies as user types */
+function previewConvert(){
+  const raw=parseFloat($('amt').value)||0;
+  const cur=$('cur').value;
+  const prev=$('convPrev');
+  if(!prev) return;
+  if(!raw){ prev.textContent=''; return; }
+  if(cur==='sle'){
+    const usd=(raw/RATE).toFixed(2);
+    prev.textContent='Le '+raw.toLocaleString()+' ≈ $'+usd+'  (live rate '+RATE+' Le/USD)';
+  }else{
+    const sle=Math.round(raw*RATE).toLocaleString();
+    prev.textContent='$'+raw.toFixed(2)+' ≈ Le '+sle+'  (live rate '+RATE+' Le/USD)';
+  }
+}
+
+/* Auto-load balance while user types phone number */
+$('phone').addEventListener('input',()=>{
+  const digits=($('phone').value||'').replace(/\D/g,'');
+  if(digits.length>=9){
+    PHONE=digits;
+    localStorage.setItem('su_wallet_phone',digits);
+    refresh();
+    if(!timer) timer=setInterval(refresh,15000);
+  }
+});
 
 async function viewBalance(){
   const digits=($('phone').value||'').replace(/\D/g,'');
   if(digits.length<9){ alert('Enter your full WhatsApp number.'); return; }
   PHONE=digits;
+  localStorage.setItem('su_wallet_phone',digits);
   const url=new URL(location.href); url.searchParams.set('phone',digits); history.replaceState({},'',url.toString());
   await refresh();
   $('dash').style.display='block';
@@ -155,12 +211,12 @@ async function refresh(){
     $('sSpent').textContent='$'+spent.toFixed(2);
     $('sPend').textContent=(j.pending||[]).length;
     $('pendBody').innerHTML=(j.pending||[]).map(t=>
-      `<tr><td>${esc(t.id)}</td><td>$${Number(t.amount).toFixed(2)}</td><td>${esc(t.method)}</td><td>⏳ awaiting approval</td></tr>`
+      `<tr><td>${esc(t.id)}</td><td>$${Number(t.amount).toFixed(2)} <small style="color:#5b7186">(Le ${Math.round(t.amount*RATE).toLocaleString()})</small></td><td>${esc(t.method==='orange_money'?'🟠 OM':'🟡 Binance')}</td><td>⏳ awaiting approval</td></tr>`
     ).join('')||'<tr><td colspan="4">No pending top-ups.</td></tr>';
     $('txBody').innerHTML=(j.tx||[]).map(t=>
       `<tr><td>${esc((t.date||'').slice(0,16).replace('T',' '))}</td>`+
       `<td class="${t.type==='credit'?'credit':'debit'}">${t.type==='credit'?'➕ Added':'➖ Spent'}</td>`+
-      `<td class="${t.type==='credit'?'credit':'debit'}">$${Number(t.amount).toFixed(2)}</td>`+
+      `<td class="${t.type==='credit'?'credit':'debit'}">$${Number(t.amount).toFixed(2)} <small style="color:#5b7186">(Le ${Math.round(t.amount*RATE).toLocaleString()})</small></td>`+
       `<td>${esc(t.ref||'—')}</td></tr>`
     ).join('')||'<tr><td colspan="4">No transactions yet.</td></tr>';
   }catch(e){}
@@ -168,8 +224,14 @@ async function refresh(){
 
 async function addFund(){
   if(!PHONE){ alert('View your balance first.'); return; }
-  const amount=parseFloat($('amt').value);
+  let amount=parseFloat($('amt').value);
   if(!amount||amount<=0){ alert('Enter a valid amount.'); return; }
+  /* Convert Leones → USD if user selected Leones */
+  if($('cur').value==='sle'){
+    amount=Math.round((amount/RATE)*100)/100;
+    if(amount<0.5){ alert('Amount too small. Need at least Le '+Math.round(0.5*RATE)+' for $0.50 minimum.'); return; }
+  }
+  if(amount>10000){ alert('Maximum top-up is $10,000 USD.'); return; }
   const method=$('method').value;
   const ref=$('ref').value.trim();
   const r=await fetch(API+'/api/wallet/topup',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -178,18 +240,20 @@ async function addFund(){
   if(j.ok){
     const n=$('topNotice');
     n.style.display='block';
-    n.innerHTML=`✅ Top-Up <b>${esc(j.topup)}</b> created for <b>$${amount.toFixed(2)}</b>.<br>`+
+    n.innerHTML=`✅ Top-Up <b>${esc(j.topup)}</b> created for <b>$${amount.toFixed(2)}</b> (Le ${Math.round(amount*RATE).toLocaleString()}).<br>`+
       `💳 Send the money now to: <b>${esc(j.pay_to)}</b><br>`+
       `📝 Include reference: <b>${esc(j.topup)}</b> in your payment note.<br>`+
       `⏳ Your balance updates automatically once a founder approves (usually within minutes).`;
-    $('amt').value=''; $('ref').value='';
+    $('amt').value=''; $('ref').value=''; previewConvert();
     refresh();
   }else{ alert(j.error||'Top-up failed.'); }
 }
 
+/* On page load: restore last phone + auto-load */
 window.addEventListener('DOMContentLoaded',()=>{
-  const p=new URLSearchParams(location.search).get('phone');
+  const p=new URLSearchParams(location.search).get('phone')||localStorage.getItem('su_wallet_phone')||'';
   if(p){ $('phone').value=p; setTimeout(viewBalance,300); }
+  previewConvert();
 });
 </script>
 </body>
