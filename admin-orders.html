@@ -1,31 +1,21 @@
 <!DOCTYPE html>
 <!--
 =====================================================================
-SIERRAUNLOCK • FOUNDER ORDER DESK — admin-orders.html (v2.0)
+SIERRAUNLOCK • FOUNDER ORDER DESK — admin-orders.html (v2.1 • WALLET)
 ---------------------------------------------------------------------
 WHAT IS THIS FILE?
-The founder-only control panel for managing customer orders. v2.0 adds:
+The founder-only control panel for managing customer orders + wallet
+top-up approvals. v2.1 adds:
 • Payment status tracking (unpaid / paid / refunded)
-• "Mark Paid" button — marks job paid + auto-fulfils upstream (no separate
-  "Place Upstream" click needed)
-• "Refund" button — founder-only refund after fraud review (requires reason)
-• Payment method selector (Orange Money / Binance / Cash)
-
-FLOW:
-1. Customer orders → job created with payment_status = 'unpaid'
-2. Founder sees job in admin desk → clicks "Mark Paid" → selects method
-3. System auto-places upstream order → status = 'sent-to-server'
-4. FastUnlockers delivers code → customer sees on track.html
-5. If fraud: founder clicks "Refund" → enters reason → status = 'refunded'
+• "Mark Paid" button — auto-fulfils upstream
+• "Refund" button — founder-only after fraud review
+• 💰 WALLET TOP-UP APPROVALS — confirm money received, credit balance
+• Live order status check
 
 SECURITY:
 • Admin token required (founder-only access)
-• Refund lock: once paid, customer cannot reverse (crypto/OM/cash final)
-• Only founders can refund via admin token + reason
-
-ACCESS:
-• Founders: direct URL + admin token (bookmark this page)
-• Customers: never see this page
+• Refund lock: once paid, customer cannot reverse
+• Wallet top-ups require manual founder approval after money received
 
 OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
 =====================================================================
@@ -43,7 +33,7 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
   p.sub{color:#8fb3cc;font-size:13px;margin-bottom:16px}
   .warn{background:#3a2b00;border:1px solid #ffb020;color:#ffd97a;border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:16px}
   input,button,select{padding:11px 14px;border-radius:10px;border:1px solid #2b3d52;background:#16202e;color:#e6f0f8;font-size:14px}
-  button{cursor:pointer;font-weight:700;background:var(--green);border:0;color:#fff}
+  button{cursor:pointer;font-weight:700;background:var(--green);border:0;color:#fff;margin:2px}
   button.sec{background:var(--blue)}
   button.danger{background:#e74c3c}
   button.ghost{background:#22314a}
@@ -64,27 +54,31 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
   .row{display:flex;gap:10px;margin-top:16px}
   .row button{flex:1;padding:12px;border-radius:10px;border:0;font-weight:700;cursor:pointer}
   .go{background:var(--green);color:#fff}.cancel{background:#22314a;color:#e6f0f8}
+  .section-title{font-size:16px;margin:20px 0 8px;color:#fff;display:flex;align-items:center;gap:8px}
+  .section-title::before{content:'';width:4px;height:18px;background:linear-gradient(180deg,var(--green),var(--blue));border-radius:2px}
 </style>
 </head>
 <body>
 <h1>SIERRAUNLOCK — Founder Order Desk</h1>
-<p class="sub">Confirm payment → auto-fulfil upstream. Refunds require fraud review.</p>
-<div class="warn">⚠ MONEY SAFETY: Once marked paid, customer cannot reverse (crypto/OM/cash are final). Only founders can refund via admin token + reason.</div>
+<p class="sub">Confirm payment → auto-fulfil upstream. Refunds require fraud review. Wallet top-ups require money-received confirmation.</p>
+<div class="warn">⚠ MONEY SAFETY: Once marked paid, customer cannot reverse (crypto/OM/cash are final). Only founders can refund via admin token + reason. Wallet top-ups: APPROVE only after you have confirmed the money arrived.</div>
 
 <input type="password" id="token" placeholder="Admin token" size="40">
 <button onclick="connect()">Connect</button>
 <button class="sec" onclick="loadJobs()">Refresh Jobs</button>
 
-<div id="walletSection" style="margin-top:18px" hidden>
-  <h2 style="font-size:16px;margin-bottom:8px">💰 Wallet Top-Up Approvals (confirm money received FIRST)</h2>
+<h2 class="section-title">💰 Wallet Top-Up Approvals</h2>
+<div id="walletSection" style="margin-top:8px" hidden>
   <table id="wtbl">
     <thead><tr><th>Top-Up ID</th><th>Phone</th><th>Amount</th><th>Method</th><th>Ref</th><th>Status</th><th>Actions</th></tr></thead>
     <tbody></tbody>
   </table>
 </div>
+<div id="walletEmpty" style="margin-top:8px;color:#8fb3cc;font-size:13px">No top-ups yet. Customers will submit requests from <a href="wallet.html" style="color:#7cc4ff">wallet.html</a>.</div>
 
+<h2 class="section-title">📦 Customer Orders</h2>
 <table id="tbl" hidden>
-<thead><tr><th>Job</th><th>Created</th><th>Service</th><th>IMEI</th><th>Customer</th><th>Payment</th><th>Status</th><th>Actions</th><th>Upstream reply</th></tr></thead>
+<thead><tr><th>Job</th><th>Created</th><th>Service</th><th>IMEI / Details</th><th>Customer</th><th>Payment</th><th>Status</th><th>Actions</th><th>Upstream reply</th></tr></thead>
 <tbody></tbody>
 </table>
 
@@ -123,24 +117,34 @@ const API='https://sierraunlock-tech-1-4um3.onrender.com';
 let TOK='', currentJobId=null;
 const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-function connect(){TOK=document.getElementById('token').value.trim();sessionStorage.setItem('su_tok',TOK);loadJobs();}
-window.addEventListener('load',()=>{const t=sessionStorage.getItem('su_tok');if(t){TOK=t;document.getElementById('token').value=t;loadJobs();}});
+function connect(){
+  TOK=document.getElementById('token').value.trim();
+  if(!TOK){ alert('Enter admin token.'); return; }
+  sessionStorage.setItem('su_tok',TOK);
+  loadJobs();
+}
+
+window.addEventListener('load',()=>{
+  const t=sessionStorage.getItem('su_tok');
+  if(t){ TOK=t; document.getElementById('token').value=t; loadJobs(); }
+});
 
 async function loadJobs(){
-  if(!TOK){alert('Enter admin token first.');return;}
+  if(!TOK){ alert('Enter admin token first.'); return; }
   const r=await fetch(API+'/api/admin/jobs',{headers:{'x-admin-token':TOK}});
   const j=await r.json();
-  if(!j.ok){alert('Bad token.');return;}
+  if(!j.ok){ alert('Bad token.'); return; }
   document.getElementById('tbl').hidden=false;
   loadWallets();
+
   document.querySelector('#tbl tbody').innerHTML=(j.jobs||[]).map(job=>`
    <tr>
-     <td>${esc(job.id)}</td>
+     <td>${esc(job.id)}<br><small style="color:#8fb3cc">${esc((job.type||'imei').toUpperCase())}</small></td>
      <td>${esc((job.created||'').slice(0,16).replace('T',' '))}</td>
      <td>${esc(job.serviceName||job.service||'—')}<br><small>ID ${esc(job.serviceId||job.service||'—')}</small></td>
-     <td>${esc(job.imei)}</td>
+     <td>${job.type==='imei' ? esc(job.imei||'—') : esc((job.details||'').slice(0,80))}</td>
      <td>${esc(job.phone||job.customer||'—')}</td>
-     <td class="pay ${esc(job.payment_status||'unpaid')}">${esc((job.payment_status||'unpaid').toUpperCase())}</td>
+     <td class="pay ${esc(job.payment_status||'unpaid')}">${esc((job.payment_status||'unpaid').toUpperCase())}<br><small>${esc(job.payment_method||'—')}</small></td>
      <td class="st ${esc(job.status)}">${esc(job.status)}</td>
      <td>
        ${ (job.payment_status||'unpaid')==='unpaid' ? `<button onclick="openPayModal('${esc(job.id)}')">Mark Paid</button>`:'' }
@@ -151,11 +155,11 @@ async function loadJobs(){
    </tr>`).join('')||'<tr><td colspan="9">No jobs yet.</td></tr>';
 }
 
-function openPayModal(id){currentJobId=id;document.getElementById('payModal').classList.add('open');}
-function closePayModal(){document.getElementById('payModal').classList.remove('open');currentJobId=null;}
+function openPayModal(id){ currentJobId=id; document.getElementById('payModal').classList.add('open'); }
+function closePayModal(){ document.getElementById('payModal').classList.remove('open'); currentJobId=null; }
 
 async function confirmPay(){
-  if(!currentJobId)return;
+  if(!currentJobId) return;
   const method=document.getElementById('payMethod').value;
   const r=await fetch(API+'/api/admin/pay',{method:'POST',headers:{'Content-Type':'application/json','x-admin-token':TOK},
     body:JSON.stringify({id:currentJobId,method:method})});
@@ -169,13 +173,13 @@ async function confirmPay(){
   loadJobs();
 }
 
-function openRefundModal(id){currentJobId=id;document.getElementById('refundModal').classList.add('open');}
-function closeRefundModal(){document.getElementById('refundModal').classList.remove('open');currentJobId=null;}
+function openRefundModal(id){ currentJobId=id; document.getElementById('refundModal').classList.add('open'); }
+function closeRefundModal(){ document.getElementById('refundModal').classList.remove('open'); currentJobId=null; }
 
 async function confirmRefund(){
-  if(!currentJobId)return;
+  if(!currentJobId) return;
   const reason=document.getElementById('refundReason').value.trim();
-  if(reason.length<5){alert('Please enter a reason (min 5 characters).');return;}
+  if(reason.length<5){ alert('Please enter a reason (min 5 characters).'); return; }
   const r=await fetch(API+'/api/admin/refund',{method:'POST',headers:{'Content-Type':'application/json','x-admin-token':TOK},
     body:JSON.stringify({id:currentJobId,reason:reason})});
   const j=await r.json();
@@ -188,34 +192,52 @@ async function confirmRefund(){
   loadJobs();
 }
 
+/* ===== WALLET TOP-UP APPROVALS ===== */
 async function loadWallets(){
-  if(!TOK)return;
-  const r=await fetch(API+'/api/admin/wallet/topups',{headers:{'x-admin-token':TOK}});
-  const j=await r.json();
-  if(!j.ok)return;
-  document.getElementById('walletSection').hidden=false;
-  document.querySelector('#wtbl tbody').innerHTML=(j.topups||[]).map(t=>`
-    <tr>
-      <td>${esc(t.id)}</td><td>${esc(t.phone)}</td><td>$${Number(t.amount).toFixed(2)}</td>
-      <td>${esc(t.method)}</td><td>${esc(t.ref||'—')}</td><td>${esc(t.status)}</td>
-      <td>${t.status==='pending'?`<button onclick="approveTp('${esc(t.id)}')">Approve</button> <button class="ghost" onclick="rejectTp('${esc(t.id)}')">Reject</button>`:'—'}</td>
-    </tr>`).join('')||'<tr><td colspan="7">No top-ups yet.</td></tr>';
+  if(!TOK) return;
+  try{
+    const r=await fetch(API+'/api/admin/wallet/topups',{headers:{'x-admin-token':TOK}});
+    const j=await r.json();
+    if(!j.ok) return;
+    const topups=j.topups||[];
+    if(!topups.length){
+      document.getElementById('walletSection').hidden=true;
+      document.getElementById('walletEmpty').style.display='block';
+      return;
+    }
+    document.getElementById('walletSection').hidden=false;
+    document.getElementById('walletEmpty').style.display='none';
+    document.querySelector('#wtbl tbody').innerHTML=topups.map(t=>`
+      <tr>
+        <td>${esc(t.id)}</td>
+        <td>${esc(t.phone)}</td>
+        <td>$${Number(t.amount).toFixed(2)}</td>
+        <td>${esc(t.method==='orange_money'?'🟠 OM':t.method==='binance'?'🟡 Binance':t.method)}</td>
+        <td>${esc(t.ref||'—')}</td>
+        <td><span class="pay ${esc(t.status)}">${esc(t.status.toUpperCase())}</span></td>
+        <td>${t.status==='pending'?`<button onclick="approveTp('${esc(t.id)}')">✅ Approve</button> <button class="ghost" onclick="rejectTp('${esc(t.id)}')">❌ Reject</button>`:esc(t.status)}</td>
+      </tr>`).join('');
+  }catch(e){}
 }
+
 async function approveTp(id){
-  if(!confirm('Confirm you RECEIVED the money before approving!'))return;
+  if(!confirm('Confirm you RECEIVED the money before approving! This will credit the customer balance.')) return;
   const r=await fetch(API+'/api/admin/wallet/approve',{method:'POST',headers:{'Content-Type':'application/json','x-admin-token':TOK},body:JSON.stringify({id})});
   const j=await r.json();
-  alert(j.ok?('✅ Approved. Customer new balance: $'+Number(j.balance).toFixed(2)):('❌ '+(j.error||'failed')));
+  alert(j.ok?('✅ Approved.\nCustomer new balance: $'+Number(j.balance).toFixed(2)):('❌ '+(j.error||'failed')));
   loadWallets();
 }
+
 async function rejectTp(id){
-  const reason=prompt('Reason for rejection:');
-  if(!reason)return;
+  const reason=prompt('Reason for rejection (will be shown to customer):');
+  if(!reason) return;
   const r=await fetch(API+'/api/admin/wallet/reject',{method:'POST',headers:{'Content-Type':'application/json','x-admin-token':TOK},body:JSON.stringify({id,reason})});
   const j=await r.json();
   alert(j.ok?'✅ Rejected.':'❌ '+(j.error||'failed'));
   loadWallets();
 }
+
+/* ===== LIVE ORDER STATUS ===== */
 async function check(id){
   const r=await fetch(API+'/api/order-status',{method:'POST',headers:{'Content-Type':'application/json','x-admin-token':TOK},body:JSON.stringify({id})});
   const j=await r.json();
