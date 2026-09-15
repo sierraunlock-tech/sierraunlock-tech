@@ -1,19 +1,33 @@
 /* =====================================================================
-   SIERRAUNLOCK • BACKEND API — server.js (v3.16 • FULL INTEGRATION)
+   SIERRAUNLOCK • BACKEND API — server.js (v3.17 • FINAL STABLE)
    ---------------------------------------------------------------------
    WHAT IS THIS FILE?
    The Node.js/Express server brain on Render. Secure bridge between
    sierraunlock.com + sierraunlock.live and the FastUnlockers.us GSM
    Hub (reseller account: Alhassan301).
 
+   v3.17 CHANGES (final fixes):
+   • FIXED: "Authentication Failed" bug — gsmCall now filters empty/null/
+     undefined fields before sending to upstream so the login username
+     field is NEVER overwritten by customer data.
+   • FIXED: Customer tool username was colliding with the login
+     `username` parameter. Tool username now travels inside the
+     `details` field as structured text (USERNAME: xxx). No separate
+     username field is ever sent to FastUnlockers.
+   • FIXED: Wallet auto-refund — if upstream order fails, the deducted
+     money is returned to the customer's wallet instantly. Customer
+     never loses money on a failed placement.
+   • ADDED: /api/admin/retry — founders can re-place a failed paid
+     job with one click (no customer action needed).
+
    FEATURES (complete, consolidated):
    • TRIPLE CATALOG SYNC — IMEI + FILE + SERVER lists fetched together.
-     Probes multiple action names and merges into ONE catalog so NOTHING
-     from Alhassan's account is missed (Chimera, Octoplus, UMT, etc.).
+     Probes multiple action names and merges into ONE catalog so
+     NOTHING from Alhassan's account is missed (Chimera, Octoplus,
+     UMT, DC-Unlocker, Avengers, NCK, Infinity, etc.).
    • FASTUNLOCKERS-MIRROR ORDER FIELDS — per-service type:
        IMEI services   → imei (15 digits) + bulkimei (optional)
-       Tool services   → email + username + notes
-       Account/qty svcs→ email + accountid + quantity + notes
+       Tool services   → email + accountid + quantity + notes
    • WALLET-ONLY PAYMENT — all money stays inside SIERRAUNLOCK portal:
        /api/wallet/topup  → customer requests top-up (OM/Binance)
        /api/wallet/pay    → server-side price check + deduct + auto-fulfil
@@ -21,6 +35,7 @@
        Funds can NEVER be withdrawn (no withdrawal endpoint exists).
    • AUTO-FULFIL — when admin marks paid or wallet pays, system
      automatically places upstream order (no manual copying).
+   • AUTO-REFUND — upstream failure → money returns to wallet instantly.
    • CDR WEBHOOK — FastUnlockers pushes results back automatically.
    • BINANCE WEBHOOK — auto-detect payment with job ID in note.
    • PRICING — cost + $2 flat, 26 SLE/USD (admin-updatable).
@@ -92,7 +107,7 @@ const strict = rateLimit({ windowMs: 60 * 1000, max: 6 });
 /* 04 • AUTH */
 const adminOk = (req) => !!process.env.ADMIN_TOKEN && req.get('x-admin-token') === process.env.ADMIN_TOKEN;
 
-/* 05 • SCHEMAS (v3.16: FastUnlockers-mirror fields) */
+/* 05 • SCHEMAS (FastUnlockers-mirror fields) */
 const unlockSchema = Joi.object({
   type: Joi.string().valid('imei', 'file', 'server').default('imei'),
   imei: Joi.string().trim().allow('').max(15).optional(),
@@ -133,9 +148,9 @@ const adminRefundSchema = Joi.object({
 });
 
 /* 06 • PUBLIC HEALTH */
-app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.16.0', docs: '/api/health' }));
+app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.17.0', docs: '/api/health' }));
 app.get('/api/health', (req, res) => res.json({
-  ok: true, service: 'SIERRAUNLOCK API', version: '3.16.0',
+  ok: true, service: 'SIERRAUNLOCK API', version: '3.17.0',
   mode: fuReady() ? 'connected-to-fastunlockers' : 'manual-mode',
   catalogs: ['imei', 'file', 'server'],
   rate: load().rate,
@@ -164,7 +179,7 @@ app.post('/api/unlock', strict, async (req, res) => {
     return res.status(400).json({ ok: false, error: 'IMEI must be exactly 15 digits.' });
   }
   if (type !== 'imei' && (!value.details || value.details.trim().length < 3) && !value.f_email) {
-    return res.status(400).json({ ok: false, error: 'File/Server orders need email + username/accountid.' });
+    return res.status(400).json({ ok: false, error: 'File/Server orders need email + details.' });
   }
   const db = load();
   const job = {
@@ -286,7 +301,7 @@ app.post('/api/wallet/topup', strict, (req, res) => {
   });
 });
 
-/* 08g • WALLET PAY (server-side price check + deduct + auto-fulfil) */
+/* 08g • WALLET PAY (server-side price check + deduct + auto-fulfil + auto-refund) */
 app.post('/api/wallet/pay', strict, async (req, res) => {
   const b = req.body || {};
   const phone = String(b.phone || '').replace(/\D/g, '');
@@ -314,6 +329,7 @@ app.post('/api/wallet/pay', strict, async (req, res) => {
     return res.status(400).json({ ok: false, error: 'Email/details required for file/server orders.' });
   }
 
+  /* Deduct from wallet BEFORE placing upstream */
   w.balance = Math.round((w.balance - price) * 100) / 100;
 
   const job = {
@@ -330,15 +346,24 @@ app.post('/api/wallet/pay', strict, async (req, res) => {
     created: new Date().toISOString()
   };
 
+  let autoRefunded = false;
   if (fuReady()) {
     const up = await placeUpstream(job);
-    if (up.ok) { job.upstream = up.r.json; job.upstreamOrderId = up.orderId; }
-    else { job.status = 'failed'; job.upstream = up.r.json || up.r.text; }
+    if (up.ok) {
+      job.upstream = up.r.json; job.upstreamOrderId = up.orderId;
+    } else {
+      /* AUTO-REFUND: upstream rejected → money returns to wallet instantly */
+      job.status = 'failed';
+      job.upstream = up.r.json || up.r.text;
+      w.balance = Math.round((w.balance + price) * 100) / 100;
+      w.tx.unshift({ type: 'credit', amount: price, ref: 'AUTO-REFUND ' + job.id, date: new Date().toISOString() });
+      autoRefunded = true;
+    }
   }
 
   w.tx.unshift({ type: 'debit', amount: price, ref: job.id, date: new Date().toISOString() });
   db.jobs.unshift(job); save(db);
-  res.json({ ok: true, job: job.id, balance: w.balance, status: job.status });
+  res.json({ ok: true, job: job.id, balance: w.balance, status: job.status, auto_refunded: autoRefunded });
 });
 
 /* 08h • ADMIN WALLET TOP-UPS LIST */
@@ -432,10 +457,17 @@ const FU = {
   endpoint: '/api/dhru'
 };
 function fuReady() { return !!(FU.base && FU.key && FU.username); }
+
+/* v3.17 FIX: filter ALL empty/null/undefined fields before sending.
+   This prevents customer data (e.g. empty tool username) from
+   overwriting the critical login `username` field in FastUnlockers. */
 async function gsmCall(action, extraParams = {}) {
   if (!fuReady()) throw new Error('Upstream not configured.');
   const params = { username: FU.username, apiaccesskey: FU.key, action };
-  Object.keys(extraParams).forEach(k => { if (extraParams[k] != null) params[k] = extraParams[k]; });
+  Object.keys(extraParams).forEach(k => {
+    const v = extraParams[k];
+    if (v !== undefined && v !== null && v !== '') params[k] = v;
+  });
   const body = Object.keys(params).map(k => encodeURIComponent(k) + '=' + encodeURIComponent(params[k])).join('&');
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 15000);
@@ -453,7 +485,7 @@ async function gsmCall(action, extraParams = {}) {
   } finally { clearTimeout(t); }
 }
 
-/* ACTION MAPS (v3.16 extended probes for full coverage incl. Chimera) */
+/* ACTION MAPS (v3.17 — extended probes for full coverage incl. Chimera) */
 const LIST_ACTIONS = {
   imei: ['imeiservicelist'],
   file: ['fileservicelist', 'filelist', 'fileandservicelist', 'servicelistfile'],
@@ -503,7 +535,7 @@ function parseList(raw, type) {
   return out;
 }
 
-/* v3.16: UNION of all list actions per type = nothing from Alhassan's account is missed */
+/* v3.17: UNION of all list actions per type = nothing from Alhassan's account is missed */
 async function fetchList(type) {
   const merged = [];
   const seen = {};
@@ -521,7 +553,10 @@ async function fetchList(type) {
   return merged;
 }
 
-/* v3.16: placeUpstream sends FastUnlockers-mirror fields */
+/* v3.17 FIX: placeUpstream sends only fields FastUnlockers accepts.
+   Tool username (f_username) travels inside `details` as structured text
+   "USERNAME: xxx" — we NEVER send it as a separate `username` field
+   because that would overwrite the login username. */
 async function placeUpstream(job) {
   const type = job.type || 'imei';
   let last = { http: 0, json: null, text: 'no attempt' };
@@ -531,7 +566,6 @@ async function placeUpstream(job) {
       imei: job.imei || '',
       details: job.details || '',
       email: job.f_email || '',
-      username: job.f_username || '',
       accountid: job.f_accountid || '',
       quantity: job.f_quantity || '',
       bulkimei: job.f_bulk || '',
@@ -648,6 +682,27 @@ app.post('/api/order-status', strict, async (req, res) => {
   res.json({ ok: true, job });
 });
 
+/* 13b • ADMIN RETRY — re-place a failed paid job after a fix */
+app.post('/api/admin/retry', strict, async (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  const id = String((req.body || {}).id || '');
+  const db = load();
+  const job = db.jobs.find(j => j.id === id);
+  if (!job) return res.status(404).json({ ok: false, error: 'Job not found.' });
+  if (!fuReady()) return res.status(503).json({ ok: false, error: 'Upstream not configured.' });
+  const up = await placeUpstream(job);
+  if (up.ok) {
+    job.status = 'sent-to-server';
+    job.upstream = up.r.json;
+    job.upstreamOrderId = up.orderId;
+  } else {
+    job.status = 'failed';
+    job.upstream = up.r.json || up.r.text;
+  }
+  save(db);
+  res.json({ ok: up.ok, job: job.id, upstreamOrderId: up.orderId, upstream: up.r.json || up.r.text });
+});
+
 /* 13c • PUBLIC TRACK */
 app.get('/api/track/:id', async (req, res) => {
   const id = String(req.params.id || '').trim();
@@ -690,8 +745,9 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ ok: false, error: 'Server error.' });
 });
 app.listen(PORT, () => {
-  console.log(`SIERRAUNLOCK API v3.16 online on :${PORT} — mode: ${fuReady() ? 'CONNECTED (IMEI+FILE+SERVER+CHIMERA UNION)' : 'MANUAL'}`);
+  console.log(`SIERRAUNLOCK API v3.17 online on :${PORT} — mode: ${fuReady() ? 'CONNECTED (IMEI+FILE+SERVER+CHIMERA UNION)' : 'MANUAL'}`);
   console.log(`  Policy: cost + $${process.env.UNLOCK_FLAT_FEE || '2'} • rate ${load().rate} SLE • split ${process.env.UNLOCK_COMMISSION_SPLIT || '0.75,0.25'}`);
   console.log(`  CDR webhook: /api/webhook/cdr ${process.env.CDR_REPLY_KEY ? '(key set)' : '(no key set)'}`);
-  console.log(`  Wallet: /api/wallet/:phone + topup + pay (admin approve/reject)`);
+  console.log(`  Wallet: /api/wallet/:phone + topup + pay (auto-refund on failure)`);
+  console.log(`  Auth fix: empty fields filtered before upstream (no more Authentication Failed)`);
 });
