@@ -1,16 +1,19 @@
 <!DOCTYPE html>
 <!--
 =====================================================================
-SIERRAUNLOCK • LIVE CATALOG — live-services.html (v2.4 • TRIPLE TYPE)
+SIERRAUNLOCK • LIVE CATALOG — live-services.html (v2.6 • FU-MIRROR)
 ---------------------------------------------------------------------
-v2.4 CHANGES:
-• Shows ALL THREE upstream catalogs: IMEI + FILE + SERVER services
-• Type badges on every card (IMEI / FILE / SERVER)
-• Type filter dropdown + deep links (#t=server / #t=file / #g=frp)
-• Order form adapts by type:
-    - IMEI services  → IMEI (15 digits) required
-    - FILE / SERVER  → Order details (username/email/notes) required
-• Payment instructions + track link + auto-retry kept from v2.3
+v2.6 CHANGES:
+• Order form mirrors FastUnlockers.us EXACTLY per service type:
+    - IMEI services   → IMEI or Serial Number* + Bulk IMEI (optional)
+    - Tool/credit svcs→ Email* + Username* + Notes
+    - Account/qty svcs→ Email* + AccountID* + Quantity* + Notes
+• PAYMENT = WALLET ONLY. All money stays inside SIERRAUNLOCK.
+  Customer tops up wallet (OM/Binance → founder approves) then every
+  purchase deducts from balance automatically. No direct payments
+  to upstream account = fraud lock.
+• Live balance preview inside the order modal when phone is typed
+• Catalog = union of ALL upstream lists (IMEI+FILE+SERVER, Chimera etc.)
 OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
 =====================================================================
 -->
@@ -19,13 +22,13 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Live Unlock Services — SIERRAUNLOCK</title>
-<meta name="description" content="Live catalog of IMEI, File and Server services with instant pricing in USD and Leones.">
+<meta name="description" content="Live catalog of IMEI, File and Server services with instant pricing in USD and Leones. Wallet-secured checkout.">
 <style>
-  :root{--green:#1EB53A;--blue:#0072C6;--navy:#0b1f33;--ink:#12263a;--bg:#f4f8fb}
+  :root{--green:#1EB53A;--blue:#0072C6;--navy:#0b1f33;--ink:#12263a;--bg:#f4f8fb;--err:#e74c3c}
   *{box-sizing:border-box;margin:0;padding:0;font-family:Segoe UI,Arial,sans-serif}
   body{background:var(--bg);color:var(--ink)}
   header{background:linear-gradient(120deg,var(--blue),var(--green));color:#fff;padding:18px 22px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap}
-  header h1{font-size:22px;letter-spacing:.5px}
+  header h1{font-size:22px}
   header a{color:#fff;text-decoration:none;font-weight:600;margin-left:14px}
   .bar{max-width:1100px;margin:18px auto;padding:0 16px;display:flex;gap:10px;flex-wrap:wrap}
   .bar input,.bar select{flex:1;min-width:160px;padding:12px;border:2px solid #d5e3ee;border-radius:10px;font-size:15px}
@@ -35,9 +38,7 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
   .card h3{font-size:15px;line-height:1.35}
   .grp{font-size:12px;color:var(--blue);font-weight:700;text-transform:uppercase}
   .tbadge{font-size:10px;font-weight:800;letter-spacing:.6px;padding:3px 8px;border-radius:6px;display:inline-block;width:max-content}
-  .t-imei{background:#e0f2ff;color:#0a4a7a}
-  .t-file{background:#fff6d6;color:#7a5c00}
-  .t-server{background:#f3e8ff;color:#5b21b6}
+  .t-imei{background:#e0f2ff;color:#0a4a7a}.t-file{background:#fff6d6;color:#7a5c00}.t-server{background:#f3e8ff;color:#5b21b6}
   .meta{font-size:12.5px;color:#5b7186}
   .price{display:flex;gap:10px;align-items:baseline}
   .price b{color:var(--green);font-size:18px}
@@ -46,19 +47,20 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
   button.order:hover{background:#179c31}
   .modal{position:fixed;inset:0;background:rgba(11,31,51,.6);display:none;align-items:center;justify-content:center;padding:16px;z-index:50}
   .modal.open{display:flex}
-  .box{background:#fff;border-radius:16px;max-width:520px;width:100%;padding:22px;max-height:90vh;overflow-y:auto}
+  .box{background:#fff;border-radius:16px;max-width:540px;width:100%;padding:22px;max-height:92vh;overflow-y:auto}
   .box h2{font-size:18px;margin-bottom:6px}
   .box p{font-size:13px;color:#5b7186;margin-bottom:12px}
   .box label{font-size:12.5px;font-weight:700;display:block;margin:8px 0 4px}
+  .req{color:var(--err)}
   .box input,.box textarea{width:100%;padding:11px;border:2px solid #d5e3ee;border-radius:10px;font-size:15px;font-family:inherit}
-  .box textarea{min-height:80px;resize:vertical}
+  .box textarea{min-height:70px;resize:vertical}
   .row{display:flex;gap:10px;margin-top:16px}
   .row button{flex:1;padding:12px;border-radius:10px;border:0;font-weight:700;cursor:pointer}
   .go{background:var(--green);color:#fff}.cancel{background:#e5edf3;color:var(--ink)}
   .done{background:#e9f9ee;border:2px solid var(--green);border-radius:12px;padding:16px;margin-top:12px;font-size:14px;display:none;line-height:1.6}
+  .done.bad{background:#fdecec;border-color:var(--err)}
   .done a{color:var(--blue);font-weight:700;text-decoration:none}
-  .pay-method{padding:10px;background:#f4f8fb;border-radius:10px;margin:6px 0;border-left:4px solid var(--blue)}
-  .pay-method .detail{font-family:'Courier New',monospace;font-weight:700;color:var(--blue)}
+  .payinfo{background:#f4f8fb;border:2px solid var(--blue);border-radius:10px;padding:10px;font-size:13px;line-height:1.5}
   .job-id-display{background:var(--navy);color:#fff;padding:10px 14px;border-radius:8px;font-family:'Courier New',monospace;font-weight:700;text-align:center;margin:10px 0}
   footer{background:var(--navy);color:#cfe3f5;text-align:center;padding:18px;font-size:13px}
 </style>
@@ -66,7 +68,7 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
 <body>
 <header>
   <h1>SIERRAUNLOCK — Live Services</h1>
-  <nav><a href="index.html">Home</a><a href="services.html">Our Services</a></nav>
+  <nav><a href="index.html">Home</a><a href="wallet.html">💰 My Wallet</a></nav>
 </header>
 
 <div class="bar">
@@ -87,19 +89,30 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
   <div class="box">
     <h2 id="mName"></h2>
     <p id="mMeta"></p>
-    <label id="imeiLabel">IMEI (15 digits — dial *#06# to see it)</label>
+
+    <label id="imeiLabel">IMEI or Serial Number <span class="req">*</span></label>
     <input id="imei" inputmode="numeric" maxlength="15" placeholder="35xxxxxxxxxxxxx">
-    <label id="detLabel" style="display:none">Order details (username / email / file link / notes)</label>
-    <textarea id="details" style="display:none" placeholder="e.g. tool username, email, or instructions for the server"></textarea>
-    <label>Your WhatsApp phone number</label>
+    <label id="bulkLabel">Bulk IMEI <small>(optional — one per line)</small></label>
+    <textarea id="bulk" placeholder="Several serial numbers, one per line"></textarea>
+
+    <label id="emailLabel">Email <span class="req">*</span></label>
+    <input id="f_email" type="email" placeholder="your@email.com">
+    <label id="userLabel">Username <span class="req">*</span></label>
+    <input id="f_username" placeholder="Tool username">
+    <label id="accLabel">Account ID <span class="req">*</span></label>
+    <input id="f_accountid" placeholder="Account ID">
+    <label id="qtyLabel">Quantity <span class="req">*</span> <small>(min 1)</small></label>
+    <input id="f_quantity" inputmode="numeric" placeholder="e.g. 5">
+
+    <label>Notes <small>(optional)</small></label>
+    <textarea id="details" placeholder="Any additional notes or information you want included with your order…"></textarea>
+
+    <label>Your WhatsApp phone number <span class="req">*</span></label>
     <input id="phone" inputmode="tel" placeholder="+232 75 …">
-    <label>Brand / Model (optional)</label>
-    <input id="model" placeholder="e.g. Apple iPhone 13">
-    <label>Payment method</label>
-    <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <label style="flex:1;min-width:150px;background:#f4f8fb;border:2px solid var(--blue);border-radius:10px;padding:10px;font-size:13px;cursor:pointer;text-align:center;font-weight:700"><input type="radio" name="paymethod" value="whatsapp" checked style="width:auto;margin-right:6px">WhatsApp / OM / Binance</label>
-      <label style="flex:1;min-width:150px;background:#f4f8fb;border:2px solid #d5e3ee;border-radius:10px;padding:10px;font-size:13px;cursor:pointer;text-align:center;font-weight:700"><input type="radio" name="paymethod" value="wallet" style="width:auto;margin-right:6px">💰 Pay from my balance</label>
-    </div>
+
+    <label>💰 Payment — SIERRAUNLOCK Wallet (secured)</label>
+    <div class="payinfo" id="payInfo">Type your WhatsApp number to see your balance. All purchases deduct from your SIERRAUNLOCK wallet — never pay outside this platform.</div>
+
     <div class="done" id="done"></div>
     <div class="row">
       <button class="cancel" onclick="closeM()">Cancel</button>
@@ -112,21 +125,17 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
 
 <script>
 const API='https://sierraunlock-tech-1-4um3.onrender.com';
-const WA='23275908206';
-let ALL=[],cur=null;
+let ALL=[],cur=null,RATE=26,balTimer=null;
+const $=id=>document.getElementById(id);
 const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const show=(id,on)=>{ $(id).style.display = on ? 'block' : 'none'; };
+fetch(API+'/api/rates').then(r=>r.json()).then(j=>{ if(j&&j.slePerUsd) RATE=j.slePerUsd; }).catch(()=>{});
 
-/* deep links: #g=frp (group) and #t=server (type) */
 (function(){
   const mg=(location.hash||'').match(/g=([a-z]+)/i);
   if(mg){
     const key=mg[1].toLowerCase();
-    const MAP={
-      network:['network','carrier','unlock code','worldwide','at&t','t-mobile','vodafone','orange'],
-      frp:['frp','icloud','bypass','activator','ramdisk','passcode','mdm'],
-      checks:['check','checker','info'],
-      tools:['tool','license','cm2','iapro','iremove','infinity','chimera','octoplus','umt']
-    };
+    const MAP={network:['network','carrier','unlock code','worldwide'],frp:['frp','icloud','bypass','activator','ramdisk','passcode','mdm'],checks:['check','checker','info'],tools:['tool','license','cm2','iapro','iremove','infinity','chimera','octoplus','umt']};
     window.__groupFilter=MAP[key]||[key];
   }
   const mt=(location.hash||'').match(/t=([a-z]+)/i);
@@ -139,38 +148,31 @@ async function load(){
     const j=await r.json();
     if(!j.ok)throw 0;
     ALL=j.services||[];
-    document.getElementById('count').textContent=ALL.length+' live services';
+    $('count').textContent=ALL.length+' live services';
     const gs=[...new Set(ALL.map(s=>s.group))].sort();
-    document.getElementById('grp').innerHTML='<option value="">All groups</option>'+gs.map(g=>`<option>${esc(g)}</option>`).join('');
-    if(window.__typeFilter){
-      const sel=document.getElementById('type');
-      if([...sel.options].some(o=>o.value===window.__typeFilter)) sel.value=window.__typeFilter;
-    }
+    $('grp').innerHTML='<option value="">All groups</option>'+gs.map(g=>`<option>${esc(g)}</option>`).join('');
+    if(window.__typeFilter){ const sel=$('type'); if([...sel.options].some(o=>o.value===window.__typeFilter)) sel.value=window.__typeFilter; }
     if(window.__groupFilter){
       const hit=gs.find(g=>{const gl=g.toLowerCase();return window.__groupFilter.some(k=>gl.includes(k));});
-      if(hit)document.getElementById('grp').value=hit;
+      if(hit)$('grp').value=hit;
     }
     render();
   }catch(e){
     if((window.__retries=(window.__retries||0)+1)<=3){
-      document.getElementById('count').textContent='Waking server… retry '+window.__retries+'/3';
+      $('count').textContent='Waking server… retry '+window.__retries+'/3';
       setTimeout(load,15000);
     }else{
-      document.getElementById('count').innerHTML='Catalog offline — <a href="live-services.html" style="color:#7cc4ff">reload page</a>';
+      $('count').innerHTML='Catalog offline — <a href="live-services.html" style="color:#7cc4ff">reload page</a>';
     }
   }
 }
 
 function render(){
-  const q=document.getElementById('q').value.toLowerCase();
-  const g=document.getElementById('grp').value;
-  const ty=document.getElementById('type').value;
-  const list=ALL.filter(s=>
-    (!ty||s.type===ty)&&
-    (!g||s.group===g)&&
-    (!q||(s.name+' '+s.group).toLowerCase().includes(q))
-  ).slice(0,300);
-  document.getElementById('grid').innerHTML=list.map(s=>`
+  const q=$('q').value.toLowerCase();
+  const g=$('grp').value;
+  const ty=$('type').value;
+  const list=ALL.filter(s=>(!ty||s.type===ty)&&(!g||s.group===g)&&(!q||(s.name+' '+s.group).toLowerCase().includes(q))).slice(0,300);
+  $('grid').innerHTML=list.map(s=>`
     <div class="card">
       <span class="tbadge t-${esc(s.type||'imei')}">${esc((s.type||'imei').toUpperCase())}</span>
       <div class="grp">${esc(s.group)}</div>
@@ -183,71 +185,105 @@ function render(){
 
 function openM(s){
   cur=s;
-  document.getElementById('mName').textContent=s.name;
-  document.getElementById('mMeta').textContent=`${(s.type||'imei').toUpperCase()} • ${s.group} • $${s.priceUsd} (Le ${s.priceSle.toLocaleString()}) • ${s.time||'—'}`;
+  $('mName').textContent=s.name;
+  $('mMeta').textContent=`${(s.type||'imei').toUpperCase()} • ${s.group} • $${s.priceUsd} (Le ${s.priceSle.toLocaleString()}) • ${s.time||'—'}`;
+  const nm=((s.name||'')+' '+(s.group||'')).toLowerCase();
   const isImei=(s.type||'imei')==='imei';
-  document.getElementById('imeiLabel').style.display=isImei?'block':'none';
-  document.getElementById('imei').style.display=isImei?'block':'none';
-  document.getElementById('detLabel').style.display=isImei?'none':'block';
-  document.getElementById('details').style.display=isImei?'none':'block';
-  document.getElementById('done').style.display='none';
-  document.getElementById('modal').classList.add('open');
+  const needsAcc=/ufi|accountid|account id|transfer credit|quantity/i.test(nm);
+  const needsUser=!isImei&&!needsAcc;
+  show('imeiLabel',isImei); show('imei',isImei);
+  show('bulkLabel',isImei); show('bulk',isImei);
+  show('emailLabel',!isImei); show('f_email',!isImei);
+  show('userLabel',needsUser); show('f_username',needsUser);
+  show('accLabel',needsAcc); show('f_accountid',needsAcc);
+  show('qtyLabel',needsAcc); show('f_quantity',needsAcc);
+  $('details').value=''; $('done').style.display='none';
+  $('modal').classList.add('open');
+  showBal();
 }
-function closeM(){document.getElementById('modal').classList.remove('open');}
+function closeM(){$('modal').classList.remove('open');}
 
-document.getElementById('q').addEventListener('input',render);
-document.getElementById('grp').addEventListener('change',render);
-document.getElementById('type').addEventListener('change',render);
-
-document.getElementById('send').onclick=async()=>{
-  const type=(cur&&cur.type)||'imei';
-  const imei=document.getElementById('imei').value.trim();
-  const details=document.getElementById('details').value.trim();
-  const phone=document.getElementById('phone').value.trim();
-  const model=document.getElementById('model').value.trim();
-  if(type==='imei' && !/^\d{15}$/.test(imei)){alert('IMEI must be exactly 15 digits.');return;}
-  if(type!=='imei' && details.length<3){alert('Please enter the order details (username / email / notes).');return;}
-  if(phone.length<9){alert('Enter a valid WhatsApp number.');return;}
-  const brand=(model.split(' ')[0]||'Phone');
-  const btn=document.getElementById('send');
-  btn.disabled=true; btn.textContent='Submitting…';
+$('phone').addEventListener('input',()=>{ clearTimeout(balTimer); balTimer=setTimeout(showBal,500); });
+async function showBal(){
+  const d=($('phone').value||'').replace(/\D/g,'');
+  const info=$('payInfo');
+  if(d.length<9){ info.innerHTML='Type your WhatsApp number to see your balance. All purchases deduct from your SIERRAUNLOCK wallet — never pay outside this platform.'; return; }
   try{
-    const payMethod=(document.querySelector('input[name="paymethod"]:checked')||{}).value||'whatsapp';
-    if(payMethod==='wallet'){
-      const rw=await fetch(API+'/api/wallet/pay',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({type,imei,details,brand,model,phone,serviceId:cur.id})});
-      const jw=await rw.json();
-      if(jw.ok){
-        const d=document.getElementById('done');
-        d.style.display='block';
-        d.innerHTML=`<b>✅ Paid from balance — order placed automatically!</b>`+
-          `<div class="job-id-display">📋 Job: ${esc(jw.job)}</div>`+
-          `💰 Remaining balance: <b>$${Number(jw.balance).toFixed(2)}</b><br>`+
-          `📍 <a href="track.html?id=${encodeURIComponent(jw.job)}" target="_blank">Track your order live →</a> · `+
-          `<a href="wallet.html?phone=${encodeURIComponent(phone)}">View wallet →</a>`;
-      }else{ alert(jw.error||'Wallet payment failed.'); }
-      btn.disabled=false; btn.textContent='Submit Order';
-      return;
-    }
-    const r=await fetch(API+'/api/unlock',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({type,imei,details,brand,model,phone,serviceId:cur.id,serviceName:cur.name})});
+    const r=await fetch(API+'/api/wallet/'+d);
     const j=await r.json();
     if(j.ok){
-      const jobId=j.job;
-      const msg=encodeURIComponent(`SIERRAUNLOCK order ${jobId}: ${cur.name} (ID ${cur.id}) — ${type==='imei'?('IMEI '+imei):('Details: '+details)}. I have completed payment.`);
-      const d=document.getElementById('done');
-      d.style.display='block';
-      d.innerHTML=
-        `<b>✅ Order <span style="color:var(--green)">${esc(jobId)}</span> received!</b>`+
-        `<div class="job-id-display">📋 Your Job ID: ${esc(jobId)}</div>`+
-        `<b>💳 PAYMENT INSTRUCTIONS:</b>`+
-        `<div class="pay-method">🟠 <b>Orange Money</b><br><span class="detail">+232 75 908 206</span></div>`+
-        `<div class="pay-method">🟡 <b>Binance Pay</b> (auto-detect)<br><span class="detail">ID: 754378475</span><br><small>Note: "${esc(jobId)}"</small></div>`+
-        `<div class="pay-method">💵 <b>Cash</b><br><small>Waterloo or Koidu hub</small></div>`+
-        `📍 <a href="track.html?id=${encodeURIComponent(jobId)}" target="_blank">Track your order live →</a><br>`+
-        `💬 <a target="_blank" href="https://wa.me/${WA}?text=${msg}">Confirm payment on WhatsApp →</a>`;
-    }else{alert('Order failed: '+(j.error||'try again'));}
-  }catch(e){alert('Network error: '+(e.message||'try again'));}
+      info.innerHTML=`💰 Balance for +${d}: <b>$${Number(j.balance).toFixed(2)}</b> (Le ${Math.round(j.balance*RATE).toLocaleString()}) · <a href="wallet.html?phone=${d}" target="_blank">Add Fund →</a><br><small>Price of this service: $${cur?cur.priceUsd:0} — deducted automatically on submit.</small>`;
+    }
+  }catch(e){}
+}
+
+$('q').addEventListener('input',render);
+$('grp').addEventListener('change',render);
+$('type').addEventListener('change',render);
+window.addEventListener('hashchange',()=>{
+  const mt=(location.hash||'').match(/t=([a-z]+)/i);
+  const mg=(location.hash||'').match(/g=([a-z]+)/i);
+  if(mt){ const sel=$('type'); const v=mt[1].toLowerCase(); if([...sel.options].some(o=>o.value===v)) sel.value=v; }
+  if(mg){
+    const key=mg[1].toLowerCase();
+    const MAP={network:['network','carrier','unlock code','worldwide'],frp:['frp','icloud','bypass','activator','ramdisk','passcode','mdm'],checks:['check','checker','info'],tools:['tool','license','cm2','iapro','iremove','infinity','chimera','octoplus','umt']};
+    const keys=MAP[key]||[key];
+    const hit=[...new Set(ALL.map(s=>s.group))].find(g=>{const gl=g.toLowerCase();return keys.some(k=>gl.includes(k));});
+    if(hit)$('grp').value=hit;
+  }
+  render();
+});
+
+$('send').onclick=async()=>{
+  if(!cur) return;
+  const type=(cur.type||'imei');
+  const nm=((cur.name||'')+' '+(cur.group||'')).toLowerCase();
+  const isImei=type==='imei';
+  const needsAcc=/ufi|accountid|account id|transfer credit|quantity/i.test(nm);
+  const needsUser=!isImei&&!needsAcc;
+  const imei=$('imei').value.trim();
+  const bulk=$('bulk').value.trim();
+  const f_email=$('f_email').value.trim();
+  const f_username=$('f_username').value.trim();
+  const f_accountid=$('f_accountid').value.trim();
+  const f_quantity=$('f_quantity').value.trim();
+  const notes=$('details').value.trim();
+  const phone=$('phone').value.trim();
+  if(isImei && !/^\d{15}$/.test(imei)){ alert('IMEI must be exactly 15 digits.'); return; }
+  if(!isImei && !/^\S+@\S+\.\S+$/.test(f_email)){ alert('Enter a valid email.'); return; }
+  if(needsUser && f_username.length<2){ alert('Enter the tool username.'); return; }
+  if(needsAcc && f_accountid.length<1){ alert('Enter the Account ID.'); return; }
+  if(needsAcc && (!/^\d+$/.test(f_quantity) || Number(f_quantity)<1)){ alert('Quantity must be a number ≥ 1.'); return; }
+  if(phone.replace(/\D/g,'').length<9){ alert('Enter a valid WhatsApp number.'); return; }
+  const parts=[];
+  if(!isImei) parts.push('EMAIL: '+f_email);
+  if(needsUser) parts.push('USERNAME: '+f_username);
+  if(needsAcc){ parts.push('ACCOUNTID: '+f_accountid); parts.push('QTY: '+f_quantity); }
+  if(isImei && bulk) parts.push('BULK: '+bulk.replace(/\n/g,', '));
+  if(notes) parts.push('NOTES: '+notes);
+  const details=parts.join(' | ');
+  const btn=$('send');
+  btn.disabled=true; btn.textContent='Processing…';
+  try{
+    const r=await fetch(API+'/api/wallet/pay',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type,imei,details,f_email,f_username,f_accountid,f_quantity,f_bulk:bulk,brand:'Phone',model:'',phone,serviceId:cur.id})});
+    const j=await r.json();
+    const d=$('done'); d.style.display='block';
+    if(j.ok){
+      d.className='done';
+      d.innerHTML=`<b>✅ Payment verified from wallet — order placed automatically!</b>`+
+        `<div class="job-id-display">📋 Job: ${esc(j.job)}</div>`+
+        `💰 Remaining balance: <b>$${Number(j.balance).toFixed(2)}</b><br>`+
+        `📍 <a href="track.html?id=${encodeURIComponent(j.job)}" target="_blank">Track your order live →</a> · `+
+        `<a href="wallet.html?phone=${encodeURIComponent(phone.replace(/\D/g,''))}" target="_blank">My wallet →</a>`;
+    }else if((j.error||'').indexOf('Insufficient')===0){
+      d.className='done bad';
+      d.innerHTML=`⚠️ <b>${esc(j.error)}</b><br>Funds can only be added through the official wallet (founder-verified).<br>👉 <a href="wallet.html?phone=${encodeURIComponent(phone.replace(/\D/g,''))}" target="_blank">Add Fund now →</a>`;
+    }else{
+      d.className='done bad';
+      d.innerHTML='❌ '+esc(j.error||'Order failed. Try again.');
+    }
+  }catch(e){ alert('Network error: '+(e.message||'try again')); }
   btn.disabled=false; btn.textContent='Submit Order';
 };
 load();
