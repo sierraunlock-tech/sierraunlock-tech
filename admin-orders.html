@@ -1,11 +1,14 @@
 <!DOCTYPE html>
 <!--
 =====================================================================
-SIERRAUNLOCK • FOUNDER ORDER DESK — admin-orders.html (v2.1 • WALLET)
+SIERRAUNLOCK • FOUNDER ORDER DESK — admin-orders.html (v2.2 • RETRY)
 ---------------------------------------------------------------------
 WHAT IS THIS FILE?
 The founder-only control panel for managing customer orders + wallet
-top-up approvals. v2.1 adds:
+top-up approvals. v2.2 adds:
+• 🔄 Retry Upstream button on failed jobs (server v3.17 /api/admin/retry)
+• 💸 Auto-refund indicator on failed wallet-paid jobs
+• ⏱ Optional auto-refresh every 20 seconds (tick the checkbox)
 • Payment status tracking (unpaid / paid / refunded)
 • "Mark Paid" button — auto-fulfils upstream
 • "Refund" button — founder-only after fraud review
@@ -13,7 +16,7 @@ top-up approvals. v2.1 adds:
 • Live order status check
 
 SECURITY:
-• Admin token required (founder-only access)
+• Admin token required (founder-only access) — NEVER share with customers
 • Refund lock: once paid, customer cannot reverse
 • Wallet top-ups require manual founder approval after money received
 
@@ -33,15 +36,18 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
   p.sub{color:#8fb3cc;font-size:13px;margin-bottom:16px}
   .warn{background:#3a2b00;border:1px solid #ffb020;color:#ffd97a;border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:16px}
   input,button,select{padding:11px 14px;border-radius:10px;border:1px solid #2b3d52;background:#16202e;color:#e6f0f8;font-size:14px}
+  input[type="checkbox"]{width:auto;padding:0}
   button{cursor:pointer;font-weight:700;background:var(--green);border:0;color:#fff;margin:2px}
   button.sec{background:var(--blue)}
   button.danger{background:#e74c3c}
   button.ghost{background:#22314a}
+  label.auto{display:inline-flex;align-items:center;gap:6px;margin-left:12px;font-size:13px;color:#8fb3cc;cursor:pointer}
   table{width:100%;border-collapse:collapse;margin-top:16px;font-size:13px}
   th,td{border:1px solid #22314a;padding:8px;text-align:left;vertical-align:top}
   th{background:#16202e}
   .st{font-weight:700}.queued{color:#ffd97a}.sent-to-server,.processing{color:#7cc4ff}.solved{color:#7dff9b}.failed{color:#ff8f8f}
   .pay{font-weight:700}.unpaid{color:#ffd97a}.paid{color:#7dff9b}.refunded{color:#ff8f8f}
+  .note{display:block;margin-top:4px;font-size:11px;color:#ffd97a}
   pre{background:#0a121c;border:1px solid #22314a;border-radius:8px;padding:8px;font-size:11px;max-width:420px;overflow:auto;white-space:pre-wrap}
   .modal{position:fixed;inset:0;background:rgba(11,31,51,.8);display:none;align-items:center;justify-content:center;padding:16px;z-index:50}
   .modal.open{display:flex}
@@ -61,11 +67,12 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
 <body>
 <h1>SIERRAUNLOCK — Founder Order Desk</h1>
 <p class="sub">Confirm payment → auto-fulfil upstream. Refunds require fraud review. Wallet top-ups require money-received confirmation.</p>
-<div class="warn">⚠ MONEY SAFETY: Once marked paid, customer cannot reverse (crypto/OM/cash are final). Only founders can refund via admin token + reason. Wallet top-ups: APPROVE only after you have confirmed the money arrived.</div>
+<div class="warn">⚠ MONEY SAFETY: Once marked paid, customer cannot reverse (crypto/OM/cash are final). Only founders can refund via admin token + reason. Wallet top-ups: APPROVE only after you have confirmed the money arrived. Failed wallet orders are auto-refunded by the server.</div>
 
 <input type="password" id="token" placeholder="Admin token" size="40">
 <button onclick="connect()">Connect</button>
 <button class="sec" onclick="loadJobs()">Refresh Jobs</button>
+<label class="auto"><input type="checkbox" id="autoRef"> Auto-refresh every 20s</label>
 
 <h2 class="section-title">💰 Wallet Top-Up Approvals</h2>
 <div id="walletSection" style="margin-top:8px" hidden>
@@ -114,7 +121,7 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
 
 <script>
 const API='https://sierraunlock-tech-1-4um3.onrender.com';
-let TOK='', currentJobId=null;
+let TOK='', currentJobId=null, refTimer=null;
 const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 function connect(){
@@ -127,6 +134,12 @@ function connect(){
 window.addEventListener('load',()=>{
   const t=sessionStorage.getItem('su_tok');
   if(t){ TOK=t; document.getElementById('token').value=t; loadJobs(); }
+});
+
+/* optional auto-refresh every 20 seconds */
+document.getElementById('autoRef').addEventListener('change',function(){
+  if(this.checked){ refTimer=setInterval(()=>{ if(TOK) loadJobs(); },20000); }
+  else { clearInterval(refTimer); refTimer=null; }
 });
 
 async function loadJobs(){
@@ -145,11 +158,12 @@ async function loadJobs(){
      <td>${job.type==='imei' ? esc(job.imei||'—') : esc((job.details||'').slice(0,80))}</td>
      <td>${esc(job.phone||job.customer||'—')}</td>
      <td class="pay ${esc(job.payment_status||'unpaid')}">${esc((job.payment_status||'unpaid').toUpperCase())}<br><small>${esc(job.payment_method||'—')}</small></td>
-     <td class="st ${esc(job.status)}">${esc(job.status)}</td>
+     <td class="st ${esc(job.status)}">${esc(job.status)}${ (job.status==='failed' && job.payment_method==='wallet') ? '<span class="note">💸 auto-refunded to wallet</span>' : '' }</td>
      <td>
        ${ (job.payment_status||'unpaid')==='unpaid' ? `<button onclick="openPayModal('${esc(job.id)}')">Mark Paid</button>`:'' }
        ${ (job.payment_status||'unpaid')==='paid' ? `<button class="danger" onclick="openRefundModal('${esc(job.id)}')">Refund</button>`:'' }
        ${ job.upstreamOrderId ? `<br><br><button class="sec" onclick="check('${esc(job.id)}')">Check Status</button>`:'' }
+       ${ job.status==='failed' ? `<br><br><button class="sec" onclick="retryJob('${esc(job.id)}')">🔄 Retry Upstream</button>`:'' }
      </td>
      <td>${job.live?`<pre>${esc(JSON.stringify(job.live).slice(0,400))}</pre>`:(job.upstreamOrderId?`<small>order ${esc(job.upstreamOrderId)}</small>`:'—')}</td>
    </tr>`).join('')||'<tr><td colspan="9">No jobs yet.</td></tr>';
@@ -235,6 +249,15 @@ async function rejectTp(id){
   const j=await r.json();
   alert(j.ok?'✅ Rejected.':'❌ '+(j.error||'failed'));
   loadWallets();
+}
+
+/* ===== RETRY FAILED UPSTREAM ORDER (server v3.17) ===== */
+async function retryJob(id){
+  if(!confirm('Re-place this failed order upstream now?')) return;
+  const r=await fetch(API+'/api/admin/retry',{method:'POST',headers:{'Content-Type':'application/json','x-admin-token':TOK},body:JSON.stringify({id})});
+  const j=await r.json();
+  alert(j.ok?('✅ Re-placed! Upstream order: '+(j.upstreamOrderId||'see reply')):('❌ '+JSON.stringify(j.upstream||j.error).slice(0,300)));
+  loadJobs();
 }
 
 /* ===== LIVE ORDER STATUS ===== */
