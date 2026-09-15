@@ -1,70 +1,16 @@
 <!DOCTYPE html>
 <!--
 =====================================================================
-SIERRAUNLOCK • LIVE UNLOCK SERVICES CATALOG — live-services.html (v2.3)
+SIERRAUNLOCK • LIVE CATALOG — live-services.html (v2.4 • TRIPLE TYPE)
 ---------------------------------------------------------------------
-WHAT IS THIS FILE?
-A standalone customer-facing page that displays the REAL live catalog
-of 248+ unlock, IMEI check, bypass and tool-license services pulled
-from Alhassan's FastUnlockers account via the backend API.
-Customers can:
-  • Browse 248+ services (iPhone, Samsung, Xiaomi, Huawei, FRP, etc.)
-  • See ONLY the SIERRAUNLOCK selling price in USD AND Leones
-    (wholesale cost is a business secret — never shown here)
-  • Search by name or filter by service group
-  • Open the page with a pre-selected group via deep links:
-        live-services.html#g=network   (carrier & network unlocks)
-        live-services.html#g=frp       (FRP / iCloud / passcode bypass)
-        live-services.html#g=checks    (IMEI & info checkers)
-        live-services.html#g=tools     (tool licenses: CM2, iAPro…)
-  • Click "Order Now" → enter IMEI + WhatsApp → submit order
-  • After submission: see clear PAYMENT INSTRUCTIONS (Orange Money /
-    Binance / Cash) + track link + WhatsApp confirmation link
-
-v2.3 CHANGES (Pack 4):
-• Order success modal now shows full payment instructions:
-  🟠 Orange Money: +232 75 908 206 (Alhassan)
-  🟡 Binance Pay: ID 754378475 (include job ID in note for auto-detect)
-  💵 Cash: Visit Waterloo or Koidu hub
-• Track-your-order link included in success modal
-• WhatsApp confirm link for payment verification
-
-HOW IT WORKS:
-1. Page loads → fetches /api/services from the Render backend
-2. Backend calls FastUnlockers GSM Hub API (imeiservicelist action)
-3. Backend flattens the nested reply + applies the founder profit
-   formula (wholesale cost + $2 flat; cost hidden from public)
-4. This page renders cards with $ price + Le price + BUY button
-5. Customer clicks Order Now → modal opens → enters IMEI + phone
-6. Form submits to /api/unlock → job created with status "queued"
-   and payment_status = "unpaid"
-7. Payment instructions shown → customer pays via OM/Binance/cash
-8. Founder opens admin-orders.html → confirms payment → auto-fulfil
-9. Result/code returned to customer via track.html + WhatsApp
-
-DEEP-LINK GROUP FILTER:
-The Services mega-menu (main.js v9.4) links here with #g= hashes.
-On load, the page reads the hash and pre-selects the matching group
-in the filter dropdown so customers land exactly where they clicked.
-
-AUTO-RETRY LOGIC:
-Render free tier sleeps after inactivity; first wake takes ~50 s.
-This page auto-retries up to 3 times (every 15 s) showing
-"Waking server… retry X/3", then offers a friendly reload link.
-
-SECURITY & PRIVACY:
-• Wholesale cost (costUsd) is NEVER rendered or requested here
-• Only job ID + IMEI + phone are submitted; no permanent storage
-• Money safety: upstream orders require the founder admin token;
-  customers can never trigger spending on Alhassan's balance
-• Payments go to SIERRAUNLOCK desks first (Orange Money / Binance /
-  cash); refunds are founder-only after fraud review (site policy)
-
-ACCESS:
-• Public: any visitor can browse + order (all devices, responsive)
-• Founders: admin-orders.html by direct URL + admin token
-• Linked: Services mega-menu on every page (main.js v9.4)
-
+v2.4 CHANGES:
+• Shows ALL THREE upstream catalogs: IMEI + FILE + SERVER services
+• Type badges on every card (IMEI / FILE / SERVER)
+• Type filter dropdown + deep links (#t=server / #t=file / #g=frp)
+• Order form adapts by type:
+    - IMEI services  → IMEI (15 digits) required
+    - FILE / SERVER  → Order details (username/email/notes) required
+• Payment instructions + track link + auto-retry kept from v2.3
 OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
 =====================================================================
 -->
@@ -73,7 +19,7 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Live Unlock Services — SIERRAUNLOCK</title>
-<meta name="description" content="Live catalog of 248+ unlock, IMEI check, bypass and tool-license services with instant pricing in USD and Leones.">
+<meta name="description" content="Live catalog of IMEI, File and Server services with instant pricing in USD and Leones.">
 <style>
   :root{--green:#1EB53A;--blue:#0072C6;--navy:#0b1f33;--ink:#12263a;--bg:#f4f8fb}
   *{box-sizing:border-box;margin:0;padding:0;font-family:Segoe UI,Arial,sans-serif}
@@ -82,12 +28,16 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
   header h1{font-size:22px;letter-spacing:.5px}
   header a{color:#fff;text-decoration:none;font-weight:600;margin-left:14px}
   .bar{max-width:1100px;margin:18px auto;padding:0 16px;display:flex;gap:10px;flex-wrap:wrap}
-  .bar input,.bar select{flex:1;min-width:200px;padding:12px;border:2px solid #d5e3ee;border-radius:10px;font-size:15px}
+  .bar input,.bar select{flex:1;min-width:160px;padding:12px;border:2px solid #d5e3ee;border-radius:10px;font-size:15px}
   .count{background:var(--navy);color:#fff;border-radius:10px;padding:12px 16px;font-weight:700}
   .grid{max-width:1100px;margin:0 auto 60px;padding:0 16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
   .card{background:#fff;border:1px solid #e1ecf4;border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:8px;box-shadow:0 2px 8px rgba(18,38,58,.06)}
   .card h3{font-size:15px;line-height:1.35}
   .grp{font-size:12px;color:var(--blue);font-weight:700;text-transform:uppercase}
+  .tbadge{font-size:10px;font-weight:800;letter-spacing:.6px;padding:3px 8px;border-radius:6px;display:inline-block;width:max-content}
+  .t-imei{background:#e0f2ff;color:#0a4a7a}
+  .t-file{background:#fff6d6;color:#7a5c00}
+  .t-server{background:#f3e8ff;color:#5b21b6}
   .meta{font-size:12.5px;color:#5b7186}
   .price{display:flex;gap:10px;align-items:baseline}
   .price b{color:var(--green);font-size:18px}
@@ -100,18 +50,16 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
   .box h2{font-size:18px;margin-bottom:6px}
   .box p{font-size:13px;color:#5b7186;margin-bottom:12px}
   .box label{font-size:12.5px;font-weight:700;display:block;margin:8px 0 4px}
-  .box input{width:100%;padding:11px;border:2px solid #d5e3ee;border-radius:10px;font-size:15px}
+  .box input,.box textarea{width:100%;padding:11px;border:2px solid #d5e3ee;border-radius:10px;font-size:15px;font-family:inherit}
+  .box textarea{min-height:80px;resize:vertical}
   .row{display:flex;gap:10px;margin-top:16px}
   .row button{flex:1;padding:12px;border-radius:10px;border:0;font-weight:700;cursor:pointer}
   .go{background:var(--green);color:#fff}.cancel{background:#e5edf3;color:var(--ink)}
   .done{background:#e9f9ee;border:2px solid var(--green);border-radius:12px;padding:16px;margin-top:12px;font-size:14px;display:none;line-height:1.6}
   .done a{color:var(--blue);font-weight:700;text-decoration:none}
-  .done a:hover{text-decoration:underline}
-  .pay-method{padding:12px;background:#f4f8fb;border-radius:10px;margin:6px 0;border-left:4px solid var(--blue)}
-  .pay-method b{color:var(--navy)}
-  .pay-method .detail{font-family:'Courier New',monospace;font-weight:700;color:var(--blue);font-size:14px}
-  .pay-note{background:#fff6d6;border:1px solid #ffb020;border-radius:8px;padding:10px;font-size:12.5px;margin-top:8px;color:#7a5c00}
-  .job-id-display{background:var(--navy);color:#fff;padding:10px 14px;border-radius:8px;font-family:'Courier New',monospace;font-weight:700;letter-spacing:1px;text-align:center;margin:10px 0;font-size:15px}
+  .pay-method{padding:10px;background:#f4f8fb;border-radius:10px;margin:6px 0;border-left:4px solid var(--blue)}
+  .pay-method .detail{font-family:'Courier New',monospace;font-weight:700;color:var(--blue)}
+  .job-id-display{background:var(--navy);color:#fff;padding:10px 14px;border-radius:8px;font-family:'Courier New',monospace;font-weight:700;text-align:center;margin:10px 0}
   footer{background:var(--navy);color:#cfe3f5;text-align:center;padding:18px;font-size:13px}
 </style>
 </head>
@@ -122,7 +70,13 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
 </header>
 
 <div class="bar">
-  <input id="q" type="search" placeholder="Search: iPhone, AT&T, FRP, Xiaomi…">
+  <input id="q" type="search" placeholder="Search: iPhone, Chimera, Octoplus, UMT…">
+  <select id="type">
+    <option value="">All types</option>
+    <option value="imei">IMEI Services</option>
+    <option value="file">File Services</option>
+    <option value="server">Server Services</option>
+  </select>
   <select id="grp"><option value="">All groups</option></select>
   <div class="count" id="count">Loading…</div>
 </div>
@@ -133,8 +87,10 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
   <div class="box">
     <h2 id="mName"></h2>
     <p id="mMeta"></p>
-    <label>IMEI (15 digits — dial *#06# to see it)</label>
+    <label id="imeiLabel">IMEI (15 digits — dial *#06# to see it)</label>
     <input id="imei" inputmode="numeric" maxlength="15" placeholder="35xxxxxxxxxxxxx">
+    <label id="detLabel" style="display:none">Order details (username / email / file link / notes)</label>
+    <textarea id="details" style="display:none" placeholder="e.g. tool username, email, or instructions for the server"></textarea>
     <label>Your WhatsApp phone number</label>
     <input id="phone" inputmode="tel" placeholder="+232 75 …">
     <label>Brand / Model (optional)</label>
@@ -155,20 +111,21 @@ const WA='23275908206';
 let ALL=[],cur=null;
 const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-/* DEEP-LINK GROUP FILTER — reads #g=network / #g=frp / #g=checks / #g=tools
-   from the URL (sent by the Services mega-menu) and pre-selects the matching
-   group once the catalog finishes loading. */
+/* deep links: #g=frp (group) and #t=server (type) */
 (function(){
-  const m=(location.hash||'').match(/g=([a-z]+)/i);
-  if(!m)return;
-  const key=m[1].toLowerCase();
-  const MAP={
-    network:['network','carrier','unlock code','worldwide','at&t','t-mobile','vodafone','orange'],
-    frp:['frp','icloud','bypass','activator','ramdisk','passcode','mdm'],
-    checks:['check','checker','info'],
-    tools:['tool','license','cm2','iapro','iremove','infinity']
-  };
-  window.__groupFilter=MAP[key]||[key];
+  const mg=(location.hash||'').match(/g=([a-z]+)/i);
+  if(mg){
+    const key=mg[1].toLowerCase();
+    const MAP={
+      network:['network','carrier','unlock code','worldwide','at&t','t-mobile','vodafone','orange'],
+      frp:['frp','icloud','bypass','activator','ramdisk','passcode','mdm'],
+      checks:['check','checker','info'],
+      tools:['tool','license','cm2','iapro','iremove','infinity','chimera','octoplus','umt']
+    };
+    window.__groupFilter=MAP[key]||[key];
+  }
+  const mt=(location.hash||'').match(/t=([a-z]+)/i);
+  if(mt) window.__typeFilter=mt[1].toLowerCase();
 })();
 
 async function load(){
@@ -180,6 +137,10 @@ async function load(){
     document.getElementById('count').textContent=ALL.length+' live services';
     const gs=[...new Set(ALL.map(s=>s.group))].sort();
     document.getElementById('grp').innerHTML='<option value="">All groups</option>'+gs.map(g=>`<option>${esc(g)}</option>`).join('');
+    if(window.__typeFilter){
+      const sel=document.getElementById('type');
+      if([...sel.options].some(o=>o.value===window.__typeFilter)) sel.value=window.__typeFilter;
+    }
     if(window.__groupFilter){
       const hit=gs.find(g=>{const gl=g.toLowerCase();return window.__groupFilter.some(k=>gl.includes(k));});
       if(hit)document.getElementById('grp').value=hit;
@@ -198,9 +159,15 @@ async function load(){
 function render(){
   const q=document.getElementById('q').value.toLowerCase();
   const g=document.getElementById('grp').value;
-  const list=ALL.filter(s=>(!g||s.group===g)&&(!q||(s.name+' '+s.group).toLowerCase().includes(q))).slice(0,300);
+  const ty=document.getElementById('type').value;
+  const list=ALL.filter(s=>
+    (!ty||s.type===ty)&&
+    (!g||s.group===g)&&
+    (!q||(s.name+' '+s.group).toLowerCase().includes(q))
+  ).slice(0,300);
   document.getElementById('grid').innerHTML=list.map(s=>`
     <div class="card">
+      <span class="tbadge t-${esc(s.type||'imei')}">${esc((s.type||'imei').toUpperCase())}</span>
       <div class="grp">${esc(s.group)}</div>
       <h3>${esc(s.name)}</h3>
       <div class="meta">ID ${esc(s.id)} • ⏱ ${esc(s.time)||'—'}</div>
@@ -212,76 +179,55 @@ function render(){
 function openM(s){
   cur=s;
   document.getElementById('mName').textContent=s.name;
-  document.getElementById('mMeta').textContent=`Group: ${s.group} • Price: $${s.priceUsd} (Le ${s.priceSle.toLocaleString()}) • Time: ${s.time||'—'}`;
+  document.getElementById('mMeta').textContent=`${(s.type||'imei').toUpperCase()} • ${s.group} • $${s.priceUsd} (Le ${s.priceSle.toLocaleString()}) • ${s.time||'—'}`;
+  const isImei=(s.type||'imei')==='imei';
+  document.getElementById('imeiLabel').style.display=isImei?'block':'none';
+  document.getElementById('imei').style.display=isImei?'block':'none';
+  document.getElementById('detLabel').style.display=isImei?'none':'block';
+  document.getElementById('details').style.display=isImei?'none':'block';
   document.getElementById('done').style.display='none';
   document.getElementById('modal').classList.add('open');
 }
-
-function closeM(){
-  document.getElementById('modal').classList.remove('open');
-}
+function closeM(){document.getElementById('modal').classList.remove('open');}
 
 document.getElementById('q').addEventListener('input',render);
 document.getElementById('grp').addEventListener('change',render);
+document.getElementById('type').addEventListener('change',render);
 
 document.getElementById('send').onclick=async()=>{
+  const type=(cur&&cur.type)||'imei';
   const imei=document.getElementById('imei').value.trim();
+  const details=document.getElementById('details').value.trim();
   const phone=document.getElementById('phone').value.trim();
   const model=document.getElementById('model').value.trim();
-  if(!/^\d{15}$/.test(imei)){alert('IMEI must be exactly 15 digits.');return;}
+  if(type==='imei' && !/^\d{15}$/.test(imei)){alert('IMEI must be exactly 15 digits.');return;}
+  if(type!=='imei' && details.length<3){alert('Please enter the order details (username / email / notes).');return;}
   if(phone.length<9){alert('Enter a valid WhatsApp number.');return;}
   const brand=(model.split(' ')[0]||'Phone');
-
-  const btn = document.getElementById('send');
-  btn.disabled = true;
-  btn.textContent = 'Submitting…';
-
+  const btn=document.getElementById('send');
+  btn.disabled=true; btn.textContent='Submitting…';
   try{
     const r=await fetch(API+'/api/unlock',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({imei,brand,model,phone,serviceId:cur.id,serviceName:cur.name})});
+      body:JSON.stringify({type,imei,details,brand,model,phone,serviceId:cur.id,serviceName:cur.name})});
     const j=await r.json();
     if(j.ok){
-      const jobId = j.job;
-      const msg=encodeURIComponent(`SIERRAUNLOCK order ${jobId}: ${cur.name} (ID ${cur.id}) — IMEI ${imei}. I have completed payment.`);
+      const jobId=j.job;
+      const msg=encodeURIComponent(`SIERRAUNLOCK order ${jobId}: ${cur.name} (ID ${cur.id}) — ${type==='imei'?('IMEI '+imei):('Details: '+details)}. I have completed payment.`);
       const d=document.getElementById('done');
       d.style.display='block';
       d.innerHTML=
-        `<b>✅ Order <span style="color:var(--green)">${esc(jobId)}</span> received!</b><br><br>`+
-
+        `<b>✅ Order <span style="color:var(--green)">${esc(jobId)}</span> received!</b>`+
         `<div class="job-id-display">📋 Your Job ID: ${esc(jobId)}</div>`+
-        `<div class="pay-note">⚠️ <b>Include this Job ID in your Binance payment note</b> for automatic processing.</div><br>`+
-
-        `<b>💳 PAYMENT INSTRUCTIONS:</b><br>`+
-        `<div class="pay-method">`+
-          `🟠 <b>Orange Money</b><br>`+
-          `<span class="detail">+232 75 908 206</span><br>`+
-          `<small>Name: Alhassan Mansaray</small>`+
-        `</div>`+
-        `<div class="pay-method">`+
-          `🟡 <b>Binance Pay</b> <small>(auto-detect)</small><br>`+
-          `<span class="detail">ID: 754378475</span><br>`+
-          `<small>Note: "${esc(jobId)}" — auto-fulfils in ~30 seconds</small>`+
-        `</div>`+
-        `<div class="pay-method">`+
-          `💵 <b>Cash</b><br>`+
-          `<small>Visit Waterloo hub (Tombo Park) or Koidu hub</small>`+
-        `</div><br>`+
-
-        `<div style="display:flex;flex-direction:column;gap:8px">`+
-          `📍 <a href="track.html?id=${encodeURIComponent(jobId)}" target="_blank">Track your order live →</a>`+
-          `💬 <a target="_blank" href="https://wa.me/${WA}?text=${msg}">Confirm payment on WhatsApp →</a>`+
-        `</div>`;
-    }else{
-      alert('Order failed: '+(j.error||'try again'));
-    }
-  }catch(e){
-    alert('Network error: '+(e.message||'try again'));
-  }finally{
-    btn.disabled = false;
-    btn.textContent = 'Submit Order';
-  }
+        `<b>💳 PAYMENT INSTRUCTIONS:</b>`+
+        `<div class="pay-method">🟠 <b>Orange Money</b><br><span class="detail">+232 75 908 206</span></div>`+
+        `<div class="pay-method">🟡 <b>Binance Pay</b> (auto-detect)<br><span class="detail">ID: 754378475</span><br><small>Note: "${esc(jobId)}"</small></div>`+
+        `<div class="pay-method">💵 <b>Cash</b><br><small>Waterloo or Koidu hub</small></div>`+
+        `📍 <a href="track.html?id=${encodeURIComponent(jobId)}" target="_blank">Track your order live →</a><br>`+
+        `💬 <a target="_blank" href="https://wa.me/${WA}?text=${msg}">Confirm payment on WhatsApp →</a>`;
+    }else{alert('Order failed: '+(j.error||'try again'));}
+  }catch(e){alert('Network error: '+(e.message||'try again'));}
+  btn.disabled=false; btn.textContent='Submit Order';
 };
-
 load();
 </script>
 </body>

@@ -196,8 +196,8 @@ function injectServicesMegaMenu() {
       '<a href="live-services.html">🛒 Place Order</a>'+
       '<a href="track.html">📍 Track My Order</a>'+
       '<a href="auth.html">📜 Order History</a>'+
-      '<a href="services.html">📁 File Service</a>'+
-      '<a href="reseller.html">🖥 Server Service</a>'+
+      '<a href="live-services.html#t=file">📁 File Service (Live)</a>'+
+      '<a href="live-services.html#t=server">🖥 Server Service (Live)</a>'+
     '</div>'+
     '<div class="su-col"><h4>👤 My Account</h4>'+
       '<a href="auth.html">🔐 Sign In / Create Account</a>'+
