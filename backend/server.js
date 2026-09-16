@@ -1,38 +1,13 @@
 /* =====================================================================
    SIERRAUNLOCK • BACKEND API — server.js (v3.20 • FULL AUTOMATION)
    ---------------------------------------------------------------------
-   WHAT IS THIS FILE?
-   The Node.js/Express server brain on Render. Secure bridge between
-   sierraunlock.com + sierraunlock.live and the FastUnlockers.us GSM
-   Hub (reseller account: Alhassan301).
-
-   v3.20 FIXES (the two screenshot errors):
-   • FIXED: "Could not send email" — EmailJS endpoint corrected to
-     https://api.emailjs.com/api/v1.0/email/send (was missing /send)
-   • FIXED: "Parameter 'ID' Required / Parameter 'IMEI' Required" —
-     upstream order now sends parameter ALIASES (service + id +
-     serviceid, imei + IMEI) so every DHRU fork variant accepts it
-   • ADDED: AUTO-RETRY BOT — every upstream placement tries up to
-     3 times with 2s pause (skips retries on hard validation errors)
-   • ADDED: BINANCE TOP-UP AUTO-APPROVE BOT — a Binance payment whose
-     note contains a TP- id credits the wallet instantly, no human
-   • KEPT: accounts + email verification + wallet + auto-refund +
-     CDR webhook + triple catalog + retry endpoint + admin desk
-
-   AUTOMATION MAP (no human in the money path):
-   1. Customer wallet-pays → order forwarded to FastUnlockers INSTANTLY
-      (3-attempt retry bot guarantees delivery)
-   2. FastUnlockers completes → CDR webhook pushes code → customer
-      track page shows it automatically
-   3. Upstream rejects → AUTO-REFUND returns money to wallet instantly
-   4. Binance top-up → webhook bot auto-approves wallet credit
-   5. Orange Money top-up → ONE founder click (OM has no public API;
-      this click is the fraud shield — founders only monitor)
-
-   SECURITY: CORS dual-domain, helmet, rate limiting, Joi validation,
-   bcrypt password hashing, admin token on money endpoints, webhook
-   HMAC, refund lock, IMEI masking, wholesale cost hidden.
-
+   v3.20 FIXES:
+   • EmailJS endpoint corrected to /api/v1.0/email/send
+   • Upstream order sends parameter ALIASES (service+id+serviceid,
+     imei+IMEI) so every DHRU fork accepts it
+   • AUTO-RETRY BOT: 3 attempts per upstream placement
+   • BINANCE TOP-UP AUTO-APPROVE BOT (TP- id in payment note)
+   • Accounts + email verification + wallet + auto-refund + CDR
    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
    ===================================================================== */
 
@@ -53,7 +28,7 @@ const PORT = process.env.PORT || 3000;
 const DATA = path.join(__dirname, 'data.json');
 app.set('trust proxy', 1);
 
-/* 02 • STORAGE (rate default 26 SLE/USD) */
+/* 02 • STORAGE */
 const DEFAULT_RATE = 26.0;
 const load = () => {
   try { return JSON.parse(fs.readFileSync(DATA, 'utf8')); }
@@ -73,7 +48,7 @@ else {
   if (!db.rate || db.rate < 20) { db.rate = DEFAULT_RATE; save(db); }
 }
 
-/* 03 • SECURITY + CORS (dual-domain) */
+/* 03 • SECURITY + CORS */
 app.use(helmet());
 const FALLBACK_ORIGINS = [
   'https://sierraunlock.com', 'https://www.sierraunlock.com', 'http://sierraunlock.com',
@@ -98,11 +73,9 @@ const strict = rateLimit({ windowMs: 60 * 1000, max: 6 });
 
 /* 04 • AUTH */
 const adminOk = (req) => !!process.env.ADMIN_TOKEN && req.get('x-admin-token') === process.env.ADMIN_TOKEN;
-
-/* v3.19: In-memory store for email verification codes (6-digit, 10-min expiry) */
 const verificationCodes = new Map();
 
-/* 05 • SCHEMAS (FastUnlockers-mirror fields) */
+/* 05 • SCHEMAS */
 const unlockSchema = Joi.object({
   type: Joi.string().valid('imei', 'file', 'server').default('imei'),
   imei: Joi.string().trim().allow('').max(15).optional(),
@@ -153,7 +126,7 @@ app.get('/api/health', (req, res) => res.json({
 }));
 app.get('/api/rates', (req, res) => res.json({ ok: true, slePerUsd: load().rate }));
 
-/* 06b • MY-IP (founders) */
+/* 06b • MY-IP */
 app.get('/api/my-ip', strict, async (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   try {
@@ -165,7 +138,7 @@ app.get('/api/my-ip', strict, async (req, res) => {
   }
 });
 
-/* 07 • CUSTOMER ORDER (typed, FastUnlockers-mirror fields) */
+/* 07 • CUSTOMER ORDER */
 app.post('/api/unlock', strict, async (req, res) => {
   const { error, value } = unlockSchema.validate(req.body || {});
   if (error) return res.status(400).json({ ok: false, error: error.details[0].message });
@@ -225,7 +198,7 @@ app.get('/api/admin/jobs', strict, (req, res) => {
   res.json({ ok: true, jobs: load().jobs });
 });
 
-/* 08c • ADMIN PAY = mark paid + AUTO-FULFIL */
+/* 08c • ADMIN PAY */
 app.post('/api/admin/pay', strict, async (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   const { error, value } = adminPaySchema.validate(req.body || {});
@@ -259,7 +232,7 @@ app.post('/api/admin/refund', strict, (req, res) => {
   res.json({ ok: true, job: job.id, payment_status: job.payment_status, refund_reason: job.refund_reason });
 });
 
-/* 08e • WALLET — view balance + transactions + pending top-ups */
+/* 08e • WALLET VIEW */
 app.get('/api/wallet/:phone', async (req, res) => {
   const phone = String(req.params.phone || '').replace(/\D/g, '');
   if (phone.length < 9) return res.status(400).json({ ok: false, error: 'Invalid phone.' });
@@ -269,7 +242,7 @@ app.get('/api/wallet/:phone', async (req, res) => {
   res.json({ ok: true, balance: w.balance, tx: (w.tx || []).slice(0, 30), pending });
 });
 
-/* 08f • WALLET TOP-UP REQUEST */
+/* 08f • WALLET TOP-UP */
 app.post('/api/wallet/topup', strict, (req, res) => {
   const b = req.body || {};
   const phone = String(b.phone || '').replace(/\D/g, '');
@@ -296,7 +269,7 @@ app.post('/api/wallet/topup', strict, (req, res) => {
   });
 });
 
-/* 08g • WALLET PAY (server-side price check + deduct + auto-fulfil + auto-refund) */
+/* 08g • WALLET PAY */
 app.post('/api/wallet/pay', strict, async (req, res) => {
   const b = req.body || {};
   const phone = String(b.phone || '').replace(/\D/g, '');
@@ -359,7 +332,7 @@ app.post('/api/wallet/pay', strict, async (req, res) => {
   res.json({ ok: true, job: job.id, balance: w.balance, status: job.status, auto_refunded: autoRefunded });
 });
 
-/* 08h • ADMIN WALLET TOP-UPS LIST */
+/* 08h • ADMIN TOP-UPS LIST */
 app.get('/api/admin/wallet/topups', strict, (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   res.json({ ok: true, topups: (load().topups || []).slice(0, 100) });
@@ -393,7 +366,7 @@ app.post('/api/admin/wallet/reject', strict, (req, res) => {
   res.json({ ok: true, topup: tp.id });
 });
 
-/* 09 • BINANCE WEBHOOK (auto-pay + auto-fulfil + v3.20 top-up auto-approve bot) */
+/* 09 • BINANCE WEBHOOK + TOP-UP AUTO-APPROVE BOT */
 app.post('/api/webhook/binance', express.raw({ type: '*/*' }), async (req, res) => {
   const secret = process.env.BINANCE_WEBHOOK_SECRET;
   if (secret) {
@@ -407,7 +380,6 @@ app.post('/api/webhook/binance', express.raw({ type: '*/*' }), async (req, res) 
   if (!payload) return res.status(400).json({ ok: false, error: 'Invalid payload.' });
   const note = payload.note || payload.remark || '';
 
-  /* v3.20 BOT: auto-approve wallet top-ups paid via Binance (note contains TP- id) */
   const mt = note.match(/TP-\d+/);
   if (mt) {
     const db0 = load(); db0.topups = db0.topups || []; db0.wallets = db0.wallets || {};
@@ -438,7 +410,7 @@ app.post('/api/webhook/binance', express.raw({ type: '*/*' }), async (req, res) 
   res.json({ ok: true, received: true, job: job.id, auto_fulfilled: true });
 });
 
-/* 09b • CDR WEBHOOK — FastUnlockers pushes results here */
+/* 09b • CDR WEBHOOK */
 app.post('/api/webhook/cdr', express.urlencoded({ extended: true }), (req, res) => {
   const p = req.body || {};
   const key = p.replykey || p.key || p.cdrkey || req.get('x-cdr-key') || '';
@@ -491,7 +463,6 @@ async function gsmCall(action, extraParams = {}) {
   } finally { clearTimeout(t); }
 }
 
-/* ACTION MAPS (extended probes for full coverage incl. Chimera) */
 const LIST_ACTIONS = {
   imei: ['imeiservicelist'],
   file: ['fileservicelist', 'filelist', 'fileandservicelist', 'servicelistfile'],
@@ -574,8 +545,6 @@ async function fetchList(type) {
   return merged;
 }
 
-/* v3.20 FIX: parameter ALIASES so every DHRU fork variant accepts the order
-   (service + id + serviceid, imei + IMEI). Empty values auto-filtered. */
 async function placeUpstreamOnce(job) {
   const type = job.type || 'imei';
   let last = { http: 0, json: null, text: 'no attempt' };
@@ -602,8 +571,6 @@ async function placeUpstreamOnce(job) {
   return { ok: false, r: last, orderId: null };
 }
 
-/* v3.20 AUTO-RETRY BOT: up to 3 attempts, 2s pause.
-   Skips retries on hard validation errors (wrong IMEI, insufficient etc.) */
 async function placeUpstream(job) {
   let last = null;
   for (let attempt = 1; attempt <= 3; attempt++) {
@@ -642,14 +609,15 @@ app.get('/api/admin/probe', strict, async (req, res) => {
   res.json({ ok: true, probe: out });
 });
 
-/* 12 • PUBLIC CATALOG (imei+file+server merged, cost hidden) */
+/* 12 • CATALOG */
 let svcCache = { ts: 0, data: null };
 
-app.post('/api/admin/refresh-catalog', strict, (req, res) => {
+app.post('/api/admin/refresh-catalog', strict, async (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   svcCache.ts = 0;
   res.json({ ok: true, note: 'Catalog cache cleared. Next /api/services call will re-fetch from FastUnlockers.' });
 });
+
 app.get('/api/admin/debug-catalog', strict, async (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   svcCache.ts = 0;
@@ -681,6 +649,7 @@ async function fetchCatalog() {
   svcCache = { ts: Date.now(), data: services };
   return services;
 }
+
 app.get('/api/services', async (req, res) => {
   if (!fuReady()) return res.json({ ok: false, mode: 'manual', services: [] });
   const services = await fetchCatalog();
@@ -691,7 +660,8 @@ app.get('/api/services', async (req, res) => {
   }));
   res.json({ ok: true, cached: (Date.now() - svcCache.ts) < 600000, count: pub.length, services: pub });
 });
-app.get('/api/admin/services', strict, (req, res) => {
+
+app.get('/api/admin/services', strict, async (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   if (!fuReady()) return res.json({ ok: false, mode: 'manual', services: [] });
   const services = await fetchCatalog();
@@ -744,7 +714,7 @@ app.post('/api/order-status', strict, async (req, res) => {
   res.json({ ok: true, job });
 });
 
-/* 13b • ADMIN RETRY — re-place a failed paid job after a fix */
+/* 13b • ADMIN RETRY */
 app.post('/api/admin/retry', strict, async (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   const id = String((req.body || {}).id || '');
@@ -800,7 +770,7 @@ app.get('/api/track/:id', async (req, res) => {
   });
 });
 
-/* ===== v3.19/v3.20: AUTH ENDPOINTS (registration + verification + login + me) ===== */
+/* 13d • AUTH ENDPOINTS (EmailJS verified) */
 const EMAILJS = {
   service: process.env.EMAILJS_SERVICE_ID || '',
   template: process.env.EMAILJS_TEMPLATE_ID || '',
@@ -809,7 +779,6 @@ const EMAILJS = {
 };
 const emailReady = () => !!(EMAILJS.service && EMAILJS.template && EMAILJS.private);
 
-/* v3.20 FIX: correct EmailJS endpoint (.../email/send) */
 async function sendVerificationEmail(toEmail, toName, code) {
   if (!emailReady()) return { ok: false, error: 'EmailJS not configured' };
   try {
@@ -942,7 +911,6 @@ app.listen(PORT, () => {
   console.log(`SIERRAUNLOCK API v3.20 online on :${PORT} — mode: ${fuReady() ? 'CONNECTED (IMEI+FILE+SERVER+CHIMERA UNION)' : 'MANUAL'}`);
   console.log(`  Policy: cost + $${process.env.UNLOCK_FLAT_FEE || '2'} • rate ${load().rate} SLE • split ${process.env.UNLOCK_COMMISSION_SPLIT || '0.75,0.25'}`);
   console.log(`  CDR webhook: /api/webhook/cdr ${process.env.CDR_REPLY_KEY ? '(key set)' : '(no key set)'}`);
-  console.log(`  Wallet: /api/wallet/:phone + topup + pay (auto-refund on failure)`);
   console.log(`  Bots: auto-retry x3 upstream + Binance top-up auto-approve`);
-  console.log(`  Auth: /api/auth/register + verify + login + me (EmailJS ${emailReady() ? 'ready' : 'NOT CONFIGURED'})`);
+  console.log(`  Auth: EmailJS ${emailReady() ? 'ready' : 'NOT CONFIGURED'}`);
 });
