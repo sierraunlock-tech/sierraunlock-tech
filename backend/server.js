@@ -466,22 +466,12 @@ async function gsmCall(action, extraParams = {}) {
 const LIST_ACTIONS = {
   imei: ['imeiservicelist'],
   file: ['fileservicelist', 'filelist', 'fileandservicelist', 'servicelistfile'],
+  /* v3.21: generic probes only — tool-specific probes never returned extra
+     services and caused upstream throttling. All tool groups (Octoplus, UMT,
+     UnlockTool, Infinity, NCK, Z3X...) already arrive inside these lists. */
   server: [
     'serverservicelist', 'serverlist', 'creditservicelist',
-    'servicelistserver', 'serverandservicelist',
-    'chimeralist', 'chimera',
-    'octopluslist', 'octoplus',
-    'umtlist', 'umt', 'ultimatemultitool',
-    'dcunlockerlist', 'dcunlocker', 'dchculist',
-    'avengerslist', 'avengers',
-    'ncklist', 'nckbox',
-    'infinitylist', 'infinity', 'infinitybox',
-    'unlocktoollist', 'unlocktool', 'utlist',
-    'pandoralist', 'pandora',
-    'tsmlist', 'tsmtool',
-    'cheetahlist', 'cheetah',
-    'borneolist', 'borneo',
-    'gsmserverlist', 'gsmserver'
+    'servicelistserver', 'serverandservicelist'
   ]
 };
 const ORDER_ACTIONS = {
@@ -644,7 +634,10 @@ async function fetchCatalog() {
   if (svcCache.data && Date.now() - svcCache.ts < 600000) return svcCache.data;
   const [imei, file, server] = await Promise.all([fetchList('imei'), fetchList('file'), fetchList('server')]);
   const services = [...imei, ...file, ...server];
-  if (!services.length) return null;
+  if (!services.length) return svcCache.data || null;
+  /* v3.21 RESILIENCE: if a whole type vanished (upstream glitch/throttle),
+     keep the previous good catalog instead of caching the broken one */
+  if (svcCache.data && svcCache.data.length > services.length + 50) return svcCache.data;
   services.sort((a, b) => a.type.localeCompare(b.type) || a.group.localeCompare(b.group) || Number(a.id) - Number(b.id));
   svcCache = { ts: Date.now(), data: services };
   return services;
