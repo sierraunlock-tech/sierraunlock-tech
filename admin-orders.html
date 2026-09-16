@@ -1,14 +1,16 @@
 <!DOCTYPE html>
 <!--
 =====================================================================
-SIERRAUNLOCK • FOUNDER ORDER DESK — admin-orders.html (v2.2 • RETRY)
+SIERRAUNLOCK • FOUNDER ORDER DESK — admin-orders.html (v2.3 • PACK 15)
 ---------------------------------------------------------------------
 WHAT IS THIS FILE?
 The founder-only control panel for managing customer orders + wallet
-top-up approvals. v2.2 adds:
-• 🔄 Retry Upstream button on failed jobs (server v3.17 /api/admin/retry)
+top-up approvals + registered customers. v2.3 adds:
+• 👥 Registered Customers table (name/email/phone/balance/orders/joined)
+• 🗑 Delete account button (founder-only, requires reason, logs action)
+• 🔄 Retry Upstream button on failed jobs
 • 💸 Auto-refund indicator on failed wallet-paid jobs
-• ⏱ Optional auto-refresh every 20 seconds (tick the checkbox)
+• ⏱ Optional auto-refresh every 20 seconds
 • Payment status tracking (unpaid / paid / refunded)
 • "Mark Paid" button — auto-fulfils upstream
 • "Refund" button — founder-only after fraud review
@@ -19,6 +21,7 @@ SECURITY:
 • Admin token required (founder-only access) — NEVER share with customers
 • Refund lock: once paid, customer cannot reverse
 • Wallet top-ups require manual founder approval after money received
+• Account deletion: requires reason + confirm + logged in adminLog
 
 OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
 =====================================================================
@@ -66,12 +69,12 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
 </head>
 <body>
 <h1>SIERRAUNLOCK — Founder Order Desk</h1>
-<p class="sub">Confirm payment → auto-fulfil upstream. Refunds require fraud review. Wallet top-ups require money-received confirmation.</p>
-<div class="warn">⚠ MONEY SAFETY: Once marked paid, customer cannot reverse (crypto/OM/cash are final). Only founders can refund via admin token + reason. Wallet top-ups: APPROVE only after you have confirmed the money arrived. Failed wallet orders are auto-refunded by the server.</div>
+<p class="sub">Confirm payment → auto-fulfil upstream. Refunds require fraud review. Wallet top-ups require money-received confirmation. Customers: view + delete (logged).</p>
+<div class="warn">⚠ MONEY SAFETY: Once marked paid, customer cannot reverse (crypto/OM/cash are final). Only founders can refund via admin token + reason. Wallet top-ups: APPROVE only after you have confirmed the money arrived. Failed wallet orders are auto-refunded by the server. Account deletion: wallet + order records are KEPT for accounting.</div>
 
 <input type="password" id="token" placeholder="Admin token" size="40">
 <button onclick="connect()">Connect</button>
-<button class="sec" onclick="loadJobs()">Refresh Jobs</button>
+<button class="sec" onclick="loadJobs()">Refresh All</button>
 <label class="auto"><input type="checkbox" id="autoRef"> Auto-refresh every 20s</label>
 
 <h2 class="section-title">💰 Wallet Top-Up Approvals</h2>
@@ -82,6 +85,15 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
   </table>
 </div>
 <div id="walletEmpty" style="margin-top:8px;color:#8fb3cc;font-size:13px">No top-ups yet. Customers will submit requests from <a href="wallet.html" style="color:#7cc4ff">wallet.html</a>.</div>
+
+<h2 class="section-title">👥 Registered Customers</h2>
+<div id="usersSection" style="margin-top:8px" hidden>
+  <table id="utbl">
+    <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Balance</th><th>Orders</th><th>Joined</th><th>Actions</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+<div id="usersEmpty" style="margin-top:8px;color:#8fb3cc;font-size:13px">No registered customers yet.</div>
 
 <h2 class="section-title">📦 Customer Orders</h2>
 <table id="tbl" hidden>
@@ -136,7 +148,6 @@ window.addEventListener('load',()=>{
   if(t){ TOK=t; document.getElementById('token').value=t; loadJobs(); }
 });
 
-/* optional auto-refresh every 20 seconds */
 document.getElementById('autoRef').addEventListener('change',function(){
   if(this.checked){ refTimer=setInterval(()=>{ if(TOK) loadJobs(); },20000); }
   else { clearInterval(refTimer); refTimer=null; }
@@ -149,6 +160,7 @@ async function loadJobs(){
   if(!j.ok){ alert('Bad token.'); return; }
   document.getElementById('tbl').hidden=false;
   loadWallets();
+  loadUsers();
 
   document.querySelector('#tbl tbody').innerHTML=(j.jobs||[]).map(job=>`
    <tr>
@@ -251,7 +263,45 @@ async function rejectTp(id){
   loadWallets();
 }
 
-/* ===== RETRY FAILED UPSTREAM ORDER (server v3.17) ===== */
+/* ===== PACK 15: CUSTOMER MANAGEMENT ===== */
+async function loadUsers(){
+  if(!TOK) return;
+  try{
+    const r=await fetch(API+'/api/admin/users',{headers:{'x-admin-token':TOK}});
+    const j=await r.json();
+    if(!j.ok) return;
+    const users=j.users||[];
+    if(!users.length){
+      document.getElementById('usersSection').hidden=true;
+      document.getElementById('usersEmpty').style.display='block';
+      return;
+    }
+    document.getElementById('usersSection').hidden=false;
+    document.getElementById('usersEmpty').style.display='none';
+    document.querySelector('#utbl tbody').innerHTML=users.map(u=>`
+      <tr>
+        <td>${esc(u.name)}</td>
+        <td>${esc(u.email)}</td>
+        <td>${esc(u.phone)}</td>
+        <td>$${Number(u.balance||0).toFixed(2)}</td>
+        <td>${u.orders||0}</td>
+        <td>${esc((u.createdAt||'').slice(0,10))}</td>
+        <td><button class="danger" onclick="deleteUser('${esc(u.phone)}','${esc(u.email)}')">🗑 Delete</button></td>
+      </tr>`).join('');
+  }catch(e){}
+}
+
+async function deleteUser(phone,email){
+  const reason=prompt('Delete account '+email+' ?\nEnter reason (required, kept in admin log):');
+  if(!reason || reason.length<5){ alert('Deletion cancelled (reason required).'); return; }
+  if(!confirm('FINAL WARNING: This permanently deletes the login account.\nWallet money and order records are KEPT for accounting.\nContinue?')) return;
+  const r=await fetch(API+'/api/admin/user/delete',{method:'POST',headers:{'Content-Type':'application/json','x-admin-token':TOK},body:JSON.stringify({phone,reason})});
+  const j=await r.json();
+  alert(j.ok?'✅ '+j.note:('❌ '+(j.error||'failed')));
+  loadUsers();
+}
+
+/* ===== RETRY FAILED UPSTREAM ORDER ===== */
 async function retryJob(id){
   if(!confirm('Re-place this failed order upstream now?')) return;
   const r=await fetch(API+'/api/admin/retry',{method:'POST',headers:{'Content-Type':'application/json','x-admin-token':TOK},body:JSON.stringify({id})});

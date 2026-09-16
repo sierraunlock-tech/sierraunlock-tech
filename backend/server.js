@@ -901,6 +901,85 @@ app.post('/api/auth/resend', strict, async (req, res) => {
   res.json(sent.ok ? { ok: true, note: 'New code sent to ' + rec.email } : { ok: false, error: 'Email send failed. ' + (sent.detail || '') });
 });
 
+/* ===== v3.21 PACK 15: PASSWORD RESET + FOUNDER ACCOUNT MANAGEMENT ===== */
+const resetCodes = new Map(); /* phone -> { code, expires } */
+
+/* Customer: request password-reset code (email sent via EmailJS) */
+app.post('/api/auth/forgot', strict, async (req, res) => {
+  const { emailOrPhone } = req.body || {};
+  const p = String(emailOrPhone || '').replace(/\D/g, '');
+  const db = load(); db.users = db.users || {};
+  let user = null, phone = null;
+  if (/^\d{9,}$/.test(p)) { user = db.users[p]; phone = p; }
+  else {
+    const entry = Object.entries(db.users).find(([k, u]) => u.email && u.email.toLowerCase() === String(emailOrPhone).toLowerCase());
+    if (entry) { phone = entry[0]; user = entry[1]; }
+  }
+  if (user && phone) {
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    resetCodes.set(phone, { code, expires: Date.now() + 600000 });
+    await sendVerificationEmail(user.email, user.name, code);
+  }
+  res.json({ ok: true, note: 'If that account exists, a 6-digit reset code was sent to its email.' });
+});
+
+/* Customer: set new password with the reset code */
+app.post('/api/auth/reset', strict, (req, res) => {
+  const { emailOrPhone, code, newPassword } = req.body || {};
+  const p = String(emailOrPhone || '').replace(/\D/g, '');
+  const db = load(); db.users = db.users || {};
+  let phone = null;
+  if (/^\d{9,}$/.test(p) && db.users[p]) phone = p;
+  else {
+    const entry = Object.entries(db.users).find(([k, u]) => u.email && u.email.toLowerCase() === String(emailOrPhone).toLowerCase());
+    if (entry) phone = entry[0];
+  }
+  if (!phone) return res.status(400).json({ ok: false, error: 'Account not found.' });
+  const rec = resetCodes.get(phone);
+  if (!rec) return res.status(400).json({ ok: false, error: 'No reset requested. Click Forgot Password first.' });
+  if (Date.now() > rec.expires) { resetCodes.delete(phone); return res.status(400).json({ ok: false, error: 'Code expired. Request a new one.' }); }
+  if (rec.code !== String(code).trim()) return res.status(400).json({ ok: false, error: 'Wrong code.' });
+  if (!newPassword || newPassword.length < 6) return res.status(400).json({ ok: false, error: 'New password min 6 chars.' });
+  db.users[phone].passwordHash = bcrypt.hashSync(newPassword, 10);
+  resetCodes.delete(phone);
+  db.sessions = db.sessions || {};
+  Object.keys(db.sessions).forEach(t => { if (db.sessions[t].phone === phone) delete db.sessions[t]; });
+  save(db);
+  res.json({ ok: true, note: 'Password changed. Sign in with your new password.' });
+});
+
+/* Founder: list all customers (passwords never exposed) */
+app.get('/api/admin/users', strict, (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  const db = load(); db.users = db.users || {};
+  const list = Object.values(db.users).map(u => ({
+    phone: u.phone, email: u.email, name: u.name,
+    createdAt: u.createdAt, lastLogin: u.lastLogin,
+    balance: ((db.wallets || {})[u.phone] || {}).balance || 0,
+    orders: (db.jobs || []).filter(j => (j.phone || '').replace(/\D/g, '') === u.phone).length
+  }));
+  res.json({ ok: true, count: list.length, users: list });
+});
+
+/* Founder: delete account (wallet + order records kept for accounting) */
+app.post('/api/admin/user/delete', strict, (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  const { phone, reason } = req.body || {};
+  const p = String(phone || '').replace(/\D/g, '');
+  if (!p) return res.status(400).json({ ok: false, error: 'Phone required.' });
+  const db = load(); db.users = db.users || {};
+  if (!db.users[p]) return res.status(404).json({ ok: false, error: 'Account not found.' });
+  const deleted = db.users[p];
+  delete db.users[p];
+  db.sessions = db.sessions || {};
+  Object.keys(db.sessions).forEach(t => { if (db.sessions[t].phone === p) delete db.sessions[t]; });
+  db.adminLog = db.adminLog || [];
+  db.adminLog.unshift({ action: 'user-delete', phone: p, email: deleted.email, reason: String(reason || ''), at: new Date().toISOString() });
+  db.adminLog = db.adminLog.slice(0, 200);
+  save(db);
+  res.json({ ok: true, note: 'Account deleted. Wallet/order records kept for accounting.' });
+});
+
 /* 14 • 404 + BOOT */
 app.use((req, res) => res.status(404).json({ ok: false, error: 'Not found.' }));
 app.use((err, req, res, next) => {
