@@ -8,6 +8,8 @@
    • AUTO-RETRY BOT: 3 attempts per upstream placement
    • BINANCE TOP-UP AUTO-APPROVE BOT (TP- id in payment note)
    • Accounts + email verification + wallet + auto-refund + CDR
+   • v3.21 cache resilience + probe reduction
+   • Pack 15: password reset + founder customer list + account delete
    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
    ===================================================================== */
 
@@ -466,9 +468,6 @@ async function gsmCall(action, extraParams = {}) {
 const LIST_ACTIONS = {
   imei: ['imeiservicelist'],
   file: ['fileservicelist', 'filelist', 'fileandservicelist', 'servicelistfile'],
-  /* v3.21: generic probes only — tool-specific probes never returned extra
-     services and caused upstream throttling. All tool groups (Octoplus, UMT,
-     UnlockTool, Infinity, NCK, Z3X...) already arrive inside these lists. */
   server: [
     'serverservicelist', 'serverlist', 'creditservicelist',
     'servicelistserver', 'serverandservicelist'
@@ -635,8 +634,6 @@ async function fetchCatalog() {
   const [imei, file, server] = await Promise.all([fetchList('imei'), fetchList('file'), fetchList('server')]);
   const services = [...imei, ...file, ...server];
   if (!services.length) return svcCache.data || null;
-  /* v3.21 RESILIENCE: if a whole type vanished (upstream glitch/throttle),
-     keep the previous good catalog instead of caching the broken one */
   if (svcCache.data && svcCache.data.length > services.length + 50) return svcCache.data;
   services.sort((a, b) => a.type.localeCompare(b.type) || a.group.localeCompare(b.group) || Number(a.id) - Number(b.id));
   svcCache = { ts: Date.now(), data: services };
@@ -894,10 +891,9 @@ app.post('/api/auth/resend', strict, async (req, res) => {
   res.json(sent.ok ? { ok: true, note: 'New code sent to ' + rec.email } : { ok: false, error: 'Email send failed. ' + (sent.detail || '') });
 });
 
-/* ===== v3.21 PACK 15: PASSWORD RESET + FOUNDER ACCOUNT MANAGEMENT ===== */
-const resetCodes = new Map(); /* phone -> { code, expires } */
+/* ===== PACK 15: PASSWORD RESET + FOUNDER ACCOUNT MANAGEMENT ===== */
+const resetCodes = new Map();
 
-/* Customer: request password-reset code (email sent via EmailJS) */
 app.post('/api/auth/forgot', strict, async (req, res) => {
   const { emailOrPhone } = req.body || {};
   const p = String(emailOrPhone || '').replace(/\D/g, '');
@@ -916,7 +912,6 @@ app.post('/api/auth/forgot', strict, async (req, res) => {
   res.json({ ok: true, note: 'If that account exists, a 6-digit reset code was sent to its email.' });
 });
 
-/* Customer: set new password with the reset code */
 app.post('/api/auth/reset', strict, (req, res) => {
   const { emailOrPhone, code, newPassword } = req.body || {};
   const p = String(emailOrPhone || '').replace(/\D/g, '');
@@ -941,7 +936,6 @@ app.post('/api/auth/reset', strict, (req, res) => {
   res.json({ ok: true, note: 'Password changed. Sign in with your new password.' });
 });
 
-/* Founder: list all customers (passwords never exposed) */
 app.get('/api/admin/users', strict, (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   const db = load(); db.users = db.users || {};
@@ -954,7 +948,6 @@ app.get('/api/admin/users', strict, (req, res) => {
   res.json({ ok: true, count: list.length, users: list });
 });
 
-/* Founder: delete account (wallet + order records kept for accounting) */
 app.post('/api/admin/user/delete', strict, (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   const { phone, reason } = req.body || {};
@@ -983,6 +976,8 @@ app.listen(PORT, () => {
   console.log(`SIERRAUNLOCK API v3.20 online on :${PORT} — mode: ${fuReady() ? 'CONNECTED (IMEI+FILE+SERVER+CHIMERA UNION)' : 'MANUAL'}`);
   console.log(`  Policy: cost + $${process.env.UNLOCK_FLAT_FEE || '2'} • rate ${load().rate} SLE • split ${process.env.UNLOCK_COMMISSION_SPLIT || '0.75,0.25'}`);
   console.log(`  CDR webhook: /api/webhook/cdr ${process.env.CDR_REPLY_KEY ? '(key set)' : '(no key set)'}`);
+  console.log(`  Wallet: /api/wallet/:phone + topup + pay (auto-refund on failure)`);
   console.log(`  Bots: auto-retry x3 upstream + Binance top-up auto-approve`);
-  console.log(`  Auth: EmailJS ${emailReady() ? 'ready' : 'NOT CONFIGURED'}`);
+  console.log(`  Auth: /api/auth/register + verify + login + me + forgot + reset (EmailJS ${emailReady() ? 'ready' : 'NOT CONFIGURED'})`);
+  console.log(`  Admin: users + user/delete + jobs + retry + rate`);
 });
