@@ -196,9 +196,9 @@ const adminRefundSchema = Joi.object({
 });
 
 /* 06 • PUBLIC HEALTH */
-app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.28.0', docs: '/api/health' }));
+app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.29.0', docs: '/api/health' }));
 app.get('/api/health', (req, res) => res.json({
-  ok: true, service: 'SIERRAUNLOCK API', version: '3.28.0',
+  ok: true, service: 'SIERRAUNLOCK API', version: '3.29.0',
   mode: fuReady() ? 'connected-to-fastunlockers' : 'manual-mode',
   vault: ghReady() ? 'github' : 'local-only',
   catalogs: ['imei', 'file', 'server'],
@@ -813,6 +813,43 @@ app.post('/api/admin/action-probe', strict, async (req, res) => {
   });
 });
 
+/* v3.29 • MULTIPART CONTENT-TYPE TEST — the last format hypothesis.
+   action-probe CONFIRMED placeimeiorder is a real, recognized action
+   (fake names return "Invalid Action Request"; this one doesn't).
+   So the action name was never the issue. Seven encodings of ID/IMEI
+   have failed identically over x-www-form-urlencoded. The one thing
+   not yet tested is the transport format itself: some panels expect
+   multipart/form-data (like an HTML file-upload form) rather than
+   plain URL-encoded fields. This sends ID/IMEI that way, once. */
+app.post('/api/admin/multipart-probe', strict, async (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  if (!fuReady()) return res.status(503).json({ ok: false, error: 'Upstream not configured.' });
+
+  const sid = String((req.body || {}).serviceId || '999999');
+  const imei = String((req.body || {}).imei || '352850711207110');
+
+  const form = new FormData();
+  form.append('username', FU.username);
+  form.append('apiaccesskey', FU.key);
+  form.append('action', 'placeimeiorder');
+  form.append('ID', sid);
+  form.append('IMEI', imei);
+
+  try {
+    const r = await fetch(FU.base + FU.endpoint, { method: 'POST', body: form });
+    const text = await r.text();
+    let json = null; try { json = JSON.parse(text); } catch (e) {}
+    res.json({
+      ok: true,
+      note: 'If this ALSO says "Parameter Required", the format guessing is done — see the chat reply for what to send FastUnlockers support.',
+      http: r.status,
+      reply: json || text.slice(0, 600)
+    });
+  } catch (e) {
+    res.status(502).json({ ok: false, error: 'Request failed: ' + e.message });
+  }
+});
+
 /* 12 • CATALOG */
 let svcCache = { ts: 0, data: null };
 
@@ -1181,7 +1218,7 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ ok: false, error: 'Server error.' });
 });
 app.listen(PORT, () => {
-  console.log(`SIERRAUNLOCK API v3.28 online on :${PORT} — mode: ${fuReady() ? 'CONNECTED' : 'MANUAL'}`);
+  console.log(`SIERRAUNLOCK API v3.29 online on :${PORT} — mode: ${fuReady() ? 'CONNECTED' : 'MANUAL'}`);
   console.log(`  Vault: ${ghReady() ? 'GitHub (' + GH.repo + ')' : 'LOCAL ONLY'}`);
   console.log(`  Run FIRST: GET /api/admin/auth-check — verifies upstream credentials + shows this server's IP`);
   console.log(`  Policy: cost + $${process.env.UNLOCK_FLAT_FEE || '2'} • rate ${load().rate} SLE • min top-up 50 Le`);
