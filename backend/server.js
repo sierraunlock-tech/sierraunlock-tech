@@ -759,9 +759,9 @@ app.post(['/api/admin/deep-probe', '/api/admin/slow-probe'], strict, async (req,
   const b64 = (obj) => Buffer.from(JSON.stringify(obj), 'utf8').toString('base64');
 
   const attempts = [
+    ['placeimeiorder', 'numbered_id1_imei1', { id1: sid, imei1: imei }],
+    ['placeimeiorder', 'numbered_with_qty', { id1: sid, imei1: imei, qty: '1' }],
     ['placeimeiorder', 'b64_parameters', { parameters: b64({ ID: sid, IMEI: imei }) }],
-    ['placeimeiorder', 'b64_with_requestformat', { requestformat: 'JSON', parameters: b64({ ID: sid, IMEI: imei }) }],
-    ['placeimeiorder', 'json_parameters_plain', { parameters: JSON.stringify({ ID: sid, IMEI: imei }) }],
     ['placeimeiorder', 'upper', { ID: sid, IMEI: imei }],
     ['placeimeiorder', 'lower', { id: sid, imei: imei }]
   ];
