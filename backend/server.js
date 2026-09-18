@@ -1,5 +1,5 @@
 /* =====================================================================
-   SIERRAUNLOCK • BACKEND API — server.js (v3.27 • AUTH-FIRST DIAGNOSTICS)
+   SIERRAUNLOCK • BACKEND API — server.js (v3.28 • DHRU PARAMETERS ENVELOPE TEST)
    ---------------------------------------------------------------------
    WHAT CHANGED FROM v3.24 (read this before anything else):
 
@@ -196,9 +196,9 @@ const adminRefundSchema = Joi.object({
 });
 
 /* 06 • PUBLIC HEALTH */
-app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.27.0', docs: '/api/health' }));
+app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.28.0', docs: '/api/health' }));
 app.get('/api/health', (req, res) => res.json({
-  ok: true, service: 'SIERRAUNLOCK API', version: '3.27.0',
+  ok: true, service: 'SIERRAUNLOCK API', version: '3.28.0',
   mode: fuReady() ? 'connected-to-fastunlockers' : 'manual-mode',
   vault: ghReady() ? 'github' : 'local-only',
   catalogs: ['imei', 'file', 'server'],
@@ -732,7 +732,7 @@ app.get('/api/admin/auth-check', strict, async (req, res) => {
    Tests one action/param style per call with a 3s gap, so it cannot flood
    the upstream and trigger the IP block that ruined the v3.26 results.
    Returns the exact body sent next to the exact reply. */
-app.post('/api/admin/deep-probe', strict, async (req, res) => {
+app.post(['/api/admin/deep-probe', '/api/admin/slow-probe'], strict, async (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   if (!fuReady()) return res.status(503).json({ ok: false, error: 'Upstream not configured.' });
 
@@ -748,12 +748,22 @@ app.post('/api/admin/deep-probe', strict, async (req, res) => {
 
   const sid = String((req.body || {}).serviceId || '999999');
   const imei = String((req.body || {}).imei || '352850711207110');
+  /* THE LEADING HYPOTHESIS (see header notes):
+     accountinfo works because it needs NO parameters. Every action that
+     DOES need parameters fails with "Parameter Required". On DHRU Fusion
+     / GSM Hub API v3, extra parameters are not sent as loose form fields —
+     they are packed into a single field called `parameters`, holding
+     base64-encoded JSON. If that is right, the server decodes an empty
+     blob and correctly reports ID and IMEI as missing.
+     The b64 attempts below test exactly that. */
+  const b64 = (obj) => Buffer.from(JSON.stringify(obj), 'utf8').toString('base64');
+
   const attempts = [
+    ['placeimeiorder', 'b64_parameters', { parameters: b64({ ID: sid, IMEI: imei }) }],
+    ['placeimeiorder', 'b64_with_requestformat', { requestformat: 'JSON', parameters: b64({ ID: sid, IMEI: imei }) }],
+    ['placeimeiorder', 'json_parameters_plain', { parameters: JSON.stringify({ ID: sid, IMEI: imei }) }],
     ['placeimeiorder', 'upper', { ID: sid, IMEI: imei }],
-    ['placeimeiorder', 'lower', { id: sid, imei: imei }],
-    ['placeimeiorder', 'array', { 'ID[]': sid, 'IMEI[]': imei }],
-    ['placeorder', 'upper', { ID: sid, IMEI: imei }],
-    ['imeiorder', 'upper', { ID: sid, IMEI: imei }]
+    ['placeimeiorder', 'lower', { id: sid, imei: imei }]
   ];
 
   const out = {};
@@ -1137,7 +1147,7 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ ok: false, error: 'Server error.' });
 });
 app.listen(PORT, () => {
-  console.log(`SIERRAUNLOCK API v3.27 online on :${PORT} — mode: ${fuReady() ? 'CONNECTED' : 'MANUAL'}`);
+  console.log(`SIERRAUNLOCK API v3.28 online on :${PORT} — mode: ${fuReady() ? 'CONNECTED' : 'MANUAL'}`);
   console.log(`  Vault: ${ghReady() ? 'GitHub (' + GH.repo + ')' : 'LOCAL ONLY'}`);
   console.log(`  Run FIRST: GET /api/admin/auth-check — verifies upstream credentials + shows this server's IP`);
   console.log(`  Policy: cost + $${process.env.UNLOCK_FLAT_FEE || '2'} • rate ${load().rate} SLE • min top-up 50 Le`);
