@@ -1,15 +1,14 @@
 /* =====================================================================
-   SIERRAUNLOCK • BACKEND API — server.js (v3.20 • FULL AUTOMATION)
+   SIERRAUNLOCK • BACKEND API — server.js (v3.23 • PERSISTENT VAULT)
    ---------------------------------------------------------------------
-   v3.20 FIXES:
-   • EmailJS endpoint corrected to /api/v1.0/email/send
-   • Upstream order sends parameter ALIASES (service+id+serviceid,
-     imei+IMEI) so every DHRU fork accepts it
-   • AUTO-RETRY BOT: 3 attempts per upstream placement
-   • BINANCE TOP-UP AUTO-APPROVE BOT (TP- id in payment note)
-   • Accounts + email verification + wallet + auto-refund + CDR
-   • v3.21 cache resilience + probe reduction
-   • Pack 15: password reset + founder customer list + account delete
+   v3.23:
+   • GITHUB VAULT: data.json auto-backed-up to a private GitHub repo and
+     auto-restored on every deploy → accounts/wallets/orders NEVER lost
+   • MINIMUM TOP-UP = 50 Le (converted to USD at live rate)
+   • PLACE-PROBE BOT: discovers exact FastUnlockers parameter format
+   • TRUSTED-PHONE OM auto-approve (env OM_TRUSTED_PHONES)
+   • All v3.20 features: EmailJS auth, wallet, auto-refund, retry bot,
+     Binance bot, CDR, catalog, Pack-15 account management
    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
    ===================================================================== */
 
@@ -43,12 +42,79 @@ const save = (d) => {
   d.users = d.users || {};
   d.sessions = d.sessions || {};
   fs.writeFileSync(DATA, JSON.stringify(d, null, 2));
+  ghPushSoon();
 };
+
+/* 02b • GITHUB VAULT (persistent backup — survives every Render deploy) */
+const GH = {
+  token: process.env.GITHUB_TOKEN || '',
+  repo: process.env.GITHUB_DATA_REPO || ''
+};
+const ghReady = () => !!(GH.token && GH.repo);
+let ghPushTimer = null;
+let ghLastSha = '';
+
+async function ghPull() {
+  if (!ghReady()) return null;
+  try {
+    const r = await fetch('https://api.github.com/repos/' + GH.repo + '/contents/data.json', {
+      headers: { Authorization: 'Bearer ' + GH.token, Accept: 'application/vnd.github+json', 'User-Agent': 'sierraunlock-api' }
+    });
+    if (!r.ok) return null;
+    const j = await r.json();
+    ghLastSha = j.sha || '';
+    return JSON.parse(Buffer.from(j.content || '', 'base64').toString('utf8'));
+  } catch (e) { return null; }
+}
+
+async function ghPush() {
+  if (!ghReady()) return;
+  try {
+    const b64 = Buffer.from(fs.readFileSync(DATA, 'utf8'), 'utf8').toString('base64');
+    const doPut = (sha) => {
+      const body = { message: 'vault ' + Date.now(), content: b64 };
+      if (sha) body.sha = sha;
+      return fetch('https://api.github.com/repos/' + GH.repo + '/contents/data.json', {
+        method: 'PUT',
+        headers: { Authorization: 'Bearer ' + GH.token, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json', 'User-Agent': 'sierraunlock-api' },
+        body: JSON.stringify(body)
+      });
+    };
+    let r = await doPut(ghLastSha);
+    if (r.status === 409 || r.status === 422) {
+      const g = await fetch('https://api.github.com/repos/' + GH.repo + '/contents/data.json', {
+        headers: { Authorization: 'Bearer ' + GH.token, Accept: 'application/vnd.github+json', 'User-Agent': 'sierraunlock-api' }
+      });
+      if (g.ok) { const gj = await g.json(); ghLastSha = gj.sha || ''; r = await doPut(ghLastSha); }
+    }
+    if (r.ok) { const j = await r.json(); if (j && j.content && j.content.sha) ghLastSha = j.content.sha; }
+  } catch (e) { /* silent — never crash the server */ }
+}
+
+function ghPushSoon() {
+  if (!ghReady()) return;
+  if (ghPushTimer) return;
+  ghPushTimer = setTimeout(() => { ghPushTimer = null; ghPush(); }, 15000);
+}
+
 if (!fs.existsSync(DATA)) save({ jobs: [], wallets: {}, topups: [], users: {}, sessions: {}, rate: DEFAULT_RATE });
 else {
   const db = load();
   if (!db.rate || db.rate < 20) { db.rate = DEFAULT_RATE; save(db); }
 }
+
+/* Restore vault at boot (after any deploy) */
+(async () => {
+  try {
+    const remote = await ghPull();
+    if (remote && typeof remote === 'object') {
+      const local = load();
+      const cnt = d => (d.jobs || []).length + (d.topups || []).length + Object.keys(d.users || {}).length + Object.keys(d.wallets || {}).length;
+      if (cnt(remote) > cnt(local)) { save(remote); console.log('[VAULT] restored ' + cnt(remote) + ' records from GitHub'); }
+      else ghPushSoon();
+    }
+  } catch (e) { console.log('[VAULT] pull skipped: ' + e.message); }
+})();
 
 /* 03 • SECURITY + CORS */
 app.use(helmet());
@@ -76,6 +142,8 @@ const strict = rateLimit({ windowMs: 60 * 1000, max: 6 });
 /* 04 • AUTH */
 const adminOk = (req) => !!process.env.ADMIN_TOKEN && req.get('x-admin-token') === process.env.ADMIN_TOKEN;
 const verificationCodes = new Map();
+const resetCodes = new Map();
+const TRUSTED_PHONES = (process.env.OM_TRUSTED_PHONES || '').split(',').map(s => s.replace(/\D/g, '')).filter(Boolean);
 
 /* 05 • SCHEMAS */
 const unlockSchema = Joi.object({
@@ -118,17 +186,17 @@ const adminRefundSchema = Joi.object({
 });
 
 /* 06 • PUBLIC HEALTH */
-app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.20.0', docs: '/api/health' }));
+app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.23.0', docs: '/api/health' }));
 app.get('/api/health', (req, res) => res.json({
-  ok: true, service: 'SIERRAUNLOCK API', version: '3.20.0',
+  ok: true, service: 'SIERRAUNLOCK API', version: '3.23.0',
   mode: fuReady() ? 'connected-to-fastunlockers' : 'manual-mode',
+  vault: ghReady() ? 'github' : 'local-only',
   catalogs: ['imei', 'file', 'server'],
   rate: load().rate,
   time: new Date().toISOString()
 }));
 app.get('/api/rates', (req, res) => res.json({ ok: true, slePerUsd: load().rate }));
 
-/* 06b • MY-IP */
 app.get('/api/my-ip', strict, async (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   try {
@@ -244,7 +312,7 @@ app.get('/api/wallet/:phone', async (req, res) => {
   res.json({ ok: true, balance: w.balance, tx: (w.tx || []).slice(0, 30), pending });
 });
 
-/* 08f • WALLET TOP-UP */
+/* 08f • WALLET TOP-UP (v3.23: minimum 50 Le + trusted-phone instant) */
 app.post('/api/wallet/topup', strict, (req, res) => {
   const b = req.body || {};
   const phone = String(b.phone || '').replace(/\D/g, '');
@@ -254,6 +322,10 @@ app.post('/api/wallet/topup', strict, (req, res) => {
     return res.status(400).json({ ok: false, error: 'Invalid top-up request.' });
   }
   const db = load(); db.topups = db.topups || [];
+  const minUsd = Math.round((50 / (db.rate || DEFAULT_RATE)) * 100) / 100;
+  if (amount < minUsd) {
+    return res.status(400).json({ ok: false, error: 'Minimum top-up is 50 Le (about $' + minUsd.toFixed(2) + ' at current rate).' });
+  }
   const tp = {
     id: 'TP-' + Date.now(), phone,
     amount: Math.round(amount * 100) / 100,
@@ -261,6 +333,16 @@ app.post('/api/wallet/topup', strict, (req, res) => {
     status: 'pending',
     created: new Date().toISOString()
   };
+  if (method === 'orange_money' && TRUSTED_PHONES.includes(phone)) {
+    tp.status = 'approved'; tp.approvedAt = new Date().toISOString(); tp.auto = 'trusted-phone-bot';
+    db.topups.unshift(tp);
+    db.wallets = db.wallets || {};
+    const w = db.wallets[phone] = db.wallets[phone] || { balance: 0, tx: [] };
+    w.balance = Math.round((w.balance + tp.amount) * 100) / 100;
+    w.tx.unshift({ type: 'credit', amount: tp.amount, ref: tp.id + ' (trusted-auto)', date: new Date().toISOString() });
+    save(db);
+    return res.json({ ok: true, topup: tp.id, auto_approved: true, balance: w.balance, note: 'Trusted phone: credited instantly.' });
+  }
   db.topups.unshift(tp); save(db);
   res.json({
     ok: true, topup: tp.id,
@@ -286,7 +368,7 @@ app.post('/api/wallet/pay', strict, async (req, res) => {
   if (w.balance < price) {
     return res.status(400).json({
       ok: false,
-      error: 'Insufficient balance. Need $' + price + ' — you have $' + w.balance + '. Add Fund first.',
+      error: 'Insufficient balance. Need $' + price + ' — you have $' + w.balance + '. Add Fund first (minimum 50 Le).',
       needed: price, balance: w.balance
     });
   }
@@ -598,6 +680,36 @@ app.get('/api/admin/probe', strict, async (req, res) => {
   res.json({ ok: true, probe: out });
 });
 
+/* 11b • PLACE-PROBE BOT (free format discovery — fake service 999999) */
+app.post('/api/admin/place-probe', strict, async (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  const sid = '999999';
+  const imei = '352850711207110';
+  const combos = {
+    A_service_imei:         { service: sid, imei },
+    B_id_imei:              { id: sid, imei },
+    C_serviceid_imei:       { serviceid: sid, imei },
+    D_service_imei_details: { service: sid, imei, details: 'probe' },
+    E_service_IMEI_upper:   { service: sid, IMEI: imei },
+    F_id_imei_details:      { id: sid, imei, details: 'probe' }
+  };
+  const out = {};
+  for (const [name, params] of Object.entries(combos)) {
+    const r = await gsmCall('placeimeiorder', params);
+    out[name] = r.json || r.text;
+  }
+  try {
+    const rj = await fetch(FU.base + FU.endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: FU.username, apiaccesskey: FU.key, action: 'placeimeiorder', service: sid, imei })
+    });
+    const t = await rj.text();
+    try { out.G_json_body = JSON.parse(t); } catch (e) { out.G_json_body = t.slice(0, 300); }
+  } catch (e) { out.G_json_body = e.message; }
+  res.json({ ok: true, note: 'Combo whose reply is NOT "Parameter ... Required" = correct format.', results: out });
+});
+
 /* 12 • CATALOG */
 let svcCache = { ts: 0, data: null };
 
@@ -760,7 +872,7 @@ app.get('/api/track/:id', async (req, res) => {
   });
 });
 
-/* 13d • AUTH ENDPOINTS (EmailJS verified) */
+/* 13d • AUTH ENDPOINTS */
 const EMAILJS = {
   service: process.env.EMAILJS_SERVICE_ID || '',
   template: process.env.EMAILJS_TEMPLATE_ID || '',
@@ -891,9 +1003,6 @@ app.post('/api/auth/resend', strict, async (req, res) => {
   res.json(sent.ok ? { ok: true, note: 'New code sent to ' + rec.email } : { ok: false, error: 'Email send failed. ' + (sent.detail || '') });
 });
 
-/* ===== PACK 15: PASSWORD RESET + FOUNDER ACCOUNT MANAGEMENT ===== */
-const resetCodes = new Map();
-
 app.post('/api/auth/forgot', strict, async (req, res) => {
   const { emailOrPhone } = req.body || {};
   const p = String(emailOrPhone || '').replace(/\D/g, '');
@@ -973,11 +1082,9 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ ok: false, error: 'Server error.' });
 });
 app.listen(PORT, () => {
-  console.log(`SIERRAUNLOCK API v3.20 online on :${PORT} — mode: ${fuReady() ? 'CONNECTED (IMEI+FILE+SERVER+CHIMERA UNION)' : 'MANUAL'}`);
-  console.log(`  Policy: cost + $${process.env.UNLOCK_FLAT_FEE || '2'} • rate ${load().rate} SLE • split ${process.env.UNLOCK_COMMISSION_SPLIT || '0.75,0.25'}`);
-  console.log(`  CDR webhook: /api/webhook/cdr ${process.env.CDR_REPLY_KEY ? '(key set)' : '(no key set)'}`);
-  console.log(`  Wallet: /api/wallet/:phone + topup + pay (auto-refund on failure)`);
-  console.log(`  Bots: auto-retry x3 upstream + Binance top-up auto-approve`);
-  console.log(`  Auth: /api/auth/register + verify + login + me + forgot + reset (EmailJS ${emailReady() ? 'ready' : 'NOT CONFIGURED'})`);
-  console.log(`  Admin: users + user/delete + jobs + retry + rate`);
+  console.log(`SIERRAUNLOCK API v3.23 online on :${PORT} — mode: ${fuReady() ? 'CONNECTED' : 'MANUAL'}`);
+  console.log(`  Vault: ${ghReady() ? 'GitHub (' + GH.repo + ')' : 'LOCAL ONLY (set GITHUB_TOKEN + GITHUB_DATA_REPO)'}`);
+  console.log(`  Policy: cost + $${process.env.UNLOCK_FLAT_FEE || '2'} • rate ${load().rate} SLE • min top-up 50 Le`);
+  console.log(`  Bots: auto-retry x3 + Binance auto-approve + trusted-phone OM + place-probe`);
+  console.log(`  Auth: EmailJS ${emailReady() ? 'ready' : 'NOT CONFIGURED'}`);
 });
