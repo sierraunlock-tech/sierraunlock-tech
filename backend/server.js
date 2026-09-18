@@ -622,7 +622,7 @@ async function placeUpstreamOnce(job) {
   for (const action of (ORDER_ACTIONS[type] || ORDER_ACTIONS.imei)) {
     const sid = String(job.serviceId || job.service);
     const r = await gsmCall(action, {
-      service: sid, id: sid, serviceid: sid,
+      service: sid, id: sid, ID: sid, serviceid: sid,
       imei: job.imei || '', IMEI: job.imei || '',
       details: job.details || '',
       email: job.f_email || '',
