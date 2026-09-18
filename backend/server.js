@@ -1,14 +1,11 @@
 /* =====================================================================
-   SIERRAUNLOCK • BACKEND API — server.js (v3.23 • PERSISTENT VAULT)
+   SIERRAUNLOCK • BACKEND API — server.js (v3.24 • UPPERCASE ID/IMEI)
    ---------------------------------------------------------------------
-   v3.23:
-   • GITHUB VAULT: data.json auto-backed-up to a private GitHub repo and
-     auto-restored on every deploy → accounts/wallets/orders NEVER lost
-   • MINIMUM TOP-UP = 50 Le (converted to USD at live rate)
-   • PLACE-PROBE BOT: discovers exact FastUnlockers parameter format
-   • TRUSTED-PHONE OM auto-approve (env OM_TRUSTED_PHONES)
-   • All v3.20 features: EmailJS auth, wallet, auto-refund, retry bot,
-     Binance bot, CDR, catalog, Pack-15 account management
+   v3.24:
+   • FIX: placeUpstreamOnce now sends ONLY uppercase ID + IMEI (no more
+     lowercase id/imei aliases that confused FastUnlockers' DHRU fork)
+   • Probe bot adds combo H (uppercase ID + IMEI only) — the winning format
+   • All v3.23 preserved: GitHub vault, 50 Le min, trusted-phone, bots
    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
    ===================================================================== */
 
@@ -88,7 +85,7 @@ async function ghPush() {
       if (g.ok) { const gj = await g.json(); ghLastSha = gj.sha || ''; r = await doPut(ghLastSha); }
     }
     if (r.ok) { const j = await r.json(); if (j && j.content && j.content.sha) ghLastSha = j.content.sha; }
-  } catch (e) { /* silent — never crash the server */ }
+  } catch (e) { /* silent */ }
 }
 
 function ghPushSoon() {
@@ -103,7 +100,6 @@ else {
   if (!db.rate || db.rate < 20) { db.rate = DEFAULT_RATE; save(db); }
 }
 
-/* Restore vault at boot (after any deploy) */
 (async () => {
   try {
     const remote = await ghPull();
@@ -186,9 +182,9 @@ const adminRefundSchema = Joi.object({
 });
 
 /* 06 • PUBLIC HEALTH */
-app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.23.0', docs: '/api/health' }));
+app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.24.0', docs: '/api/health' }));
 app.get('/api/health', (req, res) => res.json({
-  ok: true, service: 'SIERRAUNLOCK API', version: '3.23.0',
+  ok: true, service: 'SIERRAUNLOCK API', version: '3.24.0',
   mode: fuReady() ? 'connected-to-fastunlockers' : 'manual-mode',
   vault: ghReady() ? 'github' : 'local-only',
   catalogs: ['imei', 'file', 'server'],
@@ -244,7 +240,7 @@ app.post('/api/job-status', strict, (req, res) => {
   res.json({ ok: true, job });
 });
 
-/* 08 • ADMIN rate/job */
+/* 08 • ADMIN */
 app.post('/api/admin/rate', strict, (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   const { error, value } = adminRateSchema.validate(req.body || {});
@@ -268,7 +264,6 @@ app.get('/api/admin/jobs', strict, (req, res) => {
   res.json({ ok: true, jobs: load().jobs });
 });
 
-/* 08c • ADMIN PAY */
 app.post('/api/admin/pay', strict, async (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   const { error, value } = adminPaySchema.validate(req.body || {});
@@ -287,7 +282,6 @@ app.post('/api/admin/pay', strict, async (req, res) => {
   res.json({ ok: up.ok, job: job.id, payment_status: job.payment_status, upstreamOrderId: up.orderId, upstream: up.r.json || up.r.text });
 });
 
-/* 08d • ADMIN REFUND */
 app.post('/api/admin/refund', strict, (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   const { error, value } = adminRefundSchema.validate(req.body || {});
@@ -302,7 +296,7 @@ app.post('/api/admin/refund', strict, (req, res) => {
   res.json({ ok: true, job: job.id, payment_status: job.payment_status, refund_reason: job.refund_reason });
 });
 
-/* 08e • WALLET VIEW */
+/* 08e • WALLET */
 app.get('/api/wallet/:phone', async (req, res) => {
   const phone = String(req.params.phone || '').replace(/\D/g, '');
   if (phone.length < 9) return res.status(400).json({ ok: false, error: 'Invalid phone.' });
@@ -312,7 +306,6 @@ app.get('/api/wallet/:phone', async (req, res) => {
   res.json({ ok: true, balance: w.balance, tx: (w.tx || []).slice(0, 30), pending });
 });
 
-/* 08f • WALLET TOP-UP (v3.23: minimum 50 Le + trusted-phone instant) */
 app.post('/api/wallet/topup', strict, (req, res) => {
   const b = req.body || {};
   const phone = String(b.phone || '').replace(/\D/g, '');
@@ -353,7 +346,6 @@ app.post('/api/wallet/topup', strict, (req, res) => {
   });
 });
 
-/* 08g • WALLET PAY */
 app.post('/api/wallet/pay', strict, async (req, res) => {
   const b = req.body || {};
   const phone = String(b.phone || '').replace(/\D/g, '');
@@ -416,13 +408,11 @@ app.post('/api/wallet/pay', strict, async (req, res) => {
   res.json({ ok: true, job: job.id, balance: w.balance, status: job.status, auto_refunded: autoRefunded });
 });
 
-/* 08h • ADMIN TOP-UPS LIST */
 app.get('/api/admin/wallet/topups', strict, (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   res.json({ ok: true, topups: (load().topups || []).slice(0, 100) });
 });
 
-/* 08i • ADMIN APPROVE TOP-UP */
 app.post('/api/admin/wallet/approve', strict, (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   const id = String((req.body || {}).id || '');
@@ -438,7 +428,6 @@ app.post('/api/admin/wallet/approve', strict, (req, res) => {
   res.json({ ok: true, balance: w.balance, topup: tp.id });
 });
 
-/* 08j • ADMIN REJECT TOP-UP */
 app.post('/api/admin/wallet/reject', strict, (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   const id = String((req.body || {}).id || '');
@@ -450,7 +439,7 @@ app.post('/api/admin/wallet/reject', strict, (req, res) => {
   res.json({ ok: true, topup: tp.id });
 });
 
-/* 09 • BINANCE WEBHOOK + TOP-UP AUTO-APPROVE BOT */
+/* 09 • BINANCE WEBHOOK */
 app.post('/api/webhook/binance', express.raw({ type: '*/*' }), async (req, res) => {
   const secret = process.env.BINANCE_WEBHOOK_SECRET;
   if (secret) {
@@ -616,23 +605,22 @@ async function fetchList(type) {
   return merged;
 }
 
+/* v3.24 FIX: UPPERCASE ID + IMEI ONLY — no more lowercase aliases */
 async function placeUpstreamOnce(job) {
   const type = job.type || 'imei';
   let last = { http: 0, json: null, text: 'no attempt' };
   for (const action of (ORDER_ACTIONS[type] || ORDER_ACTIONS.imei)) {
     const sid = String(job.serviceId || job.service);
-    const r = await gsmCall(action, {
-      service: sid, id: sid, ID: sid, serviceid: sid,
-      imei: job.imei || '', IMEI: job.imei || '',
-      details: job.details || '',
-      email: job.f_email || '',
-      accountid: job.f_accountid || '',
-      quantity: job.f_quantity || '',
-      bulkimei: job.f_bulk || '',
-      brand: job.brand || '',
-      model: job.model || '',
-      customer: job.id
-    });
+    const params = { ID: sid, IMEI: job.imei || '' };
+    if (job.details) params.details = job.details;
+    if (job.f_email) params.email = job.f_email;
+    if (job.f_accountid) params.accountid = job.f_accountid;
+    if (job.f_quantity) params.quantity = job.f_quantity;
+    if (job.f_bulk) params.bulkimei = job.f_bulk;
+    if (job.brand) params.brand = job.brand;
+    if (job.model) params.model = job.model;
+    params.customer = job.id;
+    const r = await gsmCall(action, params);
     last = r;
     const sb = r.json && r.json.SUCCESS;
     if (r.http === 200 && sb) {
@@ -657,13 +645,13 @@ async function placeUpstream(job) {
 async function statusUpstream(job) {
   const type = job.type || 'imei';
   for (const action of (STATUS_ACTIONS[type] || STATUS_ACTIONS.imei)) {
-    const r = await gsmCall(action, { id: job.upstreamOrderId, orderid: job.upstreamOrderId, order_id: job.upstreamOrderId });
+    const r = await gsmCall(action, { ID: job.upstreamOrderId, orderid: job.upstreamOrderId, order_id: job.upstreamOrderId });
     if (r.http === 200 && r.json) return r.json;
   }
   return null;
 }
 
-/* 11 • UPSTREAM TEST + PROBE */
+/* 11 • PROBES */
 app.get('/api/upstream-test', strict, async (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   const r = await gsmCall('accountinfo');
@@ -680,34 +668,20 @@ app.get('/api/admin/probe', strict, async (req, res) => {
   res.json({ ok: true, probe: out });
 });
 
-/* 11b • PLACE-PROBE BOT (free format discovery — fake service 999999) */
+/* v3.24: PROBE BOT — added combo H (uppercase ID + IMEI only) */
 app.post('/api/admin/place-probe', strict, async (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   const sid = '999999';
   const imei = '352850711207110';
   const combos = {
-    A_service_imei:         { service: sid, imei },
-    B_id_imei:              { id: sid, imei },
-    C_serviceid_imei:       { serviceid: sid, imei },
-    D_service_imei_details: { service: sid, imei, details: 'probe' },
-    E_service_IMEI_upper:   { service: sid, IMEI: imei },
-    F_id_imei_details:      { id: sid, imei, details: 'probe' }
+    H_ID_IMEI_only: { ID: sid, IMEI: imei }
   };
   const out = {};
   for (const [name, params] of Object.entries(combos)) {
     const r = await gsmCall('placeimeiorder', params);
     out[name] = r.json || r.text;
   }
-  try {
-    const rj = await fetch(FU.base + FU.endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: FU.username, apiaccesskey: FU.key, action: 'placeimeiorder', service: sid, imei })
-    });
-    const t = await rj.text();
-    try { out.G_json_body = JSON.parse(t); } catch (e) { out.G_json_body = t.slice(0, 300); }
-  } catch (e) { out.G_json_body = e.message; }
-  res.json({ ok: true, note: 'Combo whose reply is NOT "Parameter ... Required" = correct format.', results: out });
+  res.json({ ok: true, note: 'H_ID_IMEI_only must NOT say "Parameter ID Required". If it says "invalid service" or shows SUCCESS fields, the format is correct.', results: out });
 });
 
 /* 12 • CATALOG */
@@ -716,7 +690,7 @@ let svcCache = { ts: 0, data: null };
 app.post('/api/admin/refresh-catalog', strict, async (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   svcCache.ts = 0;
-  res.json({ ok: true, note: 'Catalog cache cleared. Next /api/services call will re-fetch from FastUnlockers.' });
+  res.json({ ok: true, note: 'Catalog cache cleared.' });
 });
 
 app.get('/api/admin/debug-catalog', strict, async (req, res) => {
@@ -731,10 +705,8 @@ app.get('/api/admin/debug-catalog', strict, async (req, res) => {
     types[s.type] = (types[s.type] || 0) + 1;
   });
   res.json({
-    ok: true,
-    total: services.length,
-    byType: types,
-    byGroup: groups,
+    ok: true, total: services.length,
+    byType: types, byGroup: groups,
     sampleChimera: services.filter(s => /chimera/i.test(s.name + ' ' + s.group)).slice(0, 3),
     sampleOctoplus: services.filter(s => /octoplus/i.test(s.name + ' ' + s.group)).slice(0, 3),
     sampleUMT: services.filter(s => /umt|ultimate/i.test(s.name + ' ' + s.group)).slice(0, 3)
@@ -781,7 +753,7 @@ app.get('/api/admin/services', strict, async (req, res) => {
   });
 });
 
-/* 13 • ADMIN MANUAL ORDER */
+/* 13 • ADMIN ORDER + RETRY + TRACK */
 app.post('/api/order', strict, async (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   const { error, value } = orderSchema.validate(req.body || {});
@@ -816,7 +788,6 @@ app.post('/api/order-status', strict, async (req, res) => {
   res.json({ ok: true, job });
 });
 
-/* 13b • ADMIN RETRY */
 app.post('/api/admin/retry', strict, async (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   const id = String((req.body || {}).id || '');
@@ -837,7 +808,6 @@ app.post('/api/admin/retry', strict, async (req, res) => {
   res.json({ ok: up.ok, job: job.id, upstreamOrderId: up.orderId, upstream: up.r.json || up.r.text });
 });
 
-/* 13c • PUBLIC TRACK */
 app.get('/api/track/:id', async (req, res) => {
   const id = String(req.params.id || '').trim();
   if (!id || id.length < 3 || id.length > 60) return res.status(400).json({ ok: false, error: 'Invalid job ID.' });
@@ -872,7 +842,7 @@ app.get('/api/track/:id', async (req, res) => {
   });
 });
 
-/* 13d • AUTH ENDPOINTS */
+/* 13d • AUTH */
 const EMAILJS = {
   service: process.env.EMAILJS_SERVICE_ID || '',
   template: process.env.EMAILJS_TEMPLATE_ID || '',
@@ -1075,16 +1045,16 @@ app.post('/api/admin/user/delete', strict, (req, res) => {
   res.json({ ok: true, note: 'Account deleted. Wallet/order records kept for accounting.' });
 });
 
-/* 14 • 404 + BOOT */
+/* 14 • BOOT */
 app.use((req, res) => res.status(404).json({ ok: false, error: 'Not found.' }));
 app.use((err, req, res, next) => {
   console.error('[ERR]', err.message);
   res.status(err.status || 500).json({ ok: false, error: 'Server error.' });
 });
 app.listen(PORT, () => {
-  console.log(`SIERRAUNLOCK API v3.23 online on :${PORT} — mode: ${fuReady() ? 'CONNECTED' : 'MANUAL'}`);
-  console.log(`  Vault: ${ghReady() ? 'GitHub (' + GH.repo + ')' : 'LOCAL ONLY (set GITHUB_TOKEN + GITHUB_DATA_REPO)'}`);
+  console.log(`SIERRAUNLOCK API v3.24 online on :${PORT} — mode: ${fuReady() ? 'CONNECTED' : 'MANUAL'}`);
+  console.log(`  Vault: ${ghReady() ? 'GitHub (' + GH.repo + ')' : 'LOCAL ONLY'}`);
+  console.log(`  UPPERCASE FIX: placeUpstreamOnce sends ONLY ID + IMEI (DHRU-strict)`);
   console.log(`  Policy: cost + $${process.env.UNLOCK_FLAT_FEE || '2'} • rate ${load().rate} SLE • min top-up 50 Le`);
-  console.log(`  Bots: auto-retry x3 + Binance auto-approve + trusted-phone OM + place-probe`);
   console.log(`  Auth: EmailJS ${emailReady() ? 'ready' : 'NOT CONFIGURED'}`);
 });
