@@ -779,6 +779,40 @@ app.post(['/api/admin/deep-probe', '/api/admin/slow-probe'], strict, async (req,
   });
 });
 
+/* v3.28b • ACTION-NAME PROBE — LAST enumeration attempt.
+   Six parameter formats have now returned the exact same error text
+   word-for-word (form fields upper/lower, base64 envelope, plain JSON,
+   numbered id1/imei1). That pattern points at the action name itself,
+   or possibly a generic catch-all response independent of what's sent —
+   see the header note added below the results of this call. */
+app.post('/api/admin/action-probe', strict, async (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  if (!fuReady()) return res.status(503).json({ ok: false, error: 'Upstream not configured.' });
+
+  const sid = '999999';
+  const imei = '352850711207110';
+  const actionNames = [
+    'placeimeiorder',
+    'imeiorder',
+    'orderimei',
+    'placeimei',
+    'newimeiorder',
+    'createimeiorder'
+  ];
+
+  const out = {};
+  for (const action of actionNames) {
+    const r = await gsmCall(action, { ID: sid, IMEI: imei });
+    out[action] = { reply: r.json || r.text };
+    await new Promise(w => setTimeout(w, 2000));
+  }
+  res.json({
+    ok: true,
+    note: 'Look for any action that returns something DIFFERENT from "Parameter ID Required". If every single one is identical again, this is no longer a guessable format problem — see the note in the chat reply about what to do next.',
+    results: out
+  });
+});
+
 /* 12 • CATALOG */
 let svcCache = { ts: 0, data: null };
 
