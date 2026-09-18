@@ -1,5 +1,5 @@
 /* =====================================================================
-   SIERRAUNLOCK • BACKEND API — server.js (v3.26 • REAL DIAGNOSTICS)
+   SIERRAUNLOCK • BACKEND API — server.js (v3.27 • AUTH-FIRST DIAGNOSTICS)
    ---------------------------------------------------------------------
    WHAT CHANGED FROM v3.24 (read this before anything else):
 
@@ -196,9 +196,9 @@ const adminRefundSchema = Joi.object({
 });
 
 /* 06 • PUBLIC HEALTH */
-app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.26.0', docs: '/api/health' }));
+app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.27.0', docs: '/api/health' }));
 app.get('/api/health', (req, res) => res.json({
-  ok: true, service: 'SIERRAUNLOCK API', version: '3.26.0',
+  ok: true, service: 'SIERRAUNLOCK API', version: '3.27.0',
   mode: fuReady() ? 'connected-to-fastunlockers' : 'manual-mode',
   vault: ghReady() ? 'github' : 'local-only',
   catalogs: ['imei', 'file', 'server'],
@@ -695,41 +695,76 @@ app.get('/api/admin/probe', strict, async (req, res) => {
   res.json({ ok: true, probe: out });
 });
 
-/* v3.26 • REAL DIAGNOSTIC PROBE
-   This is the tool to actually resolve the FastUnlockers "ID/IMEI
-   Required" error. It tries several plausible action names combined
-   with a few param-key styles, and — the important part — returns the
-   EXACT raw body sent for each attempt (sentBody) next to the exact
-   reply. Copy the whole JSON response and send it to FastUnlockers
-   support with: "here is exactly what we sent and exactly what you
-   replied — what should the request look like?" That answer is the
-   only thing that reliably ends this; further guessing here won't. */
+/* v3.27 • AUTH CHECK — RUN THIS FIRST, BEFORE ANY ORDER PROBE
+   The v3.26 burst probe revealed the real signal: FastUnlockers replied
+   "Ip has been blocked ... too many Authentication Failed". That means
+   our username/apiaccesskey pair is being REJECTED, or this server's IP
+   is not whitelisted on the reseller account. An order can never succeed
+   while authentication is failing — every parameter experiment above was
+   testing the wrong layer.
+
+   This endpoint makes exactly ONE call (accountinfo). One call cannot
+   trigger an IP block. If it returns SUCCESS with account details, auth
+   is genuinely fine and the problem is elsewhere. If it returns
+   "Authentication Failed" or an IP-block message, THAT is the bug. */
+app.get('/api/admin/auth-check', strict, async (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  if (!fuReady()) return res.status(503).json({ ok: false, error: 'UNLOCK_API_URL / USERNAME / KEY not all set in Render env.' });
+  let ip = 'unknown';
+  try { const ir = await fetch('https://api.ipify.org?format=json'); ip = (await ir.json()).ip; } catch (e) {}
+  const r = await gsmCall('accountinfo');
+  const authOk = !!(r.json && r.json.SUCCESS);
+  res.json({
+    ok: true,
+    authenticated: authOk,
+    serverPublicIp: ip,
+    verdict: authOk
+      ? 'Auth OK — username + API key accepted. The order problem is NOT authentication.'
+      : 'AUTH FAILING — fix this before anything else. Either the API key/username is wrong, or this server IP must be whitelisted in the FastUnlockers reseller panel (API / API Settings page).',
+    endpointCalled: FU.base + FU.endpoint,
+    username: FU.username,
+    sentBody: r.sentBody,
+    reply: r.json || r.text
+  });
+});
+
+/* v3.27 • SLOW ORDER PROBE — only run AFTER auth-check says authenticated:true
+   Tests one action/param style per call with a 3s gap, so it cannot flood
+   the upstream and trigger the IP block that ruined the v3.26 results.
+   Returns the exact body sent next to the exact reply. */
 app.post('/api/admin/deep-probe', strict, async (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  if (!fuReady()) return res.status(503).json({ ok: false, error: 'Upstream not configured.' });
+
+  const pre = await gsmCall('accountinfo');
+  if (!(pre.json && pre.json.SUCCESS)) {
+    return res.json({
+      ok: false,
+      blocked: true,
+      reason: 'Authentication is currently failing upstream, so order probes would be meaningless. Run GET /api/admin/auth-check and fix auth first.',
+      reply: pre.json || pre.text
+    });
+  }
+
   const sid = String((req.body || {}).serviceId || '999999');
   const imei = String((req.body || {}).imei || '352850711207110');
-
-  const actionCandidates = [
-    'placeimeiorder', 'placeorder', 'imeiorder', 'neworder',
-    'createorder', 'submitorder', 'newimeiorder', 'placeimei'
+  const attempts = [
+    ['placeimeiorder', 'upper', { ID: sid, IMEI: imei }],
+    ['placeimeiorder', 'lower', { id: sid, imei: imei }],
+    ['placeimeiorder', 'array', { 'ID[]': sid, 'IMEI[]': imei }],
+    ['placeorder', 'upper', { ID: sid, IMEI: imei }],
+    ['imeiorder', 'upper', { ID: sid, IMEI: imei }]
   ];
-  const paramStyles = {
-    upper: { ID: sid, IMEI: imei },
-    lower: { id: sid, imei: imei },
-    array: { 'ID[]': sid, 'IMEI[]': imei }
-  };
 
   const out = {};
-  for (const action of actionCandidates) {
-    for (const [styleName, params] of Object.entries(paramStyles)) {
-      const key = action + ':' + styleName;
-      const r = await gsmCall(action, params);
-      out[key] = { sentBody: r.sentBody, reply: r.json || r.text };
-    }
+  for (const [action, style, params] of attempts) {
+    const r = await gsmCall(action, params);
+    out[action + ':' + style] = { sentBody: r.sentBody, reply: r.json || r.text };
+    await new Promise(w => setTimeout(w, 3000));
   }
   res.json({
     ok: true,
-    note: 'Look for ANY entry whose reply does NOT contain "Required". Send this whole JSON to FastUnlockers support if nothing stands out — the sentBody field for each attempt is exactly what left our server.',
+    note: 'Look for any reply that does NOT say "Required" and does NOT mention Authentication or Ip blocked.',
     results: out
   });
 });
@@ -1102,9 +1137,9 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ ok: false, error: 'Server error.' });
 });
 app.listen(PORT, () => {
-  console.log(`SIERRAUNLOCK API v3.26 online on :${PORT} — mode: ${fuReady() ? 'CONNECTED' : 'MANUAL'}`);
+  console.log(`SIERRAUNLOCK API v3.27 online on :${PORT} — mode: ${fuReady() ? 'CONNECTED' : 'MANUAL'}`);
   console.log(`  Vault: ${ghReady() ? 'GitHub (' + GH.repo + ')' : 'LOCAL ONLY'}`);
-  console.log(`  Diagnostic tool: POST /api/admin/deep-probe (returns exact sent bodies + replies)`);
+  console.log(`  Run FIRST: GET /api/admin/auth-check — verifies upstream credentials + shows this server's IP`);
   console.log(`  Policy: cost + $${process.env.UNLOCK_FLAT_FEE || '2'} • rate ${load().rate} SLE • min top-up 50 Le`);
   console.log(`  Auth: EmailJS ${emailReady() ? 'ready' : 'NOT CONFIGURED'}`);
 });
