@@ -1,11 +1,25 @@
 /* =====================================================================
-   SIERRAUNLOCK • BACKEND API — server.js (v3.24 • UPPERCASE ID/IMEI)
+   SIERRAUNLOCK • BACKEND API — server.js (v3.26 • REAL DIAGNOSTICS)
    ---------------------------------------------------------------------
-   v3.24:
-   • FIX: placeUpstreamOnce now sends ONLY uppercase ID + IMEI (no more
-     lowercase id/imei aliases that confused FastUnlockers' DHRU fork)
-   • Probe bot adds combo H (uppercase ID + IMEI only) — the winning format
-   • All v3.23 preserved: GitHub vault, 50 Le min, trusted-phone, bots
+   WHAT CHANGED FROM v3.24 (read this before anything else):
+
+   The live payment path (placeUpstreamOnce) is UNCHANGED. It already
+   sends the textbook DHRU format (ID + IMEI, uppercase). That part was
+   not guessed wrong — there is currently no evidence it's wrong at all.
+
+   What was added is a genuine diagnostic endpoint:
+     POST /api/admin/deep-probe
+   It tries several action-name candidates AND both param-key styles,
+   and — this is the important part — returns the EXACT raw request
+   body that was sent for every attempt, not just FastUnlockers' reply.
+   Send that raw-body + reply pair to FastUnlockers support and ask
+   "what should this look like instead?" That is the only way this
+   actually gets solved — repeated guessing without their docs/support
+   cannot converge, and you're already 8 guesses deep with the same
+   error every time.
+
+   No other logic was touched. Nothing here claims to have "fixed" the
+   FastUnlockers integration, because nothing has been verified to.
    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
    ===================================================================== */
 
@@ -182,9 +196,9 @@ const adminRefundSchema = Joi.object({
 });
 
 /* 06 • PUBLIC HEALTH */
-app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.24.0', docs: '/api/health' }));
+app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.26.0', docs: '/api/health' }));
 app.get('/api/health', (req, res) => res.json({
-  ok: true, service: 'SIERRAUNLOCK API', version: '3.24.0',
+  ok: true, service: 'SIERRAUNLOCK API', version: '3.26.0',
   mode: fuReady() ? 'connected-to-fastunlockers' : 'manual-mode',
   vault: ghReady() ? 'github' : 'local-only',
   catalogs: ['imei', 'file', 'server'],
@@ -512,7 +526,14 @@ const FU = {
 };
 function fuReady() { return !!(FU.base && FU.key && FU.username); }
 
-async function gsmCall(action, extraParams = {}) {
+/* Masks the api key when logging so it never lands in Render's log viewer in the clear */
+function maskedBody(paramsObj) {
+  const copy = Object.assign({}, paramsObj);
+  if (copy.apiaccesskey) copy.apiaccesskey = copy.apiaccesskey.slice(0, 4) + '***';
+  return Object.keys(copy).map(k => encodeURIComponent(k) + '=' + encodeURIComponent(copy[k])).join('&');
+}
+
+async function gsmCall(action, extraParams = {}, opts = {}) {
   if (!fuReady()) throw new Error('Upstream not configured.');
   const params = { username: FU.username, apiaccesskey: FU.key, action };
   Object.keys(extraParams).forEach(k => {
@@ -530,9 +551,13 @@ async function gsmCall(action, extraParams = {}) {
     });
     const text = await r.text();
     let json = null; try { json = JSON.parse(text); } catch (e) {}
-    return { http: r.status, json, text: text.slice(0, 600) };
+    if (opts.debug) {
+      console.log('[UPSTREAM OUT]', action, maskedBody(params));
+      console.log('[UPSTREAM IN ]', action, text.slice(0, 400));
+    }
+    return { http: r.status, json, text: text.slice(0, 600), sentBody: maskedBody(params) };
   } catch (e) {
-    return { http: 0, json: null, text: 'network error: ' + e.message };
+    return { http: 0, json: null, text: 'network error: ' + e.message, sentBody: maskedBody(params) };
   } finally { clearTimeout(t); }
 }
 
@@ -605,7 +630,9 @@ async function fetchList(type) {
   return merged;
 }
 
-/* v3.24 FIX: UPPERCASE ID + IMEI ONLY — no more lowercase aliases */
+/* LIVE PAYMENT PATH — UNCHANGED from v3.24. This sends the documented
+   DHRU format (uppercase ID + IMEI). Not modified further because there
+   is no verified evidence it's wrong — see header note. */
 async function placeUpstreamOnce(job) {
   const type = job.type || 'imei';
   let last = { http: 0, json: null, text: 'no attempt' };
@@ -620,7 +647,7 @@ async function placeUpstreamOnce(job) {
     if (job.brand) params.brand = job.brand;
     if (job.model) params.model = job.model;
     params.customer = job.id;
-    const r = await gsmCall(action, params);
+    const r = await gsmCall(action, params, { debug: true });
     last = r;
     const sb = r.json && r.json.SUCCESS;
     if (r.http === 200 && sb) {
@@ -668,20 +695,43 @@ app.get('/api/admin/probe', strict, async (req, res) => {
   res.json({ ok: true, probe: out });
 });
 
-/* v3.24: PROBE BOT — added combo H (uppercase ID + IMEI only) */
-app.post('/api/admin/place-probe', strict, async (req, res) => {
+/* v3.26 • REAL DIAGNOSTIC PROBE
+   This is the tool to actually resolve the FastUnlockers "ID/IMEI
+   Required" error. It tries several plausible action names combined
+   with a few param-key styles, and — the important part — returns the
+   EXACT raw body sent for each attempt (sentBody) next to the exact
+   reply. Copy the whole JSON response and send it to FastUnlockers
+   support with: "here is exactly what we sent and exactly what you
+   replied — what should the request look like?" That answer is the
+   only thing that reliably ends this; further guessing here won't. */
+app.post('/api/admin/deep-probe', strict, async (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
-  const sid = '999999';
-  const imei = '352850711207110';
-  const combos = {
-    H_ID_IMEI_only: { ID: sid, IMEI: imei }
+  const sid = String((req.body || {}).serviceId || '999999');
+  const imei = String((req.body || {}).imei || '352850711207110');
+
+  const actionCandidates = [
+    'placeimeiorder', 'placeorder', 'imeiorder', 'neworder',
+    'createorder', 'submitorder', 'newimeiorder', 'placeimei'
+  ];
+  const paramStyles = {
+    upper: { ID: sid, IMEI: imei },
+    lower: { id: sid, imei: imei },
+    array: { 'ID[]': sid, 'IMEI[]': imei }
   };
+
   const out = {};
-  for (const [name, params] of Object.entries(combos)) {
-    const r = await gsmCall('placeimeiorder', params);
-    out[name] = r.json || r.text;
+  for (const action of actionCandidates) {
+    for (const [styleName, params] of Object.entries(paramStyles)) {
+      const key = action + ':' + styleName;
+      const r = await gsmCall(action, params);
+      out[key] = { sentBody: r.sentBody, reply: r.json || r.text };
+    }
   }
-  res.json({ ok: true, note: 'H_ID_IMEI_only must NOT say "Parameter ID Required". If it says "invalid service" or shows SUCCESS fields, the format is correct.', results: out });
+  res.json({
+    ok: true,
+    note: 'Look for ANY entry whose reply does NOT contain "Required". Send this whole JSON to FastUnlockers support if nothing stands out — the sentBody field for each attempt is exactly what left our server.',
+    results: out
+  });
 });
 
 /* 12 • CATALOG */
@@ -1052,9 +1102,9 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ ok: false, error: 'Server error.' });
 });
 app.listen(PORT, () => {
-  console.log(`SIERRAUNLOCK API v3.24 online on :${PORT} — mode: ${fuReady() ? 'CONNECTED' : 'MANUAL'}`);
+  console.log(`SIERRAUNLOCK API v3.26 online on :${PORT} — mode: ${fuReady() ? 'CONNECTED' : 'MANUAL'}`);
   console.log(`  Vault: ${ghReady() ? 'GitHub (' + GH.repo + ')' : 'LOCAL ONLY'}`);
-  console.log(`  UPPERCASE FIX: placeUpstreamOnce sends ONLY ID + IMEI (DHRU-strict)`);
+  console.log(`  Diagnostic tool: POST /api/admin/deep-probe (returns exact sent bodies + replies)`);
   console.log(`  Policy: cost + $${process.env.UNLOCK_FLAT_FEE || '2'} • rate ${load().rate} SLE • min top-up 50 Le`);
   console.log(`  Auth: EmailJS ${emailReady() ? 'ready' : 'NOT CONFIGURED'}`);
 });
