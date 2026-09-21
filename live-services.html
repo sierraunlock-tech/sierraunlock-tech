@@ -1,19 +1,14 @@
 <!DOCTYPE html>
 <!--
 =====================================================================
-SIERRAUNLOCK • LIVE CATALOG — live-services.html (v2.6 • FU-MIRROR)
+SIERRAUNLOCK • LIVE CATALOG — live-services.html (v2.7 • FIXED)
 ---------------------------------------------------------------------
-v2.6 CHANGES:
-• Order form mirrors FastUnlockers.us EXACTLY per service type:
-    - IMEI services   → IMEI or Serial Number* + Bulk IMEI (optional)
-    - Tool/credit svcs→ Email* + Username* + Notes
-    - Account/qty svcs→ Email* + AccountID* + Quantity* + Notes
+v2.7 CHANGES:
+• Fixed backend Joi validation: sends brand:'Device', model:'Generic'
+• Order form mirrors FastUnlockers.us EXACTLY per service type
 • PAYMENT = WALLET ONLY. All money stays inside SIERRAUNLOCK.
-  Customer tops up wallet (OM/Binance → founder approves) then every
-  purchase deducts from balance automatically. No direct payments
-  to upstream account = fraud lock.
 • Live balance preview inside the order modal when phone is typed
-• Catalog = union of ALL upstream lists (IMEI+FILE+SERVER, Chimera etc.)
+• Catalog = union of ALL upstream lists (IMEI+FILE+SERVER)
 OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
 =====================================================================
 -->
@@ -266,7 +261,7 @@ $('send').onclick=async()=>{
   btn.disabled=true; btn.textContent='Processing…';
   try{
     const r=await fetch(API+'/api/wallet/pay',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({type,imei,details,f_email,f_username,f_accountid,f_quantity,f_bulk:bulk,brand:'Phone',model:'',phone,serviceId:cur.id})});
+      body:JSON.stringify({type,imei,details,f_email,f_username,f_accountid,f_quantity,f_bulk:bulk,brand:'Device',model:'Generic',phone,serviceId:cur.id})});
     const j=await r.json();
     const d=$('done'); d.style.display='block';
     if(j.ok){
