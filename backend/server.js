@@ -1,12 +1,12 @@
 /* =====================================================================
-   SIERRAUNLOCK • BACKEND API — server.js (v3.30 • ADMIN-FORMAT PROBE)
+   SIERRAUNLOCK • BACKEND API — server.js (v3.31 • SERVICEID PROBE)
    ---------------------------------------------------------------------
-   v3.30:
-   • Added /api/admin/admin-format-probe to test the exact JSON body 
-     format suggested by the FastUnlockers admin (ID + IMEI in JSON).
-   • Live payment path (placeUpstreamOnce) remains UNCHANGED until 
-     the probe confirms the correct format.
-   • All v3.29 features preserved: GitHub Vault, Wallet, Auth, CDR, 
+   v3.31:
+   • Added /api/admin/serviceid-probe to test the exact format suggested
+     by the FastUnlockers admin (lowercase serviceid + imei).
+   • Live payment path (placeUpstreamOnce) remains UNCHANGED until the
+     probe confirms the correct format.
+   • All v3.30 features preserved: GitHub Vault, Wallet, Auth, CDR,
      Auto-refund, 50 Le minimum, trusted-phone bot.
    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
    ===================================================================== */
@@ -184,9 +184,9 @@ const adminRefundSchema = Joi.object({
 });
 
 /* 06 • PUBLIC HEALTH */
-app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.30.0', docs: '/api/health' }));
+app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.31.0', docs: '/api/health' }));
 app.get('/api/health', (req, res) => res.json({
-  ok: true, service: 'SIERRAUNLOCK API', version: '3.30.0',
+  ok: true, service: 'SIERRAUNLOCK API', version: '3.31.0',
   mode: fuReady() ? 'connected-to-fastunlockers' : 'manual-mode',
   vault: ghReady() ? 'github' : 'local-only',
   catalogs: ['imei', 'file', 'server'],
@@ -617,7 +617,7 @@ async function fetchList(type) {
   return merged;
 }
 
-/* LIVE PAYMENT PATH — UNCHANGED */
+/* LIVE PAYMENT PATH — UNCHANGED until probe confirms */
 async function placeUpstreamOnce(job) {
   const type = job.type || 'imei';
   let last = { http: 0, json: null, text: 'no attempt' };
@@ -763,7 +763,6 @@ app.post('/api/admin/multipart-probe', strict, async (req, res) => {
   }
 });
 
-/* v3.30 • ADMIN-FORMAT PROBE */
 app.post('/api/admin/admin-format-probe', strict, async (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   if (!fuReady()) return res.status(503).json({ ok: false, error: 'Upstream not configured.' });
@@ -793,6 +792,46 @@ app.post('/api/admin/admin-format-probe', strict, async (req, res) => {
     out['2_query_string_ID_IMEI'] = { http: r2.status, reply: j2 || t2.slice(0, 400) };
   } catch (e) { out['2_query_string_ID_IMEI'] = { http: 0, reply: e.message }; }
   res.json({ ok: true, note: 'If either reply is NOT "Parameter Required", that transport is the fix.', results: out });
+});
+
+/* v3.31 • SERVICEID PROBE — Admin's exact suggestion */
+app.post('/api/admin/serviceid-probe', strict, async (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  if (!fuReady()) return res.status(503).json({ ok: false, error: 'Upstream not configured.' });
+  const sid = String((req.body || {}).serviceId || '999999');
+  const imei = String((req.body || {}).imei || '352850711207110');
+  const out = {};
+
+  // Test 1: serviceid + imei (lowercase)
+  try {
+    const params = new URLSearchParams({
+      username: FU.username, apiaccesskey: FU.key, action: 'placeimeiorder',
+      serviceid: sid, imei: imei
+    }).toString();
+    const r1 = await fetch(FU.base + FU.endpoint, {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: params
+    });
+    const t1 = await r1.text();
+    let j1 = null; try { j1 = JSON.parse(t1); } catch (e) {}
+    out['1_serviceid_imei_lower'] = { http: r1.status, reply: j1 || t1.slice(0, 400) };
+  } catch (e) { out['1_serviceid_imei_lower'] = { http: 0, reply: e.message }; }
+  await new Promise(w => setTimeout(w, 3000));
+
+  // Test 2: id + imei (lowercase)
+  try {
+    const params = new URLSearchParams({
+      username: FU.username, apiaccesskey: FU.key, action: 'placeimeiorder',
+      id: sid, imei: imei
+    }).toString();
+    const r2 = await fetch(FU.base + FU.endpoint, {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: params
+    });
+    const t2 = await r2.text();
+    let j2 = null; try { j2 = JSON.parse(t2); } catch (e) {}
+    out['2_id_imei_lower'] = { http: r2.status, reply: j2 || t2.slice(0, 400) };
+  } catch (e) { out['2_id_imei_lower'] = { http: 0, reply: e.message }; }
+
+  res.json({ ok: true, note: 'If either reply is NOT "Parameter Required", THAT is the fix.', results: out });
 });
 
 /* 12 • CATALOG */
@@ -1163,9 +1202,9 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ ok: false, error: 'Server error.' });
 });
 app.listen(PORT, () => {
-  console.log(`SIERRAUNLOCK API v3.30 online on :${PORT} — mode: ${fuReady() ? 'CONNECTED' : 'MANUAL'}`);
+  console.log(`SIERRAUNLOCK API v3.31 online on :${PORT} — mode: ${fuReady() ? 'CONNECTED' : 'MANUAL'}`);
   console.log(`  Vault: ${ghReady() ? 'GitHub (' + GH.repo + ')' : 'LOCAL ONLY'}`);
-  console.log(`  Run: GET /api/admin/auth-check OR POST /api/admin/admin-format-probe`);
+  console.log(`  Run: POST /api/admin/serviceid-probe to test admin's fix`);
   console.log(`  Policy: cost + $${process.env.UNLOCK_FLAT_FEE || '2'} • rate ${load().rate} SLE • min top-up 50 Le`);
   console.log(`  Auth: EmailJS ${emailReady() ? 'ready' : 'NOT CONFIGURED'}`);
 });
