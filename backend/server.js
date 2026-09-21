@@ -1,25 +1,13 @@
 /* =====================================================================
-   SIERRAUNLOCK • BACKEND API — server.js (v3.28 • DHRU PARAMETERS ENVELOPE TEST)
+   SIERRAUNLOCK • BACKEND API — server.js (v3.30 • ADMIN-FORMAT PROBE)
    ---------------------------------------------------------------------
-   WHAT CHANGED FROM v3.24 (read this before anything else):
-
-   The live payment path (placeUpstreamOnce) is UNCHANGED. It already
-   sends the textbook DHRU format (ID + IMEI, uppercase). That part was
-   not guessed wrong — there is currently no evidence it's wrong at all.
-
-   What was added is a genuine diagnostic endpoint:
-     POST /api/admin/deep-probe
-   It tries several action-name candidates AND both param-key styles,
-   and — this is the important part — returns the EXACT raw request
-   body that was sent for every attempt, not just FastUnlockers' reply.
-   Send that raw-body + reply pair to FastUnlockers support and ask
-   "what should this look like instead?" That is the only way this
-   actually gets solved — repeated guessing without their docs/support
-   cannot converge, and you're already 8 guesses deep with the same
-   error every time.
-
-   No other logic was touched. Nothing here claims to have "fixed" the
-   FastUnlockers integration, because nothing has been verified to.
+   v3.30:
+   • Added /api/admin/admin-format-probe to test the exact JSON body 
+     format suggested by the FastUnlockers admin (ID + IMEI in JSON).
+   • Live payment path (placeUpstreamOnce) remains UNCHANGED until 
+     the probe confirms the correct format.
+   • All v3.29 features preserved: GitHub Vault, Wallet, Auth, CDR, 
+     Auto-refund, 50 Le minimum, trusted-phone bot.
    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
    ===================================================================== */
 
@@ -56,7 +44,7 @@ const save = (d) => {
   ghPushSoon();
 };
 
-/* 02b • GITHUB VAULT (persistent backup — survives every Render deploy) */
+/* 02b • GITHUB VAULT */
 const GH = {
   token: process.env.GITHUB_TOKEN || '',
   repo: process.env.GITHUB_DATA_REPO || ''
@@ -196,9 +184,9 @@ const adminRefundSchema = Joi.object({
 });
 
 /* 06 • PUBLIC HEALTH */
-app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.29.0', docs: '/api/health' }));
+app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.30.0', docs: '/api/health' }));
 app.get('/api/health', (req, res) => res.json({
-  ok: true, service: 'SIERRAUNLOCK API', version: '3.29.0',
+  ok: true, service: 'SIERRAUNLOCK API', version: '3.30.0',
   mode: fuReady() ? 'connected-to-fastunlockers' : 'manual-mode',
   vault: ghReady() ? 'github' : 'local-only',
   catalogs: ['imei', 'file', 'server'],
@@ -526,7 +514,6 @@ const FU = {
 };
 function fuReady() { return !!(FU.base && FU.key && FU.username); }
 
-/* Masks the api key when logging so it never lands in Render's log viewer in the clear */
 function maskedBody(paramsObj) {
   const copy = Object.assign({}, paramsObj);
   if (copy.apiaccesskey) copy.apiaccesskey = copy.apiaccesskey.slice(0, 4) + '***';
@@ -630,9 +617,7 @@ async function fetchList(type) {
   return merged;
 }
 
-/* LIVE PAYMENT PATH — UNCHANGED from v3.24. This sends the documented
-   DHRU format (uppercase ID + IMEI). Not modified further because there
-   is no verified evidence it's wrong — see header note. */
+/* LIVE PAYMENT PATH — UNCHANGED */
 async function placeUpstreamOnce(job) {
   const type = job.type || 'imei';
   let last = { http: 0, json: null, text: 'no attempt' };
@@ -695,18 +680,6 @@ app.get('/api/admin/probe', strict, async (req, res) => {
   res.json({ ok: true, probe: out });
 });
 
-/* v3.27 • AUTH CHECK — RUN THIS FIRST, BEFORE ANY ORDER PROBE
-   The v3.26 burst probe revealed the real signal: FastUnlockers replied
-   "Ip has been blocked ... too many Authentication Failed". That means
-   our username/apiaccesskey pair is being REJECTED, or this server's IP
-   is not whitelisted on the reseller account. An order can never succeed
-   while authentication is failing — every parameter experiment above was
-   testing the wrong layer.
-
-   This endpoint makes exactly ONE call (accountinfo). One call cannot
-   trigger an IP block. If it returns SUCCESS with account details, auth
-   is genuinely fine and the problem is elsewhere. If it returns
-   "Authentication Failed" or an IP-block message, THAT is the bug. */
 app.get('/api/admin/auth-check', strict, async (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   if (!fuReady()) return res.status(503).json({ ok: false, error: 'UNLOCK_API_URL / USERNAME / KEY not all set in Render env.' });
@@ -720,7 +693,7 @@ app.get('/api/admin/auth-check', strict, async (req, res) => {
     serverPublicIp: ip,
     verdict: authOk
       ? 'Auth OK — username + API key accepted. The order problem is NOT authentication.'
-      : 'AUTH FAILING — fix this before anything else. Either the API key/username is wrong, or this server IP must be whitelisted in the FastUnlockers reseller panel (API / API Settings page).',
+      : 'AUTH FAILING — fix this before anything else.',
     endpointCalled: FU.base + FU.endpoint,
     username: FU.username,
     sentBody: r.sentBody,
@@ -728,36 +701,16 @@ app.get('/api/admin/auth-check', strict, async (req, res) => {
   });
 });
 
-/* v3.27 • SLOW ORDER PROBE — only run AFTER auth-check says authenticated:true
-   Tests one action/param style per call with a 3s gap, so it cannot flood
-   the upstream and trigger the IP block that ruined the v3.26 results.
-   Returns the exact body sent next to the exact reply. */
 app.post(['/api/admin/deep-probe', '/api/admin/slow-probe'], strict, async (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   if (!fuReady()) return res.status(503).json({ ok: false, error: 'Upstream not configured.' });
-
   const pre = await gsmCall('accountinfo');
   if (!(pre.json && pre.json.SUCCESS)) {
-    return res.json({
-      ok: false,
-      blocked: true,
-      reason: 'Authentication is currently failing upstream, so order probes would be meaningless. Run GET /api/admin/auth-check and fix auth first.',
-      reply: pre.json || pre.text
-    });
+    return res.json({ ok: false, blocked: true, reason: 'Authentication failing. Run GET /api/admin/auth-check first.', reply: pre.json || pre.text });
   }
-
   const sid = String((req.body || {}).serviceId || '999999');
   const imei = String((req.body || {}).imei || '352850711207110');
-  /* THE LEADING HYPOTHESIS (see header notes):
-     accountinfo works because it needs NO parameters. Every action that
-     DOES need parameters fails with "Parameter Required". On DHRU Fusion
-     / GSM Hub API v3, extra parameters are not sent as loose form fields —
-     they are packed into a single field called `parameters`, holding
-     base64-encoded JSON. If that is right, the server decodes an empty
-     blob and correctly reports ID and IMEI as missing.
-     The b64 attempts below test exactly that. */
   const b64 = (obj) => Buffer.from(JSON.stringify(obj), 'utf8').toString('base64');
-
   const attempts = [
     ['placeimeiorder', 'numbered_id1_imei1', { id1: sid, imei1: imei }],
     ['placeimeiorder', 'numbered_with_qty', { id1: sid, imei1: imei, qty: '1' }],
@@ -765,89 +718,81 @@ app.post(['/api/admin/deep-probe', '/api/admin/slow-probe'], strict, async (req,
     ['placeimeiorder', 'upper', { ID: sid, IMEI: imei }],
     ['placeimeiorder', 'lower', { id: sid, imei: imei }]
   ];
-
   const out = {};
   for (const [action, style, params] of attempts) {
     const r = await gsmCall(action, params);
     out[action + ':' + style] = { sentBody: r.sentBody, reply: r.json || r.text };
     await new Promise(w => setTimeout(w, 3000));
   }
-  res.json({
-    ok: true,
-    note: 'Look for any reply that does NOT say "Required" and does NOT mention Authentication or Ip blocked.',
-    results: out
-  });
+  res.json({ ok: true, note: 'Look for any reply that does NOT say "Required".', results: out });
 });
 
-/* v3.28b • ACTION-NAME PROBE — LAST enumeration attempt.
-   Six parameter formats have now returned the exact same error text
-   word-for-word (form fields upper/lower, base64 envelope, plain JSON,
-   numbered id1/imei1). That pattern points at the action name itself,
-   or possibly a generic catch-all response independent of what's sent —
-   see the header note added below the results of this call. */
 app.post('/api/admin/action-probe', strict, async (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   if (!fuReady()) return res.status(503).json({ ok: false, error: 'Upstream not configured.' });
-
   const sid = '999999';
   const imei = '352850711207110';
-  const actionNames = [
-    'placeimeiorder',
-    'imeiorder',
-    'orderimei',
-    'placeimei',
-    'newimeiorder',
-    'createimeiorder'
-  ];
-
+  const actionNames = ['placeimeiorder', 'imeiorder', 'orderimei', 'placeimei', 'newimeiorder', 'createimeiorder'];
   const out = {};
   for (const action of actionNames) {
     const r = await gsmCall(action, { ID: sid, IMEI: imei });
     out[action] = { reply: r.json || r.text };
     await new Promise(w => setTimeout(w, 2000));
   }
-  res.json({
-    ok: true,
-    note: 'Look for any action that returns something DIFFERENT from "Parameter ID Required". If every single one is identical again, this is no longer a guessable format problem — see the note in the chat reply about what to do next.',
-    results: out
-  });
+  res.json({ ok: true, note: 'Look for any action that returns something DIFFERENT from "Parameter ID Required".', results: out });
 });
 
-/* v3.29 • MULTIPART CONTENT-TYPE TEST — the last format hypothesis.
-   action-probe CONFIRMED placeimeiorder is a real, recognized action
-   (fake names return "Invalid Action Request"; this one doesn't).
-   So the action name was never the issue. Seven encodings of ID/IMEI
-   have failed identically over x-www-form-urlencoded. The one thing
-   not yet tested is the transport format itself: some panels expect
-   multipart/form-data (like an HTML file-upload form) rather than
-   plain URL-encoded fields. This sends ID/IMEI that way, once. */
 app.post('/api/admin/multipart-probe', strict, async (req, res) => {
   if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
   if (!fuReady()) return res.status(503).json({ ok: false, error: 'Upstream not configured.' });
-
   const sid = String((req.body || {}).serviceId || '999999');
   const imei = String((req.body || {}).imei || '352850711207110');
-
   const form = new FormData();
   form.append('username', FU.username);
   form.append('apiaccesskey', FU.key);
   form.append('action', 'placeimeiorder');
   form.append('ID', sid);
   form.append('IMEI', imei);
-
   try {
     const r = await fetch(FU.base + FU.endpoint, { method: 'POST', body: form });
     const text = await r.text();
     let json = null; try { json = JSON.parse(text); } catch (e) {}
-    res.json({
-      ok: true,
-      note: 'If this ALSO says "Parameter Required", the format guessing is done — see the chat reply for what to send FastUnlockers support.',
-      http: r.status,
-      reply: json || text.slice(0, 600)
-    });
+    res.json({ ok: true, note: 'If this ALSO says "Parameter Required", format guessing is done.', http: r.status, reply: json || text.slice(0, 600) });
   } catch (e) {
     res.status(502).json({ ok: false, error: 'Request failed: ' + e.message });
   }
+});
+
+/* v3.30 • ADMIN-FORMAT PROBE */
+app.post('/api/admin/admin-format-probe', strict, async (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  if (!fuReady()) return res.status(503).json({ ok: false, error: 'Upstream not configured.' });
+  const sid = String((req.body || {}).serviceId || '999999');
+  const imei = String((req.body || {}).imei || '352850711207110');
+  const out = {};
+  try {
+    const r1 = await fetch(FU.base + FU.endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ username: FU.username, apiaccesskey: FU.key, action: 'placeimeiorder', ID: sid, IMEI: imei })
+    });
+    const t1 = await r1.text();
+    let j1 = null; try { j1 = JSON.parse(t1); } catch (e) {}
+    out['1_json_body_ID_IMEI'] = { http: r1.status, reply: j1 || t1.slice(0, 400) };
+  } catch (e) { out['1_json_body_ID_IMEI'] = { http: 0, reply: e.message }; }
+  await new Promise(w => setTimeout(w, 3000));
+  try {
+    const qs = 'username=' + encodeURIComponent(FU.username) +
+      '&apiaccesskey=' + encodeURIComponent(FU.key) +
+      '&action=placeimeiorder&ID=' + encodeURIComponent(sid) + '&IMEI=' + encodeURIComponent(imei);
+    const r2 = await fetch(FU.base + FU.endpoint + '?' + qs, {
+      method: 'POST', headers: { 'Accept': 'application/json' }, body: ''
+    });
+    const t2 = await r2.text();
+    let j2 = null; try { j2 = JSON.parse(t2); } catch (e) {}
+    out['2_query_string_ID_IMEI'] = { http: r2.status, reply: j2 || t2.slice(0, 400) };
+  } catch (e) { out['2_query_string_ID_IMEI'] = { http: 0, reply: e.message }; }
+  res.json({ ok: true, note: 'If either reply is NOT "Parameter Required", that transport is the fix.', results: out });
 });
 
 /* 12 • CATALOG */
@@ -1218,9 +1163,9 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ ok: false, error: 'Server error.' });
 });
 app.listen(PORT, () => {
-  console.log(`SIERRAUNLOCK API v3.29 online on :${PORT} — mode: ${fuReady() ? 'CONNECTED' : 'MANUAL'}`);
+  console.log(`SIERRAUNLOCK API v3.30 online on :${PORT} — mode: ${fuReady() ? 'CONNECTED' : 'MANUAL'}`);
   console.log(`  Vault: ${ghReady() ? 'GitHub (' + GH.repo + ')' : 'LOCAL ONLY'}`);
-  console.log(`  Run FIRST: GET /api/admin/auth-check — verifies upstream credentials + shows this server's IP`);
+  console.log(`  Run: GET /api/admin/auth-check OR POST /api/admin/admin-format-probe`);
   console.log(`  Policy: cost + $${process.env.UNLOCK_FLAT_FEE || '2'} • rate ${load().rate} SLE • min top-up 50 Le`);
   console.log(`  Auth: EmailJS ${emailReady() ? 'ready' : 'NOT CONFIGURED'}`);
 });
