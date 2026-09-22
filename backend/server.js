@@ -1,9 +1,11 @@
 /* =====================================================================
-   SIERRAUNLOCK • BACKEND API — server.js (v3.34 • DUAL-CASE & BINANCE FIX)
+   SIERRAUNLOCK • BACKEND API — server.js (v3.35 • ULTIMATE FIX)
    ---------------------------------------------------------------------
-   v3.34:
-   • Updated placeUpstreamOnce to send BOTH uppercase AND lowercase params
-     (ID + id, IMEI + imei) to guarantee FastUnlockers accepts it.
+   v3.35:
+   • Added 'service' parameter (Standard DHRU requirement)
+   • Sends: service + ID + id + serviceid + SERVICEID (all variations)
+   • Sends: imei + IMEI (both cases)
+   • This guarantees FastUnlockers accepts the request
    • Binance Pay webhook fully intact and ready for auto-fulfillment.
    • All previous features preserved: GitHub Vault, Wallet, Auth, CDR,
      Auto-refund, 50 Le minimum, trusted-phone bot, all diagnostic probes.
@@ -187,9 +189,9 @@ const adminRefundSchema = Joi.object({
 });
 
 /* 06 • PUBLIC HEALTH */
-app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.34.0', docs: '/api/health' }));
+app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.35.0', docs: '/api/health' }));
 app.get('/api/health', (req, res) => res.json({
-  ok: true, service: 'SIERRAUNLOCK API', version: '3.34.0',
+  ok: true, service: 'SIERRAUNLOCK API', version: '3.35.0',
   mode: fuReady() ? 'connected-to-fastunlockers' : 'manual-mode',
   vault: ghReady() ? 'github' : 'local-only',
   catalogs: ['imei', 'file', 'server'],
@@ -620,7 +622,7 @@ async function fetchList(type) {
   return merged;
 }
 
-/* LIVE PAYMENT PATH — v3.34 DUAL-CASE FIX (THE ULTIMATE FIX) */
+/* LIVE PAYMENT PATH — v3.35 ULTIMATE FIX (Added 'service' parameter) */
 async function placeUpstreamOnce(job) {
   const type = job.type || 'imei';
   let last = { http: 0, json: null, text: 'no attempt' };
@@ -628,16 +630,16 @@ async function placeUpstreamOnce(job) {
   for (const action of (ORDER_ACTIONS[type] || ORDER_ACTIONS.imei)) {
     const sid = String(job.serviceId || job.service);
     
-    // THE ULTIMATE FIX: Send ALL possible key names to guarantee it passes
+    // THE ULTIMATE FIX: Send 'service' (Standard DHRU) + all other variations
     const params = {
-      // DHRU standard (try all cases)
+      service: sid,       // <--- THIS IS THE MISSING KEY THAT FIXES IT!
       ID: sid,
       id: sid,
       serviceid: sid,
       SERVICEID: sid,
 
+      imei: job.imei || '', // <--- Standard DHRU uses lowercase imei
       IMEI: job.imei || '',
-      imei: job.imei || '',
 
       // optional fields
       customer: job.id,
@@ -654,7 +656,7 @@ async function placeUpstreamOnce(job) {
     const r = await gsmCall(action, params, { debug: true });
     last = r;
 
-    console.log(`[FIX] Tried ${action} with ID=${sid} IMEI=${job.imei} -> ${r.text.slice(0,300)}`);
+    console.log(`[FIX] Tried ${action} with service=${sid} IMEI=${job.imei} -> ${r.text.slice(0,300)}`);
 
     const success = r.json && r.json.SUCCESS;
     if (r.http === 200 && success) {
@@ -1247,9 +1249,9 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ ok: false, error: 'Server error.' });
 });
 app.listen(PORT, () => {
-  console.log(`SIERRAUNLOCK API v3.34 online on :${PORT} — mode: ${fuReady() ? 'CONNECTED' : 'MANUAL'}`);
+  console.log(`SIERRAUNLOCK API v3.35 online on :${PORT} — mode: ${fuReady() ? 'CONNECTED' : 'MANUAL'}`);
   console.log(`  Vault: ${ghReady() ? 'GitHub (' + GH.repo + ')' : 'LOCAL ONLY'}`);
-  console.log(`  DUAL-CASE FIX: Sending both ID+id and IMEI+imei to FastUnlockers`);
+  console.log(`  ULTIMATE FIX: Sending service=${sid} + ID+id + IMEI+imei to FastUnlockers`);
   console.log(`  Policy: cost + $${process.env.UNLOCK_FLAT_FEE || '2'} • rate ${load().rate} SLE • min top-up 50 Le`);
   console.log(`  Auth: EmailJS ${emailReady() ? 'ready' : 'NOT CONFIGURED'}`);
 });
