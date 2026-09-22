@@ -1251,7 +1251,7 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`SIERRAUNLOCK API v3.35 online on :${PORT} — mode: ${fuReady() ? 'CONNECTED' : 'MANUAL'}`);
   console.log(`  Vault: ${ghReady() ? 'GitHub (' + GH.repo + ')' : 'LOCAL ONLY'}`);
-  console.log(`  ULTIMATE FIX: Sending service=${sid} + ID+id + IMEI+imei to FastUnlockers`);
+  console.log(`  ULTIMATE FIX: Sending service + ID+id + IMEI+imei to FastUnlockers`); // FIXED THIS LINE
   console.log(`  Policy: cost + $${process.env.UNLOCK_FLAT_FEE || '2'} • rate ${load().rate} SLE • min top-up 50 Le`);
   console.log(`  Auth: EmailJS ${emailReady() ? 'ready' : 'NOT CONFIGURED'}`);
 });
