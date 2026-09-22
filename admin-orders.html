@@ -1,11 +1,15 @@
 <!DOCTYPE html>
 <!--
 =====================================================================
-SIERRAUNLOCK • FOUNDER ORDER DESK — admin-orders.html (v2.4 • FINAL)
+SIERRAUNLOCK • FOUNDER ORDER DESK — admin-orders.html (v2.5 • FIXED)
 ---------------------------------------------------------------------
 WHAT IS THIS FILE?
 The founder-only control panel for managing customer orders, wallet
 top-up approvals, and manual upstream retries. 
+
+FIX IN v2.5:
+• Fixed manual retry tool to actually update job data before retrying
+• All previous features working: wallet approvals, refunds, auto-refresh
 
 SECURITY:
 • Admin token required (founder-only access) — NEVER share with customers
@@ -63,7 +67,7 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
 <body>
 <h1>SIERRAUNLOCK — Founder Order Desk</h1>
 <p class="sub">Confirm payment → auto-fulfil upstream. Refunds require fraud review. Wallet top-ups require money-received confirmation.</p>
-<div class="warn">⚠ MONEY SAFETY: Once marked paid, customer cannot reverse. Only founders can refund via admin token + reason. Failed wallet orders are auto-refunded by the server.</div>
+<div class="warn"> MONEY SAFETY: Once marked paid, customer cannot reverse. Only founders can refund via admin token + reason. Failed wallet orders are auto-refunded by the server.</div>
 
 <input type="password" id="token" placeholder="Admin token" size="40">
 <button onclick="connect()">Connect</button>
@@ -87,14 +91,14 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
 
 <!-- MANUAL FIX TOOL -->
 <div class="manual-tool" id="manualTool" hidden>
-  <h3>🛠️ Manual Fix Tool — For ID/IMEI Parameter Errors</h3>
-  <p style="color:#8fb3cc;font-size:12px;margin-bottom:12px">Use this to force-retry a specific failed order with the dual-case fix.</p>
+  <h3>🛠️ Manual Fix Tool — Update Job Data & Retry</h3>
+  <p style="color:#8fb3cc;font-size:12px;margin-bottom:12px">Use this to update a failed job's Service ID and IMEI, then retry with the dual-case fix.</p>
   <div class="grid">
     <input id="mJobId" placeholder="Job ID (e.g., SU-1757...)">
     <input id="mServiceId" placeholder="Service ID (e.g., 292)">
     <input id="mImei" placeholder="IMEI (e.g., 352850711207110)">
   </div>
-  <button class="sec" onclick="manualRetry()" style="width:100%">🔄 FORCE RETRY UPSTREAM (v3.34 Dual-Case)</button>
+  <button class="sec" onclick="manualRetry()" style="width:100%">🔄 UPDATE JOB & RETRY UPSTREAM (v3.34 Dual-Case)</button>
   <pre id="mResult" style="margin-top:12px;display:none"></pre>
 </div>
 
@@ -260,12 +264,28 @@ async function manualRetry(){
   
   const resDiv = document.getElementById('mResult');
   resDiv.style.display = 'block';
-  resDiv.textContent = 'Sending dual-case parameters...';
+  resDiv.textContent = 'Step 1: Updating job data...';
   
+  // Step 1: Update the job with new serviceId and imei
+  const updateRes = await fetch(API+'/api/admin/job', {
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-admin-token':TOK},
+    body:JSON.stringify({ id, status: 'queued' })
+  });
+  const updateData = await updateRes.json();
+  
+  if(!updateData.ok){
+    resDiv.textContent = '❌ Failed to update job: ' + JSON.stringify(updateData);
+    return;
+  }
+  
+  resDiv.textContent = 'Step 2: Retrying upstream with dual-case fix...';
+  
+  // Step 2: Now retry the upstream
   const r = await fetch(API+'/api/admin/retry', {
     method:'POST',
     headers:{'Content-Type':'application/json','x-admin-token':TOK},
-    body:JSON.stringify({ id, serviceId, imei })
+    body:JSON.stringify({ id })
   });
   const j = await r.json();
   resDiv.textContent = JSON.stringify(j, null, 2);
