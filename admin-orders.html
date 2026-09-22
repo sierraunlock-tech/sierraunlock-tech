@@ -1,27 +1,16 @@
 <!DOCTYPE html>
 <!--
 =====================================================================
-SIERRAUNLOCK • FOUNDER ORDER DESK — admin-orders.html (v2.3 • PACK 15)
+SIERRAUNLOCK • FOUNDER ORDER DESK — admin-orders.html (v2.4 • FINAL)
 ---------------------------------------------------------------------
 WHAT IS THIS FILE?
-The founder-only control panel for managing customer orders + wallet
-top-up approvals + registered customers. v2.3 adds:
-• 👥 Registered Customers table (name/email/phone/balance/orders/joined)
-• 🗑 Delete account button (founder-only, requires reason, logs action)
-• 🔄 Retry Upstream button on failed jobs
-• 💸 Auto-refund indicator on failed wallet-paid jobs
-• ⏱ Optional auto-refresh every 20 seconds
-• Payment status tracking (unpaid / paid / refunded)
-• "Mark Paid" button — auto-fulfils upstream
-• "Refund" button — founder-only after fraud review
-• 💰 WALLET TOP-UP APPROVALS — confirm money received, credit balance
-• Live order status check
+The founder-only control panel for managing customer orders, wallet
+top-up approvals, and manual upstream retries. 
 
 SECURITY:
 • Admin token required (founder-only access) — NEVER share with customers
 • Refund lock: once paid, customer cannot reverse
 • Wallet top-ups require manual founder approval after money received
-• Account deletion: requires reason + confirm + logged in adminLog
 
 OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
 =====================================================================
@@ -65,12 +54,16 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
   .go{background:var(--green);color:#fff}.cancel{background:#22314a;color:#e6f0f8}
   .section-title{font-size:16px;margin:20px 0 8px;color:#fff;display:flex;align-items:center;gap:8px}
   .section-title::before{content:'';width:4px;height:18px;background:linear-gradient(180deg,var(--green),var(--blue));border-radius:2px}
+  .manual-tool{background:#16202e;border:1px solid #2b3d52;border-radius:12px;padding:16px;margin-top:24px}
+  .manual-tool h3{color:#fff;margin-bottom:12px;font-size:15px}
+  .manual-tool .grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px}
+  @media(max-width:768px){.manual-tool .grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <h1>SIERRAUNLOCK — Founder Order Desk</h1>
-<p class="sub">Confirm payment → auto-fulfil upstream. Refunds require fraud review. Wallet top-ups require money-received confirmation. Customers: view + delete (logged).</p>
-<div class="warn">⚠ MONEY SAFETY: Once marked paid, customer cannot reverse (crypto/OM/cash are final). Only founders can refund via admin token + reason. Wallet top-ups: APPROVE only after you have confirmed the money arrived. Failed wallet orders are auto-refunded by the server. Account deletion: wallet + order records are KEPT for accounting.</div>
+<p class="sub">Confirm payment → auto-fulfil upstream. Refunds require fraud review. Wallet top-ups require money-received confirmation.</p>
+<div class="warn">⚠ MONEY SAFETY: Once marked paid, customer cannot reverse. Only founders can refund via admin token + reason. Failed wallet orders are auto-refunded by the server.</div>
 
 <input type="password" id="token" placeholder="Admin token" size="40">
 <button onclick="connect()">Connect</button>
@@ -84,22 +77,26 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
     <tbody></tbody>
   </table>
 </div>
-<div id="walletEmpty" style="margin-top:8px;color:#8fb3cc;font-size:13px">No top-ups yet. Customers will submit requests from <a href="wallet.html" style="color:#7cc4ff">wallet.html</a>.</div>
-
-<h2 class="section-title">👥 Registered Customers</h2>
-<div id="usersSection" style="margin-top:8px" hidden>
-  <table id="utbl">
-    <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Balance</th><th>Orders</th><th>Joined</th><th>Actions</th></tr></thead>
-    <tbody></tbody>
-  </table>
-</div>
-<div id="usersEmpty" style="margin-top:8px;color:#8fb3cc;font-size:13px">No registered customers yet.</div>
+<div id="walletEmpty" style="margin-top:8px;color:#8fb3cc;font-size:13px">No top-ups yet.</div>
 
 <h2 class="section-title">📦 Customer Orders</h2>
 <table id="tbl" hidden>
 <thead><tr><th>Job</th><th>Created</th><th>Service</th><th>IMEI / Details</th><th>Customer</th><th>Payment</th><th>Status</th><th>Actions</th><th>Upstream reply</th></tr></thead>
 <tbody></tbody>
 </table>
+
+<!-- MANUAL FIX TOOL -->
+<div class="manual-tool" id="manualTool" hidden>
+  <h3>🛠️ Manual Fix Tool — For ID/IMEI Parameter Errors</h3>
+  <p style="color:#8fb3cc;font-size:12px;margin-bottom:12px">Use this to force-retry a specific failed order with the dual-case fix.</p>
+  <div class="grid">
+    <input id="mJobId" placeholder="Job ID (e.g., SU-1757...)">
+    <input id="mServiceId" placeholder="Service ID (e.g., 292)">
+    <input id="mImei" placeholder="IMEI (e.g., 352850711207110)">
+  </div>
+  <button class="sec" onclick="manualRetry()" style="width:100%">🔄 FORCE RETRY UPSTREAM (v3.34 Dual-Case)</button>
+  <pre id="mResult" style="margin-top:12px;display:none"></pre>
+</div>
 
 <div class="modal" id="payModal">
   <div class="box">
@@ -123,7 +120,7 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
     <h2>Issue Refund</h2>
     <p>Refunds are final. Enter reason for fraud review records.</p>
     <label>Reason for Refund</label>
-    <textarea id="refundReason" placeholder="e.g. Service failed, IMEI not supported, customer requested cancellation..."></textarea>
+    <textarea id="refundReason" placeholder="e.g. Service failed, IMEI not supported..."></textarea>
     <div class="row">
       <button class="cancel" onclick="closeRefundModal()">Cancel</button>
       <button class="danger" onclick="confirmRefund()">Confirm Refund</button>
@@ -140,12 +137,13 @@ function connect(){
   TOK=document.getElementById('token').value.trim();
   if(!TOK){ alert('Enter admin token.'); return; }
   sessionStorage.setItem('su_tok',TOK);
+  document.getElementById('manualTool').hidden = false;
   loadJobs();
 }
 
 window.addEventListener('load',()=>{
   const t=sessionStorage.getItem('su_tok');
-  if(t){ TOK=t; document.getElementById('token').value=t; loadJobs(); }
+  if(t){ TOK=t; document.getElementById('token').value=t; document.getElementById('manualTool').hidden = false; loadJobs(); }
 });
 
 document.getElementById('autoRef').addEventListener('change',function(){
@@ -160,7 +158,6 @@ async function loadJobs(){
   if(!j.ok){ alert('Bad token.'); return; }
   document.getElementById('tbl').hidden=false;
   loadWallets();
-  loadUsers();
 
   document.querySelector('#tbl tbody').innerHTML=(j.jobs||[]).map(job=>`
    <tr>
@@ -170,12 +167,11 @@ async function loadJobs(){
      <td>${job.type==='imei' ? esc(job.imei||'—') : esc((job.details||'').slice(0,80))}</td>
      <td>${esc(job.phone||job.customer||'—')}</td>
      <td class="pay ${esc(job.payment_status||'unpaid')}">${esc((job.payment_status||'unpaid').toUpperCase())}<br><small>${esc(job.payment_method||'—')}</small></td>
-     <td class="st ${esc(job.status)}">${esc(job.status)}${ (job.status==='failed' && job.payment_method==='wallet') ? '<span class="note">💸 auto-refunded to wallet</span>' : '' }</td>
+     <td class="st ${esc(job.status)}">${esc(job.status)}${ (job.status==='failed' && job.payment_method==='wallet') ? '<span class="note">💸 auto-refunded</span>' : '' }</td>
      <td>
        ${ (job.payment_status||'unpaid')==='unpaid' ? `<button onclick="openPayModal('${esc(job.id)}')">Mark Paid</button>`:'' }
        ${ (job.payment_status||'unpaid')==='paid' ? `<button class="danger" onclick="openRefundModal('${esc(job.id)}')">Refund</button>`:'' }
-       ${ job.upstreamOrderId ? `<br><br><button class="sec" onclick="check('${esc(job.id)}')">Check Status</button>`:'' }
-       ${ job.status==='failed' ? `<br><br><button class="sec" onclick="retryJob('${esc(job.id)}')">🔄 Retry Upstream</button>`:'' }
+       ${ job.status==='failed' ? `<br><br><button class="sec" onclick="retryJob('${esc(job.id)}')">🔄 Retry</button>`:'' }
      </td>
      <td>${job.live?`<pre>${esc(JSON.stringify(job.live).slice(0,400))}</pre>`:(job.upstreamOrderId?`<small>order ${esc(job.upstreamOrderId)}</small>`:'—')}</td>
    </tr>`).join('')||'<tr><td colspan="9">No jobs yet.</td></tr>';
@@ -190,13 +186,9 @@ async function confirmPay(){
   const r=await fetch(API+'/api/admin/pay',{method:'POST',headers:{'Content-Type':'application/json','x-admin-token':TOK},
     body:JSON.stringify({id:currentJobId,method:method})});
   const j=await r.json();
-  if(j.ok){
-    alert('✅ Payment marked + upstream order placed!\n\nOrder ID: '+(j.upstreamOrderId||'see reply'));
-  }else{
-    alert('❌ '+(j.error||'failed'));
-  }
-  closePayModal();
-  loadJobs();
+  if(j.ok){ alert('✅ Payment marked + upstream order placed!\n\nOrder ID: '+(j.upstreamOrderId||'see reply')); }
+  else{ alert('❌ '+(j.error||'failed')); }
+  closePayModal(); loadJobs();
 }
 
 function openRefundModal(id){ currentJobId=id; document.getElementById('refundModal').classList.add('open'); }
@@ -209,16 +201,11 @@ async function confirmRefund(){
   const r=await fetch(API+'/api/admin/refund',{method:'POST',headers:{'Content-Type':'application/json','x-admin-token':TOK},
     body:JSON.stringify({id:currentJobId,reason:reason})});
   const j=await r.json();
-  if(j.ok){
-    alert('✅ Refund issued.\n\nReason: '+j.refund_reason);
-  }else{
-    alert('❌ '+(j.error||'failed'));
-  }
-  closeRefundModal();
-  loadJobs();
+  if(j.ok){ alert('✅ Refund issued.\n\nReason: '+j.refund_reason); }
+  else{ alert('❌ '+(j.error||'failed')); }
+  closeRefundModal(); loadJobs();
 }
 
-/* ===== WALLET TOP-UP APPROVALS ===== */
 async function loadWallets(){
   if(!TOK) return;
   try{
@@ -226,18 +213,12 @@ async function loadWallets(){
     const j=await r.json();
     if(!j.ok) return;
     const topups=j.topups||[];
-    if(!topups.length){
-      document.getElementById('walletSection').hidden=true;
-      document.getElementById('walletEmpty').style.display='block';
-      return;
-    }
+    if(!topups.length){ document.getElementById('walletSection').hidden=true; document.getElementById('walletEmpty').style.display='block'; return; }
     document.getElementById('walletSection').hidden=false;
     document.getElementById('walletEmpty').style.display='none';
     document.querySelector('#wtbl tbody').innerHTML=topups.map(t=>`
       <tr>
-        <td>${esc(t.id)}</td>
-        <td>${esc(t.phone)}</td>
-        <td>$${Number(t.amount).toFixed(2)}</td>
+        <td>${esc(t.id)}</td><td>${esc(t.phone)}</td><td>$${Number(t.amount).toFixed(2)}</td>
         <td>${esc(t.method==='orange_money'?'🟠 OM':t.method==='binance'?'🟡 Binance':t.method)}</td>
         <td>${esc(t.ref||'—')}</td>
         <td><span class="pay ${esc(t.status)}">${esc(t.status.toUpperCase())}</span></td>
@@ -247,15 +228,15 @@ async function loadWallets(){
 }
 
 async function approveTp(id){
-  if(!confirm('Confirm you RECEIVED the money before approving! This will credit the customer balance.')) return;
+  if(!confirm('Confirm you RECEIVED the money before approving!')) return;
   const r=await fetch(API+'/api/admin/wallet/approve',{method:'POST',headers:{'Content-Type':'application/json','x-admin-token':TOK},body:JSON.stringify({id})});
   const j=await r.json();
-  alert(j.ok?('✅ Approved.\nCustomer new balance: $'+Number(j.balance).toFixed(2)):('❌ '+(j.error||'failed')));
+  alert(j.ok?('✅ Approved.\nNew balance: $'+Number(j.balance).toFixed(2)):('❌ '+(j.error||'failed')));
   loadWallets();
 }
 
 async function rejectTp(id){
-  const reason=prompt('Reason for rejection (will be shown to customer):');
+  const reason=prompt('Reason for rejection:');
   if(!reason) return;
   const r=await fetch(API+'/api/admin/wallet/reject',{method:'POST',headers:{'Content-Type':'application/json','x-admin-token':TOK},body:JSON.stringify({id,reason})});
   const j=await r.json();
@@ -263,45 +244,6 @@ async function rejectTp(id){
   loadWallets();
 }
 
-/* ===== PACK 15: CUSTOMER MANAGEMENT ===== */
-async function loadUsers(){
-  if(!TOK) return;
-  try{
-    const r=await fetch(API+'/api/admin/users',{headers:{'x-admin-token':TOK}});
-    const j=await r.json();
-    if(!j.ok) return;
-    const users=j.users||[];
-    if(!users.length){
-      document.getElementById('usersSection').hidden=true;
-      document.getElementById('usersEmpty').style.display='block';
-      return;
-    }
-    document.getElementById('usersSection').hidden=false;
-    document.getElementById('usersEmpty').style.display='none';
-    document.querySelector('#utbl tbody').innerHTML=users.map(u=>`
-      <tr>
-        <td>${esc(u.name)}</td>
-        <td>${esc(u.email)}</td>
-        <td>${esc(u.phone)}</td>
-        <td>$${Number(u.balance||0).toFixed(2)}</td>
-        <td>${u.orders||0}</td>
-        <td>${esc((u.createdAt||'').slice(0,10))}</td>
-        <td><button class="danger" onclick="deleteUser('${esc(u.phone)}','${esc(u.email)}')">🗑 Delete</button></td>
-      </tr>`).join('');
-  }catch(e){}
-}
-
-async function deleteUser(phone,email){
-  const reason=prompt('Delete account '+email+' ?\nEnter reason (required, kept in admin log):');
-  if(!reason || reason.length<5){ alert('Deletion cancelled (reason required).'); return; }
-  if(!confirm('FINAL WARNING: This permanently deletes the login account.\nWallet money and order records are KEPT for accounting.\nContinue?')) return;
-  const r=await fetch(API+'/api/admin/user/delete',{method:'POST',headers:{'Content-Type':'application/json','x-admin-token':TOK},body:JSON.stringify({phone,reason})});
-  const j=await r.json();
-  alert(j.ok?'✅ '+j.note:('❌ '+(j.error||'failed')));
-  loadUsers();
-}
-
-/* ===== RETRY FAILED UPSTREAM ORDER ===== */
 async function retryJob(id){
   if(!confirm('Re-place this failed order upstream now?')) return;
   const r=await fetch(API+'/api/admin/retry',{method:'POST',headers:{'Content-Type':'application/json','x-admin-token':TOK},body:JSON.stringify({id})});
@@ -310,12 +252,24 @@ async function retryJob(id){
   loadJobs();
 }
 
-/* ===== LIVE ORDER STATUS ===== */
-async function check(id){
-  const r=await fetch(API+'/api/order-status',{method:'POST',headers:{'Content-Type':'application/json','x-admin-token':TOK},body:JSON.stringify({id})});
-  const j=await r.json();
-  alert('Live status:\n'+JSON.stringify(j.live||j.job,null,1).slice(0,600));
-  loadJobs();
+async function manualRetry(){
+  const id = document.getElementById('mJobId').value.trim();
+  const serviceId = document.getElementById('mServiceId').value.trim();
+  const imei = document.getElementById('mImei').value.trim();
+  if(!id || !serviceId || !imei){ alert('Fill all 3 fields.'); return; }
+  
+  const resDiv = document.getElementById('mResult');
+  resDiv.style.display = 'block';
+  resDiv.textContent = 'Sending dual-case parameters...';
+  
+  const r = await fetch(API+'/api/admin/retry', {
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-admin-token':TOK},
+    body:JSON.stringify({ id, serviceId, imei })
+  });
+  const j = await r.json();
+  resDiv.textContent = JSON.stringify(j, null, 2);
+  if(j.ok) loadJobs();
 }
 </script>
 </body>
