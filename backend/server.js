@@ -1,11 +1,11 @@
 /* =====================================================================
-   SIERRAUNLOCK • BACKEND API — server.js (v3.35 • ULTIMATE FIX)
+   SIERRAUNLOCK • BACKEND API — server.js (v3.36.1 • DHRU ENVELOPE + VALIDATION)
    ---------------------------------------------------------------------
-   v3.35:
-   • Added 'service' parameter (Standard DHRU requirement)
-   • Sends: service + ID + id + serviceid + SERVICEID (all variations)
-   • Sends: imei + IMEI (both cases)
-   • This guarantees FastUnlockers accepts the request
+   v3.36.1:
+   • Sends requestformat=JSON as required by the DHRU client contract
+   • Places ID and IMEI inside the PARAMETERS XML envelope
+   • Parses array-style SUCCESS[0].REFERENCEID responses
+   • Rejects customer orders without a serviceId before upstream fulfillment
    • Binance Pay webhook fully intact and ready for auto-fulfillment.
    • All previous features preserved: GitHub Vault, Wallet, Auth, CDR,
      Auto-refund, 50 Le minimum, trusted-phone bot, all diagnostic probes.
@@ -30,7 +30,7 @@ const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DATA = path.join(__dirname, 'data.json');
+const DATA = process.env.DATA_FILE || path.join(__dirname, 'data.json');
 app.set('trust proxy', 1);
 
 /* 02 • STORAGE */
@@ -156,7 +156,7 @@ const unlockSchema = Joi.object({
   brand: Joi.string().trim().min(2).max(40).required(),
   model: Joi.string().trim().min(2).max(60).required(),
   phone: Joi.string().trim().min(9).max(20).required(),
-  serviceId: Joi.string().trim().max(20).optional(),
+  serviceId: Joi.string().trim().min(1).max(20).required(),
   serviceName: Joi.string().trim().max(120).optional(),
   f_email: Joi.string().trim().max(120).allow('').optional(),
   f_username: Joi.string().trim().max(120).allow('').optional(),
@@ -189,9 +189,9 @@ const adminRefundSchema = Joi.object({
 });
 
 /* 06 • PUBLIC HEALTH */
-app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.35.0', docs: '/api/health' }));
+app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.36.1', docs: '/api/health' }));
 app.get('/api/health', (req, res) => res.json({
-  ok: true, service: 'SIERRAUNLOCK API', version: '3.35.0',
+  ok: true, service: 'SIERRAUNLOCK API', version: '3.36.1',
   mode: fuReady() ? 'connected-to-fastunlockers' : 'manual-mode',
   vault: ghReady() ? 'github' : 'local-only',
   catalogs: ['imei', 'file', 'server'],
@@ -515,9 +515,26 @@ const FU = {
   base: (process.env.UNLOCK_API_URL || '').replace(/\/+$/, ''),
   key: process.env.UNLOCK_API_KEY || '',
   username: process.env.UNLOCK_API_USERNAME || '',
-  endpoint: '/api/dhru'
+  endpoint: process.env.UNLOCK_API_ENDPOINT || '/api/dhru'
 };
 function fuReady() { return !!(FU.base && FU.key && FU.username); }
+
+function xmlEscape(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function dhruParameters(extraParams) {
+  const entries = Object.entries(extraParams || {})
+    .filter(([, value]) => value !== undefined && value !== null && value !== '')
+    .map(([key, value]) => `<${String(key).toUpperCase()}>${xmlEscape(value)}</${String(key).toUpperCase()}>`)
+    .join('');
+  return `<PARAMETERS>${entries}</PARAMETERS>`;
+}
 
 function maskedBody(paramsObj) {
   const copy = Object.assign({}, paramsObj);
@@ -527,12 +544,14 @@ function maskedBody(paramsObj) {
 
 async function gsmCall(action, extraParams = {}, opts = {}) {
   if (!fuReady()) throw new Error('Upstream not configured.');
-  const params = { username: FU.username, apiaccesskey: FU.key, action };
-  Object.keys(extraParams).forEach(k => {
-    const v = extraParams[k];
-    if (v !== undefined && v !== null && v !== '') params[k] = v;
-  });
-  const body = Object.keys(params).map(k => encodeURIComponent(k) + '=' + encodeURIComponent(params[k])).join('&');
+  const params = {
+    username: FU.username,
+    apiaccesskey: FU.key,
+    action,
+    requestformat: 'JSON',
+    parameters: dhruParameters(extraParams)
+  };
+  const body = new URLSearchParams(params).toString();
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 15000);
   try {
@@ -622,45 +641,56 @@ async function fetchList(type) {
   return merged;
 }
 
-/* LIVE PAYMENT PATH — v3.35 ULTIMATE FIX (Added 'service' parameter) */
+/* LIVE PAYMENT PATH — DHRU-compatible order envelope */
 async function placeUpstreamOnce(job) {
   const type = job.type || 'imei';
   let last = { http: 0, json: null, text: 'no attempt' };
+  const sid = String(job.serviceId || job.service || '').trim();
+  if (!sid) {
+    return {
+      ok: false,
+      r: {
+        http: 400,
+        json: { ERROR: [{ MESSAGE: 'Local: Missing serviceId before calling upstream' }] },
+        text: 'missing serviceId',
+        sentBody: ''
+      },
+      orderId: null
+    };
+  }
   
   for (const action of (ORDER_ACTIONS[type] || ORDER_ACTIONS.imei)) {
-    const sid = String(job.serviceId || job.service);
-    
-    // THE ULTIMATE FIX: Send 'service' (Standard DHRU) + all other variations
+    // DHRU placeimeiorder expects ID and IMEI inside the PARAMETERS envelope.
+    // Do not send duplicate top-level aliases: FastUnlockers parses the envelope.
     const params = {
-      service: sid,       // <--- THIS IS THE MISSING KEY THAT FIXES IT!
       ID: sid,
-      id: sid,
-      serviceid: sid,
-      SERVICEID: sid,
-
-      imei: job.imei || '', // <--- Standard DHRU uses lowercase imei
       IMEI: job.imei || '',
 
       // optional fields
-      customer: job.id,
-      brand: job.brand || '',
-      model: job.model || ''
+      CUSTOMER: job.id,
+      BRAND: job.brand || '',
+      MODEL: job.model || ''
     };
 
-    if (job.details) { params.details = job.details; params.DETAILS = job.details; }
-    if (job.f_email) params.email = job.f_email;
-    if (job.f_accountid) params.accountid = job.f_accountid;
-    if (job.f_quantity) params.quantity = job.f_quantity;
-    if (job.f_bulk) params.bulkimei = job.f_bulk;
+    if (job.details) params.DETAILS = job.details;
+    if (job.f_email) params.EMAIL = job.f_email;
+    if (job.f_accountid) params.ACCOUNTID = job.f_accountid;
+    if (job.f_quantity) params.QUANTITY = job.f_quantity;
+    if (job.f_bulk) params.BULKIMEI = job.f_bulk;
 
     const r = await gsmCall(action, params, { debug: true });
     last = r;
 
-    console.log(`[FIX] Tried ${action} with service=${sid} IMEI=${job.imei} -> ${r.text.slice(0,300)}`);
+    console.log(`[UPSTREAM] Tried ${action} with ID=${sid} IMEI=${job.imei} -> ${r.text.slice(0,300)}`);
 
     const success = r.json && r.json.SUCCESS;
     if (r.http === 200 && success) {
-      return { ok: true, r, orderId: success.orderid || success.order_id || success.REFERENCE || null };
+      const record = Array.isArray(success) ? (success[0] || {}) : success;
+      return {
+        ok: true,
+        r,
+        orderId: record.orderid || record.order_id || record.REFERENCE || record.REFERENCEID || null
+      };
     }
   }
   return { ok: false, r: last, orderId: null };
@@ -1249,9 +1279,9 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ ok: false, error: 'Server error.' });
 });
 app.listen(PORT, () => {
-  console.log(`SIERRAUNLOCK API v3.35 online on :${PORT} — mode: ${fuReady() ? 'CONNECTED' : 'MANUAL'}`);
+  console.log(`SIERRAUNLOCK API v3.36.1 online on :${PORT} — mode: ${fuReady() ? 'CONNECTED' : 'MANUAL'}`);
   console.log(`  Vault: ${ghReady() ? 'GitHub (' + GH.repo + ')' : 'LOCAL ONLY'}`);
-  console.log(`  ULTIMATE FIX: Sending service + ID+id + IMEI+imei to FastUnlockers`); // FIXED THIS LINE
+  console.log('  DHRU FIX: Sending requestformat=JSON with ID+IMEI inside PARAMETERS');
   console.log(`  Policy: cost + $${process.env.UNLOCK_FLAT_FEE || '2'} • rate ${load().rate} SLE • min top-up 50 Le`);
   console.log(`  Auth: EmailJS ${emailReady() ? 'ready' : 'NOT CONFIGURED'}`);
 });
