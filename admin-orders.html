@@ -1,15 +1,15 @@
 <!DOCTYPE html>
 <!--
 =====================================================================
-SIERRAUNLOCK • FOUNDER ORDER DESK — admin-orders.html (v2.5 • FIXED)
+SIERRAUNLOCK • FOUNDER ORDER DESK — admin-orders.html (v2.6 • FINAL)
 ---------------------------------------------------------------------
 WHAT IS THIS FILE?
 The founder-only control panel for managing customer orders, wallet
 top-up approvals, and manual upstream retries. 
 
-FIX IN v2.5:
-• Fixed manual retry tool to actually update job data before retrying
-• All previous features working: wallet approvals, refunds, auto-refresh
+FIX IN v2.6:
+• Updated manual retry button to reflect v3.36.1 DHRU envelope fix
+• All features working: wallet approvals, refunds, auto-refresh
 
 SECURITY:
 • Admin token required (founder-only access) — NEVER share with customers
@@ -83,7 +83,7 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
 </div>
 <div id="walletEmpty" style="margin-top:8px;color:#8fb3cc;font-size:13px">No top-ups yet.</div>
 
-<h2 class="section-title">📦 Customer Orders</h2>
+<h2 class="section-title"> Customer Orders</h2>
 <table id="tbl" hidden>
 <thead><tr><th>Job</th><th>Created</th><th>Service</th><th>IMEI / Details</th><th>Customer</th><th>Payment</th><th>Status</th><th>Actions</th><th>Upstream reply</th></tr></thead>
 <tbody></tbody>
@@ -92,13 +92,13 @@ OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
 <!-- MANUAL FIX TOOL -->
 <div class="manual-tool" id="manualTool" hidden>
   <h3>🛠️ Manual Fix Tool — Update Job Data & Retry</h3>
-  <p style="color:#8fb3cc;font-size:12px;margin-bottom:12px">Use this to update a failed job's Service ID and IMEI, then retry with the dual-case fix.</p>
+  <p style="color:#8fb3cc;font-size:12px;margin-bottom:12px">Use this to update a failed job's Service ID and IMEI, then retry with the v3.36.1 DHRU envelope fix.</p>
   <div class="grid">
     <input id="mJobId" placeholder="Job ID (e.g., SU-1757...)">
     <input id="mServiceId" placeholder="Service ID (e.g., 292)">
     <input id="mImei" placeholder="IMEI (e.g., 352850711207110)">
   </div>
-  <button class="sec" onclick="manualRetry()" style="width:100%">🔄 UPDATE JOB & RETRY UPSTREAM (v3.34 Dual-Case)</button>
+  <button class="sec" onclick="manualRetry()" style="width:100%">🔄 UPDATE JOB & RETRY UPSTREAM (v3.36.1 DHRU Envelope Fix)</button>
   <pre id="mResult" style="margin-top:12px;display:none"></pre>
 </div>
 
@@ -235,7 +235,7 @@ async function approveTp(id){
   if(!confirm('Confirm you RECEIVED the money before approving!')) return;
   const r=await fetch(API+'/api/admin/wallet/approve',{method:'POST',headers:{'Content-Type':'application/json','x-admin-token':TOK},body:JSON.stringify({id})});
   const j=await r.json();
-  alert(j.ok?('✅ Approved.\nNew balance: $'+Number(j.balance).toFixed(2)):('❌ '+(j.error||'failed')));
+  alert(j.ok?('✅ Approved.\nNew balance: $'+Number(j.balance).toFixed(2)):(' '+(j.error||'failed')));
   loadWallets();
 }
 
@@ -279,7 +279,7 @@ async function manualRetry(){
     return;
   }
   
-  resDiv.textContent = 'Step 2: Retrying upstream with dual-case fix...';
+  resDiv.textContent = 'Step 2: Retrying upstream with DHRU envelope fix...';
   
   // Step 2: Now retry the upstream
   const r = await fetch(API+'/api/admin/retry', {
