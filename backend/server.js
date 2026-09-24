@@ -1,11 +1,13 @@
 /* =====================================================================
-   SIERRAUNLOCK • BACKEND API — server.js (v3.36.1 • DHRU ENVELOPE + VALIDATION)
+   SIERRAUNLOCK • BACKEND API — server.js (v3.37 • DHRU + CDR + EXACT PRICING)
    ---------------------------------------------------------------------
-   v3.36.1:
+   v3.37:
    • Sends requestformat=JSON as required by the DHRU client contract
    • Places ID and IMEI inside the PARAMETERS XML envelope
    • Parses array-style SUCCESS[0].REFERENCEID responses
    • Rejects customer orders without a serviceId before upstream fulfillment
+   • Uses the exact FastUnlockers credit price with no added flat fee
+   • Accepts common DHRU CDR field variants and exposes a POST-only CDR endpoint
    • Binance Pay webhook fully intact and ready for auto-fulfillment.
    • All previous features preserved: GitHub Vault, Wallet, Auth, CDR,
      Auto-refund, 50 Le minimum, trusted-phone bot, all diagnostic probes.
@@ -189,9 +191,9 @@ const adminRefundSchema = Joi.object({
 });
 
 /* 06 • PUBLIC HEALTH */
-app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.36.1', docs: '/api/health' }));
+app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.37.0', docs: '/api/health' }));
 app.get('/api/health', (req, res) => res.json({
-  ok: true, service: 'SIERRAUNLOCK API', version: '3.36.1',
+  ok: true, service: 'SIERRAUNLOCK API', version: '3.37.0',
   mode: fuReady() ? 'connected-to-fastunlockers' : 'manual-mode',
   vault: ghReady() ? 'github' : 'local-only',
   catalogs: ['imei', 'file', 'server'],
@@ -491,17 +493,20 @@ app.post('/api/webhook/binance', express.raw({ type: '*/*' }), async (req, res) 
 });
 
 /* 09b • CDR WEBHOOK */
+app.get('/api/webhook/cdr', (req, res) => {
+  res.status(405).json({ ok: false, error: 'CDR webhook requires POST.' });
+});
 app.post('/api/webhook/cdr', express.urlencoded({ extended: true }), (req, res) => {
   const p = req.body || {};
-  const key = p.replykey || p.key || p.cdrkey || req.get('x-cdr-key') || '';
+  const key = p.replykey || p.replyKey || p.key || p.cdrkey || p.CDRKEY || req.get('x-cdr-key') || '';
   if (process.env.CDR_REPLY_KEY && key !== process.env.CDR_REPLY_KEY) return res.status(401).send('bad key');
-  const oid = String(p.orderid || p.id || p.order_id || '');
+  const oid = String(p.orderid || p.orderId || p.order_id || p.ORDERID || p.referenceid || p.REFERENCEID || p.id || '');
   const db = load();
   const job = db.jobs.find(j => j.upstreamOrderId && String(j.upstreamOrderId) === oid)
-           || db.jobs.find(j => j.id === String(p.jobid || ''));
+           || db.jobs.find(j => j.id === String(p.jobid || p.jobId || p.JOBID || ''));
   if (!job) return res.status(404).send('unknown order');
-  const st = String(p.status || p.orderstatus || '').toLowerCase();
-  const code = p.code || p.reply || p.result || p.response || null;
+  const st = String(p.status || p.orderstatus || p.orderStatus || p.ORDERSTATUS || '').toLowerCase();
+  const code = p.code || p.unlock_code || p.unlockCode || p.reply || p.result || p.response || null;
   if (code || st.includes('success') || st.includes('solved') || st.includes('complete')) job.status = 'solved';
   else if (st.includes('reject') || st.includes('fail') || st.includes('cancel')) job.status = 'failed';
   if (code) job.cdrCode = String(code);
@@ -595,7 +600,8 @@ function parseList(raw, type) {
   const listObj = (Array.isArray(raw) && raw[0] && raw[0].LIST) ? raw[0].LIST
                 : (raw && raw.LIST ? raw.LIST : (raw && typeof raw === 'object' ? raw : {}));
   const rate = load().rate;
-  const flat = parseFloat(process.env.UNLOCK_FLAT_FEE || '2');
+  // Customer price must match FastUnlockers exactly. Do not add a platform fee.
+  const flat = 0;
   const splitStr = (process.env.UNLOCK_COMMISSION_SPLIT || '0.75,0.25').split(',');
   const su = Math.max(0, Math.min(1, parseFloat(splitStr[0]) || 0.75));
   const al = Math.max(0, Math.min(1, parseFloat(splitStr[1]) || 0.25));
@@ -971,7 +977,7 @@ app.get('/api/admin/services', strict, async (req, res) => {
   res.json({
     ok: true, count: services.length,
     policy: {
-      flatFeeUsd: parseFloat(process.env.UNLOCK_FLAT_FEE || '2'),
+      flatFeeUsd: 0,
       sierraunlockShare: parseFloat(splitStr[0]) || 0.75,
       alhassanShare: parseFloat(splitStr[1]) || 0.25,
       rateSlePerUsd: load().rate
@@ -1279,9 +1285,10 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ ok: false, error: 'Server error.' });
 });
 app.listen(PORT, () => {
-  console.log(`SIERRAUNLOCK API v3.36.1 online on :${PORT} — mode: ${fuReady() ? 'CONNECTED' : 'MANUAL'}`);
+  console.log(`SIERRAUNLOCK API v3.37 online on :${PORT} — mode: ${fuReady() ? 'CONNECTED' : 'MANUAL'}`);
   console.log(`  Vault: ${ghReady() ? 'GitHub (' + GH.repo + ')' : 'LOCAL ONLY'}`);
   console.log('  DHRU FIX: Sending requestformat=JSON with ID+IMEI inside PARAMETERS');
-  console.log(`  Policy: cost + $${process.env.UNLOCK_FLAT_FEE || '2'} • rate ${load().rate} SLE • min top-up 50 Le`);
+  console.log(`  Policy: exact FastUnlockers price • rate ${load().rate} SLE • min top-up 50 Le`);
   console.log(`  Auth: EmailJS ${emailReady() ? 'ready' : 'NOT CONFIGURED'}`);
 });
+
