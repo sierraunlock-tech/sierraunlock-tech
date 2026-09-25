@@ -24,6 +24,11 @@
   .stat .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:#5b7186;font-weight:700}
   .stat .val{font-size:24px;font-weight:800;color:var(--navy);margin-top:6px}
   .stat.green .val{color:var(--green)}
+  .fund-cta{background:linear-gradient(120deg,#e9f9ee,#eef7ff);border:1px solid #b9e5c2;border-radius:14px;padding:18px 20px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+  .fund-cta h3{color:var(--navy);font-size:17px;margin-bottom:4px}
+  .fund-cta p{color:#5b7186;font-size:13px;line-height:1.45}
+  .fund-btn{display:inline-block;background:var(--green);color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:800;white-space:nowrap}
+  .fund-btn:hover{filter:brightness(.94)}
   .section{background:#fff;border-radius:14px;padding:20px;box-shadow:0 4px 20px rgba(18,38,58,.08);margin-bottom:18px}
   .section h3{font-size:16px;color:var(--navy);margin-bottom:12px}
   table{width:100%;border-collapse:collapse;font-size:13px}
@@ -62,6 +67,14 @@
     <div class="stat"><div class="lbl">Member Since</div><div class="val" id="sSince">—</div></div>
   </div>
 
+  <div class="fund-cta">
+    <div>
+      <h3>💰 Add funds to your wallet</h3>
+      <p>Top up immediately with Orange Money or Binance Pay before placing an order.</p>
+    </div>
+    <a class="fund-btn" id="addFundsBtn" href="wallet.html">Add Funds Now →</a>
+  </div>
+
   <div class="section">
     <h3>📜 Order History</h3>
     <div id="ordersBox"><div class="empty">Loading…</div></div>
@@ -89,6 +102,7 @@ async function loadMe(){
     $('sBal').textContent='$'+Number(w.balance||0).toFixed(2);
     $('sOrders').textContent=o.length;
     $('sSince').textContent=(u.createdAt||'').slice(0,10);
+    $('addFundsBtn').href='wallet.html?phone='+encodeURIComponent(String(u.phone||'').replace(/\D/g,''));
     if(!o.length){ $('ordersBox').innerHTML='<div class="empty">No orders yet. <a href="live-services.html" style="color:var(--blue);font-weight:700">Browse catalog →</a></div>'; return; }
     $('ordersBox').innerHTML='<table><thead><tr><th>Job</th><th>Service</th><th>Date</th><th>Status</th><th></th></tr></thead><tbody>'+
       o.map(job=>`<tr>
