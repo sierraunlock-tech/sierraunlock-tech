@@ -1,158 +1,1293 @@
 /* =====================================================================
-   SIERRAUNLOCK • SECURITY HARDENING LAYER — security.js (v4 • CLEAN)
+   SIERRAUNLOCK • BACKEND API — server.js (v3.37 • DHRU + CDR + EXACT PRICING)
    ---------------------------------------------------------------------
-   WHAT IS THIS FILE?
-   The "Security Shield" of the entire website. It loads FIRST on every
-   page (before main.js) and protects customers from:
-   • Clickjacking (site embedded in a fake page)
-   • Self-XSS scams (pasting malicious code in the console)
-   • HTML injection / XSS via form inputs
-   • Form spam (rate limiting)
-   • Tab-nabbing (noopener on external links)
-   • Bot submissions (honeypot traps)
-   • Injected malicious scripts (CSP meta tag)
-   • DevTools inspection (warning overlay)
-   • Copy-paste attacks on sensitive forms
-   • Suspicious activity detection
-
-   SECTION MAP:
-   01  Frame-buster (anti-clickjacking)
-   02  Self-XSS scam warning in the console
-   03  DevTools detection (warns when console is open)
-   04  Input sanitizer (strips <> as the user types)
-   05  Form rate limiter (max 3 submissions per 5 min per form)
-   06  Noopener fixer on all external links (anti tab-nabbing)
-   07  Honeypot auto-injector (adds hidden traps to every form)
-   08  CSP meta tag injector (blocks injected malicious scripts)
-   09  Copy-paste protection on password/OTP fields
-   10  Suspicious activity logger (detects automated behavior)
-   11  Backend hook for future EXT-13 integration
-
-   SECURITY NOTES:
-   • The admin key lockout is NOT here — it lives in admin.js v3 to
-     avoid double-locking and race conditions.
-   • Honeypot fields are invisible to humans but bots auto-fill them.
-   • This file MUST load before main.js in every HTML file.
-   • v4: removed ignored frame-ancestors directive from CSP meta tag
-     (clickjacking protection still active via frame-buster in Section 01).
-
+   v3.37:
+   • Sends requestformat=JSON as required by the DHRU client contract
+   • Places ID and IMEI inside the PARAMETERS XML envelope
+   • Parses array-style SUCCESS[0].REFERENCEID responses
+   • Rejects customer orders without a serviceId before upstream fulfillment
+   • Uses the exact FastUnlockers credit price with no added flat fee
+   • Accepts common DHRU CDR field variants and exposes a POST-only CDR endpoint
+   • Binance Pay webhook fully intact and ready for auto-fulfillment.
+   • All previous features preserved: GitHub Vault, Wallet, Auth, CDR,
+     Auto-refund, 50 Le minimum, trusted-phone bot, all diagnostic probes.
+   
+   ⚠️ SECURITY: NEVER hardcode API keys here. Use Render Environment 
+   Variables for UNLOCK_API_KEY, UNLOCK_API_USERNAME, ADMIN_TOKEN, and BINANCE_WEBHOOK_SECRET.
+   
    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
    ===================================================================== */
-'use strict';
-(function () {
 
-  /* 01 • FRAME-BUSTER — nobody can embed our site in a fake page (anti-clickjacking) */
-  if (window.top !== window.self) {
-    try { window.top.location.replace(window.self.location.href); } catch (e) { /* blocked by hostile frame; stay put */ }
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const morgan = require('morgan');
+const Joi = require('joi');
+const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
+const fs = require('fs');
+const path = require('path');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+const DATA = process.env.DATA_FILE || path.join(__dirname, 'data.json');
+app.set('trust proxy', 1);
+
+/* 02 • STORAGE */
+const DEFAULT_RATE = 26.0;
+const load = () => {
+  try { return JSON.parse(fs.readFileSync(DATA, 'utf8')); }
+  catch (e) { return { jobs: [], wallets: {}, topups: [], users: {}, sessions: {}, rate: DEFAULT_RATE }; }
+};
+const save = (d) => {
+  d.jobs = (d.jobs || []).slice(0, 500);
+  d.wallets = d.wallets || {};
+  d.topups = (d.topups || []).slice(0, 500);
+  d.users = d.users || {};
+  d.sessions = d.sessions || {};
+  fs.writeFileSync(DATA, JSON.stringify(d, null, 2));
+  ghPushSoon();
+};
+
+/* 02b • GITHUB VAULT */
+const GH = {
+  token: process.env.GITHUB_TOKEN || '',
+  repo: process.env.GITHUB_DATA_REPO || ''
+};
+const ghReady = () => !!(GH.token && GH.repo);
+let ghPushTimer = null;
+let ghLastSha = '';
+
+async function ghPull() {
+  if (!ghReady()) return null;
+  try {
+    const r = await fetch('https://api.github.com/repos/' + GH.repo + '/contents/data.json', {
+      headers: { Authorization: 'Bearer ' + GH.token, Accept: 'application/vnd.github+json', 'User-Agent': 'sierraunlock-api' }
+    });
+    if (!r.ok) return null;
+    const j = await r.json();
+    ghLastSha = j.sha || '';
+    return JSON.parse(Buffer.from(j.content || '', 'base64').toString('utf8'));
+  } catch (e) { return null; }
+}
+
+async function ghPush() {
+  if (!ghReady()) return;
+  try {
+    const b64 = Buffer.from(fs.readFileSync(DATA, 'utf8'), 'utf8').toString('base64');
+    const doPut = (sha) => {
+      const body = { message: 'vault ' + Date.now(), content: b64 };
+      if (sha) body.sha = sha;
+      return fetch('https://api.github.com/repos/' + GH.repo + '/contents/data.json', {
+        method: 'PUT',
+        headers: { Authorization: 'Bearer ' + GH.token, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json', 'User-Agent': 'sierraunlock-api' },
+        body: JSON.stringify(body)
+      });
+    };
+    let r = await doPut(ghLastSha);
+    if (r.status === 409 || r.status === 422) {
+      const g = await fetch('https://api.github.com/repos/' + GH.repo + '/contents/data.json', {
+        headers: { Authorization: 'Bearer ' + GH.token, Accept: 'application/vnd.github+json', 'User-Agent': 'sierraunlock-api' }
+      });
+      if (g.ok) { const gj = await g.json(); ghLastSha = gj.sha || ''; r = await doPut(ghLastSha); }
+    }
+    if (r.ok) { const j = await r.json(); if (j && j.content && j.content.sha) ghLastSha = j.content.sha; }
+  } catch (e) { /* silent */ }
+}
+
+function ghPushSoon() {
+  if (!ghReady()) return;
+  if (ghPushTimer) return;
+  ghPushTimer = setTimeout(() => { ghPushTimer = null; ghPush(); }, 15000);
+}
+
+if (!fs.existsSync(DATA)) save({ jobs: [], wallets: {}, topups: [], users: {}, sessions: {}, rate: DEFAULT_RATE });
+else {
+  const db = load();
+  if (!db.rate || db.rate < 20) { db.rate = DEFAULT_RATE; save(db); }
+}
+
+(async () => {
+  try {
+    const remote = await ghPull();
+    if (remote && typeof remote === 'object') {
+      const local = load();
+      const cnt = d => (d.jobs || []).length + (d.topups || []).length + Object.keys(d.users || {}).length + Object.keys(d.wallets || {}).length;
+      if (cnt(remote) > cnt(local)) { save(remote); console.log('[VAULT] restored ' + cnt(remote) + ' records from GitHub'); }
+      else ghPushSoon();
+    }
+  } catch (e) { console.log('[VAULT] pull skipped: ' + e.message); }
+})();
+
+/* 03 • SECURITY + CORS */
+app.use(helmet());
+const FALLBACK_ORIGINS = [
+  'https://sierraunlock.com', 'https://www.sierraunlock.com', 'http://sierraunlock.com',
+  'https://sierraunlock.live', 'https://www.sierraunlock.live', 'http://sierraunlock.live',
+  'https://sierraunlock-tech.github.io'
+];
+const ALLOWED = process.env.FRONTEND_URL
+  ? process.env.FRONTEND_URL.split(',').map(s => s.trim()).filter(Boolean)
+  : FALLBACK_ORIGINS;
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true);
+    if (ALLOWED.some(o => origin === o || origin.startsWith(o))) return cb(null, true);
+    cb(new Error('Not allowed by CORS'));
+  },
+  credentials: false
+}));
+app.use(express.json({ limit: '100kb' }));
+app.use(morgan('dev'));
+app.use(rateLimit({ windowMs: 60 * 1000, max: 60 }));
+const strict = rateLimit({ windowMs: 60 * 1000, max: 6 });
+
+/* 04 • AUTH */
+const adminOk = (req) => !!process.env.ADMIN_TOKEN && req.get('x-admin-token') === process.env.ADMIN_TOKEN;
+const verificationCodes = new Map();
+const resetCodes = new Map();
+const TRUSTED_PHONES = (process.env.OM_TRUSTED_PHONES || '').split(',').map(s => s.replace(/\D/g, '')).filter(Boolean);
+
+/* 05 • SCHEMAS */
+const unlockSchema = Joi.object({
+  type: Joi.string().valid('imei', 'file', 'server').default('imei'),
+  imei: Joi.string().trim().allow('').max(15).optional(),
+  details: Joi.string().trim().allow('').max(2000).optional(),
+  brand: Joi.string().trim().min(2).max(40).required(),
+  model: Joi.string().trim().min(2).max(60).required(),
+  phone: Joi.string().trim().min(9).max(20).required(),
+  serviceId: Joi.string().trim().min(1).max(20).required(),
+  serviceName: Joi.string().trim().max(120).optional(),
+  f_email: Joi.string().trim().max(120).allow('').optional(),
+  f_username: Joi.string().trim().max(120).allow('').optional(),
+  f_accountid: Joi.string().trim().max(120).allow('').optional(),
+  f_quantity: Joi.string().trim().max(10).allow('').optional(),
+  f_bulk: Joi.string().trim().max(4000).allow('').optional()
+});
+const jobStatusSchema = Joi.object({ id: Joi.string().trim().min(3).max(40).required() });
+const adminRateSchema = Joi.object({ slePerUsd: Joi.number().positive().max(100000).required() });
+const adminJobSchema = Joi.object({
+  id: Joi.string().trim().min(3).max(40).required(),
+  status: Joi.string().valid('queued', 'sent-to-server', 'processing', 'solved', 'failed').required()
+});
+const orderSchema = Joi.object({
+  type: Joi.string().valid('imei', 'file', 'server').default('imei'),
+  service: Joi.alternatives(Joi.string().max(60), Joi.number()).required(),
+  imei: Joi.string().trim().allow('').max(15).optional(),
+  details: Joi.string().trim().allow('').max(2000).optional(),
+  brand: Joi.string().trim().max(40).optional(),
+  model: Joi.string().trim().max(60).optional(),
+  customer: Joi.string().trim().max(60).optional()
+});
+const adminPaySchema = Joi.object({
+  id: Joi.string().trim().min(3).max(40).required(),
+  method: Joi.string().valid('orange_money', 'binance', 'cash', 'wallet').required()
+});
+const adminRefundSchema = Joi.object({
+  id: Joi.string().trim().min(3).max(40).required(),
+  reason: Joi.string().trim().min(5).max(500).required()
+});
+
+/* 06 • PUBLIC HEALTH */
+app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.37.0', docs: '/api/health' }));
+app.get('/api/health', (req, res) => res.json({
+  ok: true, service: 'SIERRAUNLOCK API', version: '3.37.0',
+  mode: fuReady() ? 'connected-to-fastunlockers' : 'manual-mode',
+  vault: ghReady() ? 'github' : 'local-only',
+  catalogs: ['imei', 'file', 'server'],
+  rate: load().rate,
+  time: new Date().toISOString()
+}));
+app.get('/api/rates', (req, res) => res.json({ ok: true, slePerUsd: load().rate }));
+
+app.get('/api/my-ip', strict, async (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  try {
+    const r = await fetch('https://api.ipify.org?format=json');
+    const j = await r.json();
+    res.json({ ok: true, serverPublicIp: j.ip });
+  } catch (e) {
+    res.status(502).json({ ok: false, error: 'ipify unreachable' });
+  }
+});
+
+/* 07 • CUSTOMER ORDER */
+app.post('/api/unlock', strict, async (req, res) => {
+  const { error, value } = unlockSchema.validate(req.body || {});
+  if (error) return res.status(400).json({ ok: false, error: error.details[0].message });
+  const type = value.type || 'imei';
+  if (type === 'imei' && !/^\d{15}$/.test(value.imei || '')) {
+    return res.status(400).json({ ok: false, error: 'IMEI must be exactly 15 digits.' });
+  }
+  if (type !== 'imei' && (!value.details || value.details.trim().length < 3) && !value.f_email) {
+    return res.status(400).json({ ok: false, error: 'File/Server orders need email + details.' });
+  }
+  const db = load();
+  const job = {
+    id: 'SU-' + Date.now(), type,
+    imei: value.imei || '', details: value.details || '',
+    f_email: value.f_email || '', f_username: value.f_username || '',
+    f_accountid: value.f_accountid || '', f_quantity: value.f_quantity || '',
+    f_bulk: value.f_bulk || '',
+    brand: value.brand, model: value.model, phone: value.phone,
+    serviceId: value.serviceId || '', serviceName: value.serviceName || '',
+    status: 'queued', payment_status: 'unpaid', payment_method: null,
+    paid_at: null, refunded_at: null, refund_reason: null,
+    created: new Date().toISOString()
+  };
+  db.jobs.unshift(job); save(db);
+  res.json({ ok: true, job: job.id, status: job.status, type, note: 'Order received. Complete payment to start processing.' });
+});
+
+app.post('/api/job-status', strict, (req, res) => {
+  const { error, value } = jobStatusSchema.validate(req.body || {});
+  if (error) return res.status(400).json({ ok: false, error: 'Invalid job id.' });
+  const job = load().jobs.find(j => j.id === value.id);
+  if (!job) return res.status(404).json({ ok: false, error: 'Job not found.' });
+  res.json({ ok: true, job });
+});
+
+/* 08 • ADMIN */
+app.post('/api/admin/rate', strict, (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  const { error, value } = adminRateSchema.validate(req.body || {});
+  if (error) return res.status(400).json({ ok: false, error: 'Invalid rate.' });
+  const db = load(); db.rate = value.slePerUsd; save(db);
+  svcCache.ts = 0;
+  res.json({ ok: true, slePerUsd: value.slePerUsd });
+});
+app.post('/api/admin/job', strict, (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  const { error, value } = adminJobSchema.validate(req.body || {});
+  if (error) return res.status(400).json({ ok: false, error: 'Invalid payload.' });
+  const db = load();
+  const job = db.jobs.find(j => j.id === value.id);
+  if (!job) return res.status(404).json({ ok: false, error: 'Job not found.' });
+  job.status = value.status; save(db);
+  res.json({ ok: true, job });
+});
+app.get('/api/admin/jobs', strict, (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  res.json({ ok: true, jobs: load().jobs });
+});
+
+app.post('/api/admin/pay', strict, async (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  const { error, value } = adminPaySchema.validate(req.body || {});
+  if (error) return res.status(400).json({ ok: false, error: error.details[0].message });
+  const db = load();
+  const job = db.jobs.find(j => j.id === value.id);
+  if (!job) return res.status(404).json({ ok: false, error: 'Job not found.' });
+  if (job.payment_status === 'paid') return res.status(400).json({ ok: false, error: 'Job already paid.' });
+  job.payment_status = 'paid'; job.payment_method = value.method;
+  job.paid_at = new Date().toISOString(); job.status = 'sent-to-server';
+  if (!fuReady()) { save(db); return res.json({ ok: true, job: job.id, warning: 'Upstream not configured.' }); }
+  const up = await placeUpstream(job);
+  if (up.ok) { job.upstream = up.r.json; job.upstreamOrderId = up.orderId; }
+  else { job.status = 'failed'; job.upstream = up.r.json || up.r.text; }
+  save(db);
+  res.json({ ok: up.ok, job: job.id, payment_status: job.payment_status, upstreamOrderId: up.orderId, upstream: up.r.json || up.r.text });
+});
+
+app.post('/api/admin/refund', strict, (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  const { error, value } = adminRefundSchema.validate(req.body || {});
+  if (error) return res.status(400).json({ ok: false, error: error.details[0].message });
+  const db = load();
+  const job = db.jobs.find(j => j.id === value.id);
+  if (!job) return res.status(404).json({ ok: false, error: 'Job not found.' });
+  if (job.payment_status !== 'paid') return res.status(400).json({ ok: false, error: 'Only paid jobs can be refunded.' });
+  job.payment_status = 'refunded'; job.refunded_at = new Date().toISOString();
+  job.refund_reason = value.reason; job.status = 'failed';
+  save(db);
+  res.json({ ok: true, job: job.id, payment_status: job.payment_status, refund_reason: job.refund_reason });
+});
+
+/* 08e • WALLET */
+app.get('/api/wallet/:phone', async (req, res) => {
+  const phone = String(req.params.phone || '').replace(/\D/g, '');
+  if (phone.length < 9) return res.status(400).json({ ok: false, error: 'Invalid phone.' });
+  const db = load();
+  const w = (db.wallets || {})[phone] || { balance: 0, tx: [] };
+  const pending = (db.topups || []).filter(t => t.phone === phone && t.status === 'pending');
+  res.json({ ok: true, balance: w.balance, tx: (w.tx || []).slice(0, 30), pending });
+});
+
+app.post('/api/wallet/topup', strict, (req, res) => {
+  const b = req.body || {};
+  const phone = String(b.phone || '').replace(/\D/g, '');
+  const amount = parseFloat(b.amount);
+  const method = ['orange_money', 'binance'].includes(b.method) ? b.method : null;
+  if (phone.length < 9 || !amount || amount <= 0 || amount > 10000 || !method) {
+    return res.status(400).json({ ok: false, error: 'Invalid top-up request.' });
+  }
+  const db = load(); db.topups = db.topups || [];
+  const minUsd = Math.round((50 / (db.rate || DEFAULT_RATE)) * 100) / 100;
+  if (amount < minUsd) {
+    return res.status(400).json({ ok: false, error: 'Minimum top-up is 50 Le (about $' + minUsd.toFixed(2) + ' at current rate).' });
+  }
+  const tp = {
+    id: 'TP-' + Date.now(), phone,
+    amount: Math.round(amount * 100) / 100,
+    method, ref: String(b.ref || ''),
+    status: 'pending',
+    created: new Date().toISOString()
+  };
+  if (method === 'orange_money' && TRUSTED_PHONES.includes(phone)) {
+    tp.status = 'approved'; tp.approvedAt = new Date().toISOString(); tp.auto = 'trusted-phone-bot';
+    db.topups.unshift(tp);
+    db.wallets = db.wallets || {};
+    const w = db.wallets[phone] = db.wallets[phone] || { balance: 0, tx: [] };
+    w.balance = Math.round((w.balance + tp.amount) * 100) / 100;
+    w.tx.unshift({ type: 'credit', amount: tp.amount, ref: tp.id + ' (trusted-auto)', date: new Date().toISOString() });
+    save(db);
+    return res.json({ ok: true, topup: tp.id, auto_approved: true, balance: w.balance, note: 'Trusted phone: credited instantly.' });
+  }
+  db.topups.unshift(tp); save(db);
+  res.json({
+    ok: true, topup: tp.id,
+    pay_to: method === 'orange_money'
+      ? 'Orange Money +232 75 908 206 (Alhassan)'
+      : 'Binance Pay ID 754378475',
+    note: 'Send the amount now, include ref ' + tp.id + '. Binance auto-approves via webhook; Orange Money needs one founder click.'
+  });
+});
+
+app.post('/api/wallet/pay', strict, async (req, res) => {
+  const b = req.body || {};
+  const phone = String(b.phone || '').replace(/\D/g, '');
+  const db = load(); db.wallets = db.wallets || {};
+  const w = db.wallets[phone] = db.wallets[phone] || { balance: 0, tx: [] };
+
+  const services = fuReady() ? await fetchCatalog() : null;
+  const svc = (services || []).find(s => s.id === String(b.serviceId));
+  if (!svc) return res.status(400).json({ ok: false, error: 'Service not found.' });
+
+  const price = svc.priceUsd;
+  if (w.balance < price) {
+    return res.status(400).json({
+      ok: false,
+      error: 'Insufficient balance. Need $' + price + ' — you have $' + w.balance + '. Add Fund first (minimum 50 Le).',
+      needed: price, balance: w.balance
+    });
   }
 
-  /* 02 • SELF-XSS SCAM WARNING — protects customers who paste "codes" in the console */
-  console.log('%cSTOP!', 'font-size:3rem;font-weight:900;color:#B00020');
-  console.log('%cThis browser area is for developers. If anyone told you to copy-paste something here — it is a SCAM trying to steal your account or device. SIERRAUNLOCK staff will NEVER ask you to do this.', 'font-size:.95rem;color:#0072C6');
+  const type = ['imei', 'file', 'server'].includes(b.type) ? b.type : 'imei';
+  if (type === 'imei' && !/^\d{15}$/.test(b.imei || '')) {
+    return res.status(400).json({ ok: false, error: 'IMEI must be 15 digits.' });
+  }
+  if (type !== 'imei' && !b.f_email && String(b.details || '').trim().length < 3) {
+    return res.status(400).json({ ok: false, error: 'Email/details required for file/server orders.' });
+  }
 
-  /* 03 • DEVTOOLS DETECTION — warns when console is open (deters casual inspection) */
-  let devtoolsOpen = false;
-  const threshold = 160;
-  setInterval(() => {
-    const widthThreshold = window.outerWidth - window.innerWidth > threshold;
-    const heightThreshold = window.outerHeight - window.innerHeight > threshold;
-    if (widthThreshold || heightThreshold) {
-      if (!devtoolsOpen) {
-        devtoolsOpen = true;
-        console.warn('⚠️ Developer tools detected. Remember: never paste code here that someone gave you.');
-      }
+  w.balance = Math.round((w.balance - price) * 100) / 100;
+
+  const job = {
+    id: 'SU-' + Date.now(), type,
+    imei: b.imei || '', details: b.details || '',
+    f_email: b.f_email || '', f_username: b.f_username || '',
+    f_accountid: b.f_accountid || '', f_quantity: b.f_quantity || '',
+    f_bulk: b.f_bulk || '',
+    brand: b.brand || '', model: b.model || '', phone,
+    serviceId: svc.id, serviceName: svc.name,
+    status: 'sent-to-server',
+    payment_status: 'paid', payment_method: 'wallet',
+    paid_at: new Date().toISOString(),
+    created: new Date().toISOString()
+  };
+
+  let autoRefunded = false;
+  if (fuReady()) {
+    const up = await placeUpstream(job);
+    if (up.ok) {
+      job.upstream = up.r.json; job.upstreamOrderId = up.orderId;
     } else {
-      devtoolsOpen = false;
+      job.status = 'failed';
+      job.upstream = up.r.json || up.r.text;
+      w.balance = Math.round((w.balance + price) * 100) / 100;
+      w.tx.unshift({ type: 'credit', amount: price, ref: 'AUTO-REFUND ' + job.id, date: new Date().toISOString() });
+      autoRefunded = true;
     }
-  }, 1000);
+  }
 
-  /* 04 • INPUT SANITIZER — strips HTML injection characters as the user types */
-  document.addEventListener('input', function (e) {
-    const t = e.target;
-    if (t.matches && t.matches('input[type="text"], input[type="search"], input[type="tel"], input:not([type]), textarea')) {
-      if (/[<>]/.test(t.value)) t.value = t.value.replace(/[<>]/g, '');
+  w.tx.unshift({ type: 'debit', amount: price, ref: job.id, date: new Date().toISOString() });
+  db.jobs.unshift(job); save(db);
+  res.json({ ok: true, job: job.id, balance: w.balance, status: job.status, auto_refunded: autoRefunded });
+});
+
+app.get('/api/admin/wallet/topups', strict, (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  res.json({ ok: true, topups: (load().topups || []).slice(0, 100) });
+});
+
+app.post('/api/admin/wallet/approve', strict, (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  const id = String((req.body || {}).id || '');
+  const db = load(); db.wallets = db.wallets || {}; db.topups = db.topups || [];
+  const tp = db.topups.find(t => t.id === id);
+  if (!tp) return res.status(404).json({ ok: false, error: 'Top-up not found.' });
+  if (tp.status !== 'pending') return res.status(400).json({ ok: false, error: 'Already processed.' });
+  tp.status = 'approved'; tp.approvedAt = new Date().toISOString();
+  const w = db.wallets[tp.phone] = db.wallets[tp.phone] || { balance: 0, tx: [] };
+  w.balance = Math.round((w.balance + tp.amount) * 100) / 100;
+  w.tx.unshift({ type: 'credit', amount: tp.amount, ref: tp.id, date: new Date().toISOString() });
+  save(db);
+  res.json({ ok: true, balance: w.balance, topup: tp.id });
+});
+
+app.post('/api/admin/wallet/reject', strict, (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  const id = String((req.body || {}).id || '');
+  const db = load(); db.topups = db.topups || [];
+  const tp = db.topups.find(t => t.id === id);
+  if (!tp || tp.status !== 'pending') return res.status(400).json({ ok: false, error: 'Not found or already processed.' });
+  tp.status = 'rejected'; tp.reason = String((req.body || {}).reason || '');
+  save(db);
+  res.json({ ok: true, topup: tp.id });
+});
+
+/* 09 • BINANCE WEBHOOK (FULLY INTACT & READY) */
+app.post('/api/webhook/binance', express.raw({ type: '*/*' }), async (req, res) => {
+  const secret = process.env.BINANCE_WEBHOOK_SECRET;
+  if (secret) {
+    const sig = req.get('x-binance-signature') || '';
+    const hmac = crypto.createHmac('sha256', secret).update(req.body).digest('hex');
+    let ok = false;
+    try { ok = sig.length === hmac.length && crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(hmac)); } catch (e) { ok = false; }
+    if (!ok) return res.status(401).json({ ok: false, error: 'Bad signature.' });
+  }
+  let payload = null; try { payload = JSON.parse(req.body.toString()); } catch (e) {}
+  if (!payload) return res.status(400).json({ ok: false, error: 'Invalid payload.' });
+  const note = payload.note || payload.remark || '';
+
+  const mt = note.match(/TP-\d+/);
+  if (mt) {
+    const db0 = load(); db0.topups = db0.topups || []; db0.wallets = db0.wallets || {};
+    const tp = db0.topups.find(t => t.id === mt[0] && t.status === 'pending');
+    if (tp) {
+      tp.status = 'approved'; tp.approvedAt = new Date().toISOString(); tp.auto = 'binance-webhook-bot';
+      const w = db0.wallets[tp.phone] = db0.wallets[tp.phone] || { balance: 0, tx: [] };
+      w.balance = Math.round((w.balance + tp.amount) * 100) / 100;
+      w.tx.unshift({ type: 'credit', amount: tp.amount, ref: tp.id + ' (auto-bot)', date: new Date().toISOString() });
+      save(db0);
+      return res.json({ ok: true, received: true, topup: tp.id, auto_approved: true });
     }
-  }, true);
+  }
 
-  /* 05 • FORM RATE LIMITER — max 3 submissions per 5 minutes per form */
-  document.addEventListener('submit', function (e) {
-    const f = e.target;
-    if (!f || !f.id) return;
-    const key = 'su_rl_' + f.id;
-    const now = Date.now();
-    let arr = [];
-    try { arr = JSON.parse(localStorage.getItem(key) || '[]'); } catch (err) { arr = []; }
-    arr = arr.filter(ts => now - ts < 300000);  /* keep only last 5 min */
-    if (arr.length >= 3) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      alert('⚠️ Too many submissions in a short time. Please wait a minute and try again.');
-      return;
-    }
-    arr.push(now);
-    localStorage.setItem(key, JSON.stringify(arr));
-  }, true);
+  const m = note.match(/SU-\d+/);
+  if (!m) return res.json({ ok: true, received: true, warning: 'No job ID in note.' });
+  const db = load();
+  const job = db.jobs.find(j => j.id === m[0]);
+  if (!job || job.payment_status === 'paid') return res.json({ ok: true, received: true });
+  job.payment_status = 'paid'; job.payment_method = 'binance';
+  job.paid_at = new Date().toISOString(); job.status = 'sent-to-server';
+  if (fuReady()) {
+    const up = await placeUpstream(job);
+    if (up.ok) { job.upstream = up.r.json; job.upstreamOrderId = up.orderId; }
+    else { job.status = 'failed'; job.upstream = up.r.json || up.r.text; }
+  }
+  save(db);
+  res.json({ ok: true, received: true, job: job.id, auto_fulfilled: true });
+});
 
-  document.addEventListener('DOMContentLoaded', function () {
+/* 09b • CDR WEBHOOK */
+app.get('/api/webhook/cdr', (req, res) => {
+  res.status(405).json({ ok: false, error: 'CDR webhook requires POST.' });
+});
+app.post('/api/webhook/cdr', express.urlencoded({ extended: true }), (req, res) => {
+  const p = req.body || {};
+  const key = p.replykey || p.replyKey || p.key || p.cdrkey || p.CDRKEY || req.get('x-cdr-key') || '';
+  if (process.env.CDR_REPLY_KEY && key !== process.env.CDR_REPLY_KEY) return res.status(401).send('bad key');
+  const oid = String(p.orderid || p.orderId || p.order_id || p.ORDERID || p.referenceid || p.REFERENCEID || p.id || '');
+  const db = load();
+  const job = db.jobs.find(j => j.upstreamOrderId && String(j.upstreamOrderId) === oid)
+           || db.jobs.find(j => j.id === String(p.jobid || p.jobId || p.JOBID || ''));
+  if (!job) return res.status(404).send('unknown order');
+  const st = String(p.status || p.orderstatus || p.orderStatus || p.ORDERSTATUS || '').toLowerCase();
+  const code = p.code || p.unlock_code || p.unlockCode || p.reply || p.result || p.response || null;
+  if (code || st.includes('success') || st.includes('solved') || st.includes('complete')) job.status = 'solved';
+  else if (st.includes('reject') || st.includes('fail') || st.includes('cancel')) job.status = 'failed';
+  if (code) job.cdrCode = String(code);
+  job.upstream = p; job.cdrAt = new Date().toISOString();
+  save(db);
+  res.send('OK');
+});
 
-    /* 06 • NOOPENER FIXER — adds rel="noopener noreferrer" to all external links (anti tab-nabbing) */
-    document.querySelectorAll('a[target="_blank"]').forEach(a => {
-      const rel = a.getAttribute('rel') || '';
-      if (!rel.includes('noopener')) a.setAttribute('rel', (rel + ' noopener noreferrer').trim());
+/* 10 • GSM HUB ADAPTER */
+const FU = {
+  base: (process.env.UNLOCK_API_URL || '').replace(/\/+$/, ''),
+  key: process.env.UNLOCK_API_KEY || '',
+  username: process.env.UNLOCK_API_USERNAME || '',
+  endpoint: process.env.UNLOCK_API_ENDPOINT || '/api/dhru'
+};
+function fuReady() { return !!(FU.base && FU.key && FU.username); }
+
+function xmlEscape(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function dhruParameters(extraParams) {
+  const entries = Object.entries(extraParams || {})
+    .filter(([, value]) => value !== undefined && value !== null && value !== '')
+    .map(([key, value]) => `<${String(key).toUpperCase()}>${xmlEscape(value)}</${String(key).toUpperCase()}>`)
+    .join('');
+  return `<PARAMETERS>${entries}</PARAMETERS>`;
+}
+
+function maskedBody(paramsObj) {
+  const copy = Object.assign({}, paramsObj);
+  if (copy.apiaccesskey) copy.apiaccesskey = copy.apiaccesskey.slice(0, 4) + '***';
+  return Object.keys(copy).map(k => encodeURIComponent(k) + '=' + encodeURIComponent(copy[k])).join('&');
+}
+
+async function gsmCall(action, extraParams = {}, opts = {}) {
+  if (!fuReady()) throw new Error('Upstream not configured.');
+  const params = {
+    username: FU.username,
+    apiaccesskey: FU.key,
+    action,
+    requestformat: 'JSON',
+    parameters: dhruParameters(extraParams)
+  };
+  const body = new URLSearchParams(params).toString();
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 15000);
+  try {
+    const r = await fetch(FU.base + FU.endpoint, {
+      method: 'POST',
+      headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+      body, signal: ctrl.signal
     });
-
-    /* 07 • HONEYPOT AUTO-INJECTOR — adds hidden trap fields to every form */
-    /* Bots auto-fill hidden fields; humans never see them. If filled = bot = reject. */
-    document.querySelectorAll('form').forEach(f => {
-      const hp1 = document.createElement('input');
-      hp1.type = 'text'; hp1.name = 'website_url'; hp1.id = f.id + '_hp_url';
-      hp1.tabIndex = -1; hp1.autocomplete = 'off';
-      hp1.style.cssText = 'position:absolute!important;left:-9999px!important;top:auto;width:1px;height:1px;overflow:hidden';
-      f.appendChild(hp1);
-
-      const hp2 = document.createElement('input');
-      hp2.type = 'text'; hp2.name = 'company_website'; hp2.id = f.id + '_hp_company';
-      hp2.tabIndex = -1; hp2.autocomplete = 'off';
-      hp2.style.cssText = 'position:absolute!important;left:-9999px!important;top:auto;width:1px;height:1px;overflow:hidden';
-      f.appendChild(hp2);
-    });
-
-    /* 08 • CSP META TAG INJECTOR — blocks injected malicious scripts (basic XSS protection) */
-    /* v4: frame-ancestors directive removed (ignored in meta tags; clickjacking protection
-       still enforced by the frame-buster JavaScript in Section 01 above). */
-    if (!document.querySelector('meta[http-equiv="Content-Security-Policy"]')) {
-      const csp = document.createElement('meta');
-      csp.setAttribute('http-equiv', 'Content-Security-Policy');
-      csp.setAttribute('content', "default-src 'self' 'unsafe-inline' 'unsafe-eval' https: data: blob:; img-src 'self' https: data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net https://api.binance.com https://cdn.emailjs.com; connect-src 'self' https://api.binance.com https://api.emailjs.com");
-      document.head.appendChild(csp);
+    const text = await r.text();
+    let json = null; try { json = JSON.parse(text); } catch (e) {}
+    if (opts.debug) {
+      console.log('[UPSTREAM OUT]', action, maskedBody(params));
+      console.log('[UPSTREAM IN ]', action, text.slice(0, 400));
     }
+    return { http: r.status, json, text: text.slice(0, 600), sentBody: maskedBody(params) };
+  } catch (e) {
+    return { http: 0, json: null, text: 'network error: ' + e.message, sentBody: maskedBody(params) };
+  } finally { clearTimeout(t); }
+}
 
-    /* 09 • COPY-PASTE PROTECTION — blocks paste on password/OTP fields (prevents credential stuffing) */
-    document.querySelectorAll('input[type="password"], input[id*="Code"], input[id*="Pin"], input[id*="OTP"]').forEach(el => {
-      el.addEventListener('paste', (e) => {
-        e.preventDefault();
-        alert('⚠️ For your security, please type this manually. Copy-paste is disabled on sensitive fields.');
+const LIST_ACTIONS = {
+  imei: ['imeiservicelist'],
+  file: ['fileservicelist', 'filelist', 'fileandservicelist', 'servicelistfile'],
+  server: [
+    'serverservicelist', 'serverlist', 'creditservicelist',
+    'servicelistserver', 'serverandservicelist'
+  ]
+};
+const ORDER_ACTIONS = {
+  imei: ['placeimeiorder'],
+  file: ['placefileorder'],
+  server: ['placeserverorder', 'placecreditorder']
+};
+const STATUS_ACTIONS = {
+  imei: ['imeiorderstatus'],
+  file: ['fileorderstatus'],
+  server: ['serverorderstatus', 'creditorderstatus']
+};
+
+function parseList(raw, type) {
+  const listObj = (Array.isArray(raw) && raw[0] && raw[0].LIST) ? raw[0].LIST
+                : (raw && raw.LIST ? raw.LIST : (raw && typeof raw === 'object' ? raw : {}));
+  const rate = load().rate;
+  // Customer price must match FastUnlockers exactly. Do not add a platform fee.
+  const flat = 0;
+  const splitStr = (process.env.UNLOCK_COMMISSION_SPLIT || '0.75,0.25').split(',');
+  const su = Math.max(0, Math.min(1, parseFloat(splitStr[0]) || 0.75));
+  const al = Math.max(0, Math.min(1, parseFloat(splitStr[1]) || 0.25));
+  const out = [];
+  Object.keys(listObj).forEach(gname => {
+    const svcs = (listObj[gname] || {}).SERVICES || {};
+    Object.keys(svcs).forEach(sid => {
+      const s = svcs[sid] || {};
+      const credit = parseFloat(s.CREDIT || '0');
+      const priceUsd = Math.round((credit + flat) * 100) / 100;
+      const profit = priceUsd - credit;
+      out.push({
+        id: String(s.SERVICEID || sid),
+        name: String(s.SERVICENAME || '').trim(),
+        group: String(gname), type,
+        costUsd: credit, priceUsd,
+        profitUsd: Math.round(profit * 100) / 100,
+        sierraunlockShareUsd: Math.round(profit * su * 100) / 100,
+        alhassanShareUsd: Math.round(profit * al * 100) / 100,
+        priceSle: Math.round(priceUsd * rate),
+        time: String(s.TIME || ''),
+        info: String(s.INFO || '')
       });
     });
-
-    /* 10 • SUSPICIOUS ACTIVITY LOGGER — detects rapid automated behavior */
-    let clickCount = 0;
-    let lastClickTime = Date.now();
-    document.addEventListener('click', () => {
-      const now = Date.now();
-      if (now - lastClickTime < 100) {  /* clicks faster than 100ms = suspicious */
-        clickCount++;
-        if (clickCount > 20) {
-          console.warn('⚠️ Suspicious rapid clicking detected. Automated behavior?');
-          clickCount = 0;
-        }
-      } else {
-        clickCount = 0;
-      }
-      lastClickTime = now;
-    });
   });
+  return out;
+}
 
-  /* 11 • HOOK FOR THE FUTURE BACKEND (EXT-13) — signals security layer is ready */
-  window.SU_SEC = { layer: 'frontend-v4', ready: true };
-})();
+async function fetchList(type) {
+  const merged = [];
+  const seen = {};
+  for (const action of (LIST_ACTIONS[type] || [])) {
+    try {
+      const r = await gsmCall(action);
+      if (r.http === 200 && r.json && r.json.SUCCESS) {
+        parseList(r.json.SUCCESS, type).forEach(s => {
+          const k = s.type + ':' + s.id;
+          if (!seen[k]) { seen[k] = 1; merged.push(s); }
+        });
+      }
+    } catch (e) { /* try next action */ }
+  }
+  return merged;
+}
+
+/* LIVE PAYMENT PATH — DHRU-compatible order envelope */
+async function placeUpstreamOnce(job) {
+  const type = job.type || 'imei';
+  let last = { http: 0, json: null, text: 'no attempt' };
+  const sid = String(job.serviceId || job.service || '').trim();
+  if (!sid) {
+    return {
+      ok: false,
+      r: {
+        http: 400,
+        json: { ERROR: [{ MESSAGE: 'Local: Missing serviceId before calling upstream' }] },
+        text: 'missing serviceId',
+        sentBody: ''
+      },
+      orderId: null
+    };
+  }
+  
+  for (const action of (ORDER_ACTIONS[type] || ORDER_ACTIONS.imei)) {
+    // DHRU placeimeiorder expects ID and IMEI inside the PARAMETERS envelope.
+    // Do not send duplicate top-level aliases: FastUnlockers parses the envelope.
+    const params = {
+      ID: sid,
+      IMEI: job.imei || '',
+
+      // optional fields
+      CUSTOMER: job.id,
+      BRAND: job.brand || '',
+      MODEL: job.model || ''
+    };
+
+    if (job.details) params.DETAILS = job.details;
+    if (job.f_email) params.EMAIL = job.f_email;
+    if (job.f_accountid) params.ACCOUNTID = job.f_accountid;
+    if (job.f_quantity) params.QUANTITY = job.f_quantity;
+    if (job.f_bulk) params.BULKIMEI = job.f_bulk;
+
+    const r = await gsmCall(action, params, { debug: true });
+    last = r;
+
+    console.log(`[UPSTREAM] Tried ${action} with ID=${sid} IMEI=${job.imei} -> ${r.text.slice(0,300)}`);
+
+    const success = r.json && r.json.SUCCESS;
+    if (r.http === 200 && success) {
+      const record = Array.isArray(success) ? (success[0] || {}) : success;
+      return {
+        ok: true,
+        r,
+        orderId: record.orderid || record.order_id || record.REFERENCE || record.REFERENCEID || null
+      };
+    }
+  }
+  return { ok: false, r: last, orderId: null };
+}
+
+async function placeUpstream(job) {
+  let last = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    last = await placeUpstreamOnce(job);
+    if (last.ok) return last;
+    const msg = JSON.stringify((last.r && last.r.json) || (last.r && last.r.text) || '');
+    if (/Required|Invalid|Not enough|balance|Denied/i.test(msg)) break;
+    if (attempt < 3) await new Promise(wait => setTimeout(wait, 2000));
+  }
+  return last;
+}
+
+async function statusUpstream(job) {
+  const type = job.type || 'imei';
+  for (const action of (STATUS_ACTIONS[type] || STATUS_ACTIONS.imei)) {
+    const r = await gsmCall(action, { ID: job.upstreamOrderId, orderid: job.upstreamOrderId, order_id: job.upstreamOrderId });
+    if (r.http === 200 && r.json) return r.json;
+  }
+  return null;
+}
+
+/* 11 • PROBES */
+app.get('/api/upstream-test', strict, async (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  const r = await gsmCall('accountinfo');
+  res.json({ ok: r.http === 200 && !!(r.json && r.json.SUCCESS), http: r.http, sample: r.json || r.text });
+});
+app.get('/api/admin/probe', strict, async (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  const out = {};
+  const cands = ['accountinfo', ...LIST_ACTIONS.imei, ...LIST_ACTIONS.file, ...LIST_ACTIONS.server];
+  for (const a of cands) {
+    try { const r = await gsmCall(a); out[a] = { http: r.http, ok: !!(r.json && r.json.SUCCESS) }; }
+    catch (e) { out[a] = { http: 0, ok: false, err: e.message }; }
+  }
+  res.json({ ok: true, probe: out });
+});
+
+app.get('/api/admin/auth-check', strict, async (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  if (!fuReady()) return res.status(503).json({ ok: false, error: 'UNLOCK_API_URL / USERNAME / KEY not all set in Render env.' });
+  let ip = 'unknown';
+  try { const ir = await fetch('https://api.ipify.org?format=json'); ip = (await ir.json()).ip; } catch (e) {}
+  const r = await gsmCall('accountinfo');
+  const authOk = !!(r.json && r.json.SUCCESS);
+  res.json({
+    ok: true,
+    authenticated: authOk,
+    serverPublicIp: ip,
+    verdict: authOk
+      ? 'Auth OK — username + API key accepted. The order problem is NOT authentication.'
+      : 'AUTH FAILING — fix this before anything else.',
+    endpointCalled: FU.base + FU.endpoint,
+    username: FU.username,
+    sentBody: r.sentBody,
+    reply: r.json || r.text
+  });
+});
+
+app.post(['/api/admin/deep-probe', '/api/admin/slow-probe'], strict, async (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  if (!fuReady()) return res.status(503).json({ ok: false, error: 'Upstream not configured.' });
+  const pre = await gsmCall('accountinfo');
+  if (!(pre.json && pre.json.SUCCESS)) {
+    return res.json({ ok: false, blocked: true, reason: 'Authentication failing. Run GET /api/admin/auth-check first.', reply: pre.json || pre.text });
+  }
+  const sid = String((req.body || {}).serviceId || '999999');
+  const imei = String((req.body || {}).imei || '352850711207110');
+  const b64 = (obj) => Buffer.from(JSON.stringify(obj), 'utf8').toString('base64');
+  const attempts = [
+    ['placeimeiorder', 'numbered_id1_imei1', { id1: sid, imei1: imei }],
+    ['placeimeiorder', 'numbered_with_qty', { id1: sid, imei1: imei, qty: '1' }],
+    ['placeimeiorder', 'b64_parameters', { parameters: b64({ ID: sid, IMEI: imei }) }],
+    ['placeimeiorder', 'upper', { ID: sid, IMEI: imei }],
+    ['placeimeiorder', 'lower', { id: sid, imei: imei }]
+  ];
+  const out = {};
+  for (const [action, style, params] of attempts) {
+    const r = await gsmCall(action, params);
+    out[action + ':' + style] = { sentBody: r.sentBody, reply: r.json || r.text };
+    await new Promise(w => setTimeout(w, 3000));
+  }
+  res.json({ ok: true, note: 'Look for any reply that does NOT say "Required".', results: out });
+});
+
+app.post('/api/admin/action-probe', strict, async (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  if (!fuReady()) return res.status(503).json({ ok: false, error: 'Upstream not configured.' });
+  const sid = '999999';
+  const imei = '352850711207110';
+  const actionNames = ['placeimeiorder', 'imeiorder', 'orderimei', 'placeimei', 'newimeiorder', 'createimeiorder'];
+  const out = {};
+  for (const action of actionNames) {
+    const r = await gsmCall(action, { ID: sid, IMEI: imei });
+    out[action] = { reply: r.json || r.text };
+    await new Promise(w => setTimeout(w, 2000));
+  }
+  res.json({ ok: true, note: 'Look for any action that returns something DIFFERENT from "Parameter ID Required".', results: out });
+});
+
+app.post('/api/admin/multipart-probe', strict, async (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  if (!fuReady()) return res.status(503).json({ ok: false, error: 'Upstream not configured.' });
+  const sid = String((req.body || {}).serviceId || '999999');
+  const imei = String((req.body || {}).imei || '352850711207110');
+  const form = new FormData();
+  form.append('username', FU.username);
+  form.append('apiaccesskey', FU.key);
+  form.append('action', 'placeimeiorder');
+  form.append('ID', sid);
+  form.append('IMEI', imei);
+  try {
+    const r = await fetch(FU.base + FU.endpoint, { method: 'POST', body: form });
+    const text = await r.text();
+    let json = null; try { json = JSON.parse(text); } catch (e) {}
+    res.json({ ok: true, note: 'If this ALSO says "Parameter Required", format guessing is done.', http: r.status, reply: json || text.slice(0, 600) });
+  } catch (e) {
+    res.status(502).json({ ok: false, error: 'Request failed: ' + e.message });
+  }
+});
+
+app.post('/api/admin/admin-format-probe', strict, async (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  if (!fuReady()) return res.status(503).json({ ok: false, error: 'Upstream not configured.' });
+  const sid = String((req.body || {}).serviceId || '999999');
+  const imei = String((req.body || {}).imei || '352850711207110');
+  const out = {};
+  try {
+    const r1 = await fetch(FU.base + FU.endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ username: FU.username, apiaccesskey: FU.key, action: 'placeimeiorder', ID: sid, IMEI: imei })
+    });
+    const t1 = await r1.text();
+    let j1 = null; try { j1 = JSON.parse(t1); } catch (e) {}
+    out['1_json_body_ID_IMEI'] = { http: r1.status, reply: j1 || t1.slice(0, 400) };
+  } catch (e) { out['1_json_body_ID_IMEI'] = { http: 0, reply: e.message }; }
+  await new Promise(w => setTimeout(w, 3000));
+  try {
+    const qs = 'username=' + encodeURIComponent(FU.username) +
+      '&apiaccesskey=' + encodeURIComponent(FU.key) +
+      '&action=placeimeiorder&ID=' + encodeURIComponent(sid) + '&IMEI=' + encodeURIComponent(imei);
+    const r2 = await fetch(FU.base + FU.endpoint + '?' + qs, {
+      method: 'POST', headers: { 'Accept': 'application/json' }, body: ''
+    });
+    const t2 = await r2.text();
+    let j2 = null; try { j2 = JSON.parse(t2); } catch (e) {}
+    out['2_query_string_ID_IMEI'] = { http: r2.status, reply: j2 || t2.slice(0, 400) };
+  } catch (e) { out['2_query_string_ID_IMEI'] = { http: 0, reply: e.message }; }
+  res.json({ ok: true, note: 'If either reply is NOT "Parameter Required", that transport is the fix.', results: out });
+});
+
+app.post('/api/admin/serviceid-probe', strict, async (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  if (!fuReady()) return res.status(503).json({ ok: false, error: 'Upstream not configured.' });
+  const sid = String((req.body || {}).serviceId || '999999');
+  const imei = String((req.body || {}).imei || '352850711207110');
+  const out = {};
+  try {
+    const params = new URLSearchParams({ username: FU.username, apiaccesskey: FU.key, action: 'placeimeiorder', serviceid: sid, imei: imei }).toString();
+    const r1 = await fetch(FU.base + FU.endpoint, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: params });
+    const t1 = await r1.text();
+    let j1 = null; try { j1 = JSON.parse(t1); } catch (e) {}
+    out['1_serviceid_imei_lower'] = { http: r1.status, reply: j1 || t1.slice(0, 400) };
+  } catch (e) { out['1_serviceid_imei_lower'] = { http: 0, reply: e.message }; }
+  await new Promise(w => setTimeout(w, 2000));
+  try {
+    const params = new URLSearchParams({ username: FU.username, apiaccesskey: FU.key, action: 'placeimeiorder', id: sid, imei: imei }).toString();
+    const r2 = await fetch(FU.base + FU.endpoint, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: params });
+    const t2 = await r2.text();
+    let j2 = null; try { j2 = JSON.parse(t2); } catch (e) {}
+    out['2_id_imei_lower'] = { http: r2.status, reply: j2 || t2.slice(0, 400) };
+  } catch (e) { out['2_id_imei_lower'] = { http: 0, reply: e.message }; }
+  res.json({ ok: true, note: 'If either reply is NOT "Parameter Required", THAT is the fix.', results: out });
+});
+
+/* v3.32 • STANDARD DHRU PROBE — tests 'service' + 'imei' (the actual DHRU standard) */
+app.post('/api/admin/dhru-probe', strict, async (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  if (!fuReady()) return res.status(503).json({ ok: false, error: 'Upstream not configured.' });
+  const sid = String((req.body || {}).serviceId || '999999');
+  const imei = String((req.body || {}).imei || '352850711207110');
+  const out = {};
+
+  // Test 1: Standard DHRU form-urlencoded (service + imei)
+  try {
+    const params = new URLSearchParams({
+      username: FU.username, apiaccesskey: FU.key, action: 'placeimeiorder',
+      service: sid, imei: imei
+    }).toString();
+    const r1 = await fetch(FU.base + FU.endpoint, {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: params
+    });
+    const t1 = await r1.text();
+    let j1 = null; try { j1 = JSON.parse(t1); } catch (e) {}
+    out['1_standard_dhru_service_imei'] = { http: r1.status, reply: j1 || t1.slice(0, 400) };
+  } catch (e) { out['1_standard_dhru_service_imei'] = { http: 0, reply: e.message }; }
+  
+  await new Promise(w => setTimeout(w, 2000));
+
+  // Test 2: JSON body with service + imei
+  try {
+    const r2 = await fetch(FU.base + FU.endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ username: FU.username, apiaccesskey: FU.key, action: 'placeimeiorder', service: sid, imei: imei })
+    });
+    const t2 = await r2.text();
+    let j2 = null; try { j2 = JSON.parse(t2); } catch (e) {}
+    out['2_json_service_imei'] = { http: r2.status, reply: j2 || t2.slice(0, 400) };
+  } catch (e) { out['2_json_service_imei'] = { http: 0, reply: e.message }; }
+
+  res.json({ ok: true, note: 'Standard DHRU uses "service" and "imei". If this returns "Invalid service" or SUCCESS, we found the fix.', results: out });
+});
+
+/* 12 • CATALOG */
+let svcCache = { ts: 0, data: null };
+
+app.post('/api/admin/refresh-catalog', strict, async (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  svcCache.ts = 0;
+  res.json({ ok: true, note: 'Catalog cache cleared.' });
+});
+
+app.get('/api/admin/debug-catalog', strict, async (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  svcCache.ts = 0;
+  const services = await fetchCatalog();
+  if (!services) return res.json({ ok: false, error: 'No services returned' });
+  const groups = {};
+  const types = { imei: 0, file: 0, server: 0 };
+  services.forEach(s => {
+    groups[s.group] = (groups[s.group] || 0) + 1;
+    types[s.type] = (types[s.type] || 0) + 1;
+  });
+  res.json({
+    ok: true, total: services.length,
+    byType: types, byGroup: groups,
+    sampleChimera: services.filter(s => /chimera/i.test(s.name + ' ' + s.group)).slice(0, 3),
+    sampleOctoplus: services.filter(s => /octoplus/i.test(s.name + ' ' + s.group)).slice(0, 3),
+    sampleUMT: services.filter(s => /umt|ultimate/i.test(s.name + ' ' + s.group)).slice(0, 3)
+  });
+});
+
+async function fetchCatalog() {
+  if (svcCache.data && Date.now() - svcCache.ts < 600000) return svcCache.data;
+  const [imei, file, server] = await Promise.all([fetchList('imei'), fetchList('file'), fetchList('server')]);
+  const services = [...imei, ...file, ...server];
+  if (!services.length) return svcCache.data || null;
+  if (svcCache.data && svcCache.data.length > services.length + 50) return svcCache.data;
+  services.sort((a, b) => a.type.localeCompare(b.type) || a.group.localeCompare(b.group) || Number(a.id) - Number(b.id));
+  svcCache = { ts: Date.now(), data: services };
+  return services;
+}
+
+app.get('/api/services', async (req, res) => {
+  if (!fuReady()) return res.json({ ok: false, mode: 'manual', services: [] });
+  const services = await fetchCatalog();
+  if (!services) return res.status(502).json({ ok: false, error: 'Upstream services unreachable' });
+  const pub = services.map(s => ({
+    id: s.id, name: s.name, group: s.group, type: s.type,
+    priceUsd: s.priceUsd, priceSle: s.priceSle, time: s.time, info: s.info
+  }));
+  res.json({ ok: true, cached: (Date.now() - svcCache.ts) < 600000, count: pub.length, services: pub });
+});
+
+app.get('/api/admin/services', strict, async (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  if (!fuReady()) return res.json({ ok: false, mode: 'manual', services: [] });
+  const services = await fetchCatalog();
+  if (!services) return res.status(502).json({ ok: false, error: 'Upstream services unreachable' });
+  const splitStr = (process.env.UNLOCK_COMMISSION_SPLIT || '0.75,0.25').split(',');
+  res.json({
+    ok: true, count: services.length,
+    policy: {
+      flatFeeUsd: 0,
+      sierraunlockShare: parseFloat(splitStr[0]) || 0.75,
+      alhassanShare: parseFloat(splitStr[1]) || 0.25,
+      rateSlePerUsd: load().rate
+    },
+    services
+  });
+});
+
+/* 13 • ADMIN ORDER + RETRY + TRACK */
+app.post('/api/order', strict, async (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  const { error, value } = orderSchema.validate(req.body || {});
+  if (error) return res.status(400).json({ ok: false, error: error.details[0].message });
+  if (!fuReady()) return res.status(503).json({ ok: false, error: 'Upstream not configured.' });
+  const job = {
+    id: 'SU-' + Date.now(), type: value.type || 'imei',
+    imei: value.imei || '', details: value.details || '',
+    service: String(value.service),
+    brand: value.brand || '', model: value.model || '', customer: value.customer || '',
+    status: 'sent-to-server',
+    payment_status: 'paid', payment_method: 'manual',
+    paid_at: new Date().toISOString(),
+    created: new Date().toISOString()
+  };
+  const up = await placeUpstream(job);
+  if (up.ok) { job.upstream = up.r.json; job.upstreamOrderId = up.orderId; }
+  else { job.status = 'failed'; job.upstream = up.r.json || up.r.text; }
+  const db = load(); db.jobs.unshift(job); save(db);
+  res.json({ ok: up.ok, job: job.id, upstreamOrderId: up.orderId, upstream: up.r.json || up.r.text });
+});
+
+app.post('/api/order-status', strict, async (req, res) => {
+  const { error, value } = jobStatusSchema.validate(req.body || {});
+  if (error) return res.status(400).json({ ok: false, error: 'Invalid job id.' });
+  const job = load().jobs.find(j => j.id === value.id);
+  if (!job) return res.status(404).json({ ok: false, error: 'Job not found.' });
+  if (fuReady() && job.upstreamOrderId) {
+    const live = await statusUpstream(job);
+    return res.json({ ok: true, job, live });
+  }
+  res.json({ ok: true, job });
+});
+
+app.post('/api/admin/retry', strict, async (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  const id = String((req.body || {}).id || '');
+  const db = load();
+  const job = db.jobs.find(j => j.id === id);
+  if (!job) return res.status(404).json({ ok: false, error: 'Job not found.' });
+  if (!fuReady()) return res.status(503).json({ ok: false, error: 'Upstream not configured.' });
+  const up = await placeUpstream(job);
+  if (up.ok) {
+    job.status = 'sent-to-server';
+    job.upstream = up.r.json;
+    job.upstreamOrderId = up.orderId;
+  } else {
+    job.status = 'failed';
+    job.upstream = up.r.json || up.r.text;
+  }
+  save(db);
+  res.json({ ok: up.ok, job: job.id, upstreamOrderId: up.orderId, upstream: up.r.json || up.r.text });
+});
+
+app.get('/api/track/:id', async (req, res) => {
+  const id = String(req.params.id || '').trim();
+  if (!id || id.length < 3 || id.length > 60) return res.status(400).json({ ok: false, error: 'Invalid job ID.' });
+  const job = load().jobs.find(j => j.id === id);
+  if (!job) return res.status(404).json({ ok: false, error: 'Job not found.' });
+  let code = job.cdrCode || null, message = null, failed = false;
+  if (!code && job.upstream && typeof job.upstream === 'object') {
+    const s = job.upstream.SUCCESS || job.upstream.success || null;
+    const e = job.upstream.ERROR || job.upstream.error || null;
+    if (s && typeof s === 'object') {
+      code = s.code || s.unlock_code || s.CODE || null;
+      message = s.message || null;
+    } else if (typeof s === 'string') code = s;
+    if (e) {
+      failed = true;
+      message = (typeof e === 'object') ? (e.message || JSON.stringify(e)) : e;
+    }
+  }
+  const maskedImei = job.imei ? job.imei.slice(0, 6) + '******' + job.imei.slice(-3) : '';
+  res.json({
+    ok: true,
+    job: {
+      id: job.id, type: job.type || 'imei',
+      serviceName: job.serviceName || job.service || '—',
+      imei: maskedImei, status: job.status,
+      payment_status: job.payment_status || 'unpaid',
+      failed, code: (job.status === 'solved' || code) ? (code || message) : null, message,
+      created: job.created, upstreamOrderId: job.upstreamOrderId || null,
+      eta: (job.status === 'queued' || job.status === 'sent-to-server' || job.status === 'processing')
+        ? 'In progress — auto-refreshing.' : null
+    }
+  });
+});
+
+/* 13d • AUTH */
+const EMAILJS = {
+  service: process.env.EMAILJS_SERVICE_ID || '',
+  template: process.env.EMAILJS_TEMPLATE_ID || '',
+  public: process.env.EMAILJS_PUBLIC_KEY || '',
+  private: process.env.EMAILJS_PRIVATE_KEY || ''
+};
+const emailReady = () => !!(EMAILJS.service && EMAILJS.template && EMAILJS.private);
+
+async function sendVerificationEmail(toEmail, toName, code) {
+  if (!emailReady()) return { ok: false, error: 'EmailJS not configured' };
+  try {
+    const r = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        service_id: EMAILJS.service,
+        template_id: EMAILJS.template,
+        user_id: EMAILJS.public,
+        accessToken: EMAILJS.private,
+        template_params: { to_email: toEmail, to_name: toName, code }
+      })
+    });
+    let detail = '';
+    try { detail = (await r.text()).slice(0, 200); } catch (e) {}
+    return { ok: r.ok, status: r.status, detail };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+app.post('/api/auth/register', strict, async (req, res) => {
+  const { name, email, phone, password } = req.body || {};
+  const p = String(phone || '').replace(/\D/g, '');
+  if (!name || name.length < 2) return res.status(400).json({ ok: false, error: 'Name required (min 2 chars).' });
+  if (!/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ ok: false, error: 'Invalid email.' });
+  if (p.length < 9) return res.status(400).json({ ok: false, error: 'Invalid phone.' });
+  if (!password || password.length < 6) return res.status(400).json({ ok: false, error: 'Password min 6 chars.' });
+  const db = load();
+  db.users = db.users || {};
+  if (db.users[p]) return res.status(400).json({ ok: false, error: 'This phone number is already registered. Please sign in.' });
+  const emailTaken = Object.values(db.users).some(u => u.email && u.email.toLowerCase() === email.toLowerCase());
+  if (emailTaken) return res.status(400).json({ ok: false, error: 'This email is already used by another account.' });
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  verificationCodes.set(p, { code, expires: Date.now() + 600000, email, name, password });
+  const sent = await sendVerificationEmail(email, name, code);
+  if (!sent.ok) {
+    verificationCodes.delete(p);
+    return res.status(500).json({ ok: false, error: 'Could not send email. Try again. ' + (sent.error || sent.detail || '') });
+  }
+  res.json({ ok: true, phone: p, note: 'Verification code sent to ' + email });
+});
+
+app.post('/api/auth/verify', strict, (req, res) => {
+  const { phone, code } = req.body || {};
+  const p = String(phone || '').replace(/\D/g, '');
+  const rec = verificationCodes.get(p);
+  if (!rec) return res.status(400).json({ ok: false, error: 'No pending verification. Please register again.' });
+  if (Date.now() > rec.expires) { verificationCodes.delete(p); return res.status(400).json({ ok: false, error: 'Code expired. Please register again.' }); }
+  if (rec.code !== String(code).trim()) return res.status(400).json({ ok: false, error: 'Wrong code. Try again.' });
+  const db = load(); db.users = db.users || {};
+  const hash = bcrypt.hashSync(rec.password, 10);
+  db.users[p] = {
+    phone: p, email: rec.email, name: rec.name, passwordHash: hash,
+    verified: true, createdAt: new Date().toISOString(), lastLogin: new Date().toISOString()
+  };
+  verificationCodes.delete(p);
+  const token = 'u-' + p + '-' + Date.now();
+  db.sessions = db.sessions || {};
+  db.sessions[token] = { phone: p, created: new Date().toISOString() };
+  save(db);
+  res.json({ ok: true, token, user: { phone: p, email: rec.email, name: rec.name } });
+});
+
+app.post('/api/auth/login', strict, (req, res) => {
+  const { emailOrPhone, password } = req.body || {};
+  const p = String(emailOrPhone || '').replace(/\D/g, '');
+  const db = load(); db.users = db.users || {};
+  let user = null, phone = null;
+  if (/^\d{9,}$/.test(p)) { user = db.users[p]; phone = p; }
+  else {
+    const entry = Object.entries(db.users).find(([k, u]) => u.email && u.email.toLowerCase() === String(emailOrPhone).toLowerCase());
+    if (entry) { phone = entry[0]; user = entry[1]; }
+  }
+  if (!user) return res.status(401).json({ ok: false, error: 'Account not found. Please register.' });
+  if (!bcrypt.compareSync(password || '', user.passwordHash)) return res.status(401).json({ ok: false, error: 'Wrong password.' });
+  user.lastLogin = new Date().toISOString();
+  db.sessions = db.sessions || {};
+  const token = 'u-' + phone + '-' + Date.now();
+  db.sessions[token] = { phone, created: new Date().toISOString() };
+  save(db);
+  res.json({ ok: true, token, user: { phone, email: user.email, name: user.name } });
+});
+
+app.get('/api/auth/me', strict, (req, res) => {
+  const token = req.get('x-user-token');
+  if (!token) return res.status(401).json({ ok: false, error: 'Not logged in.' });
+  const db = load(); db.sessions = db.sessions || {};
+  const s = db.sessions[token];
+  if (!s) return res.status(401).json({ ok: false, error: 'Session expired. Please log in again.' });
+  db.users = db.users || {};
+  const user = db.users[s.phone];
+  if (!user) return res.status(401).json({ ok: false, error: 'Account missing.' });
+  const w = (db.wallets || {})[s.phone] || { balance: 0, tx: [] };
+  const myJobs = (db.jobs || []).filter(j => (j.phone || '').replace(/\D/g, '') === s.phone).slice(0, 100);
+  res.json({
+    ok: true,
+    user: { phone: user.phone, email: user.email, name: user.name, createdAt: user.createdAt, lastLogin: user.lastLogin },
+    wallet: { balance: w.balance, tx: (w.tx || []).slice(0, 20) },
+    orders: myJobs
+  });
+});
+
+app.post('/api/auth/logout', strict, (req, res) => {
+  const token = req.get('x-user-token');
+  if (token) { const db = load(); db.sessions = db.sessions || {}; delete db.sessions[token]; save(db); }
+  res.json({ ok: true });
+});
+
+app.post('/api/auth/resend', strict, async (req, res) => {
+  const { phone } = req.body || {};
+  const p = String(phone || '').replace(/\D/g, '');
+  const rec = verificationCodes.get(p);
+  if (!rec) return res.status(400).json({ ok: false, error: 'No pending verification. Please register again.' });
+  rec.code = String(Math.floor(100000 + Math.random() * 900000));
+  rec.expires = Date.now() + 600000;
+  verificationCodes.set(p, rec);
+  const sent = await sendVerificationEmail(rec.email, rec.name, rec.code);
+  res.json(sent.ok ? { ok: true, note: 'New code sent to ' + rec.email } : { ok: false, error: 'Email send failed. ' + (sent.detail || '') });
+});
+
+app.post('/api/auth/forgot', strict, async (req, res) => {
+  const { emailOrPhone } = req.body || {};
+  const p = String(emailOrPhone || '').replace(/\D/g, '');
+  const db = load(); db.users = db.users || {};
+  let user = null, phone = null;
+  if (/^\d{9,}$/.test(p)) { user = db.users[p]; phone = p; }
+  else {
+    const entry = Object.entries(db.users).find(([k, u]) => u.email && u.email.toLowerCase() === String(emailOrPhone).toLowerCase());
+    if (entry) { phone = entry[0]; user = entry[1]; }
+  }
+  if (user && phone) {
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    resetCodes.set(phone, { code, expires: Date.now() + 600000 });
+    await sendVerificationEmail(user.email, user.name, code);
+  }
+  res.json({ ok: true, note: 'If that account exists, a 6-digit reset code was sent to its email.' });
+});
+
+app.post('/api/auth/reset', strict, (req, res) => {
+  const { emailOrPhone, code, newPassword } = req.body || {};
+  const p = String(emailOrPhone || '').replace(/\D/g, '');
+  const db = load(); db.users = db.users || {};
+  let phone = null;
+  if (/^\d{9,}$/.test(p) && db.users[p]) phone = p;
+  else {
+    const entry = Object.entries(db.users).find(([k, u]) => u.email && u.email.toLowerCase() === String(emailOrPhone).toLowerCase());
+    if (entry) phone = entry[0];
+  }
+  if (!phone) return res.status(400).json({ ok: false, error: 'Account not found.' });
+  const rec = resetCodes.get(phone);
+  if (!rec) return res.status(400).json({ ok: false, error: 'No reset requested. Click Forgot Password first.' });
+  if (Date.now() > rec.expires) { resetCodes.delete(phone); return res.status(400).json({ ok: false, error: 'Code expired. Request a new one.' }); }
+  if (rec.code !== String(code).trim()) return res.status(400).json({ ok: false, error: 'Wrong code.' });
+  if (!newPassword || newPassword.length < 6) return res.status(400).json({ ok: false, error: 'New password min 6 chars.' });
+  db.users[phone].passwordHash = bcrypt.hashSync(newPassword, 10);
+  resetCodes.delete(phone);
+  db.sessions = db.sessions || {};
+  Object.keys(db.sessions).forEach(t => { if (db.sessions[t].phone === phone) delete db.sessions[t]; });
+  save(db);
+  res.json({ ok: true, note: 'Password changed. Sign in with your new password.' });
+});
+
+app.get('/api/admin/users', strict, (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  const db = load(); db.users = db.users || {};
+  const list = Object.values(db.users).map(u => ({
+    phone: u.phone, email: u.email, name: u.name,
+    createdAt: u.createdAt, lastLogin: u.lastLogin,
+    balance: ((db.wallets || {})[u.phone] || {}).balance || 0,
+    orders: (db.jobs || []).filter(j => (j.phone || '').replace(/\D/g, '') === u.phone).length
+  }));
+  res.json({ ok: true, count: list.length, users: list });
+});
+
+app.post('/api/admin/user/delete', strict, (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  const { phone, reason } = req.body || {};
+  const p = String(phone || '').replace(/\D/g, '');
+  if (!p) return res.status(400).json({ ok: false, error: 'Phone required.' });
+  const db = load(); db.users = db.users || {};
+  if (!db.users[p]) return res.status(404).json({ ok: false, error: 'Account not found.' });
+  const deleted = db.users[p];
+  delete db.users[p];
+  db.sessions = db.sessions || {};
+  Object.keys(db.sessions).forEach(t => { if (db.sessions[t].phone === p) delete db.sessions[t]; });
+  db.adminLog = db.adminLog || [];
+  db.adminLog.unshift({ action: 'user-delete', phone: p, email: deleted.email, reason: String(reason || ''), at: new Date().toISOString() });
+  db.adminLog = db.adminLog.slice(0, 200);
+  save(db);
+  res.json({ ok: true, note: 'Account deleted. Wallet/order records kept for accounting.' });
+});
+
+/* 14 • BOOT */
+app.use((req, res) => res.status(404).json({ ok: false, error: 'Not found.' }));
+app.use((err, req, res, next) => {
+  console.error('[ERR]', err.message);
+  res.status(err.status || 500).json({ ok: false, error: 'Server error.' });
+});
+app.listen(PORT, () => {
+  console.log(`SIERRAUNLOCK API v3.37 online on :${PORT} — mode: ${fuReady() ? 'CONNECTED' : 'MANUAL'}`);
+  console.log(`  Vault: ${ghReady() ? 'GitHub (' + GH.repo + ')' : 'LOCAL ONLY'}`);
+  console.log('  DHRU FIX: Sending requestformat=JSON with ID+IMEI inside PARAMETERS');
+  console.log(`  Policy: exact FastUnlockers price • rate ${load().rate} SLE • min top-up 50 Le`);
+  console.log(`  Auth: EmailJS ${emailReady() ? 'ready' : 'NOT CONFIGURED'}`);
+});
