@@ -18,8 +18,8 @@
 'use strict';
 (function () {
 
-  // Use relative path so it works on both localhost and production
-  const API_BASE = ''; 
+  // GitHub Pages serves the static frontend; authentication lives on Render.
+  const API_BASE = 'https://sierraunlock-tech-1-4um3.onrender.com';
   
   const $ = (id) => document.getElementById(id);
 

@@ -270,7 +270,7 @@ async function manualRetry(){
   const updateRes = await fetch(API+'/api/admin/job', {
     method:'POST',
     headers:{'Content-Type':'application/json','x-admin-token':TOK},
-    body:JSON.stringify({ id, status: 'queued' })
+    body:JSON.stringify({ id, status: 'queued', serviceId, imei })
   });
   const updateData = await updateRes.json();
   

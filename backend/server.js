@@ -134,7 +134,7 @@ const ALLOWED = process.env.FRONTEND_URL
 app.use(cors({
   origin: (origin, cb) => {
     if (!origin) return cb(null, true);
-    if (ALLOWED.some(o => origin === o || origin.startsWith(o))) return cb(null, true);
+    if (ALLOWED.some(o => origin === o)) return cb(null, true);
     cb(new Error('Not allowed by CORS'));
   },
   credentials: false
@@ -170,7 +170,9 @@ const jobStatusSchema = Joi.object({ id: Joi.string().trim().min(3).max(40).requ
 const adminRateSchema = Joi.object({ slePerUsd: Joi.number().positive().max(100000).required() });
 const adminJobSchema = Joi.object({
   id: Joi.string().trim().min(3).max(40).required(),
-  status: Joi.string().valid('queued', 'sent-to-server', 'processing', 'solved', 'failed').required()
+  status: Joi.string().valid('queued', 'sent-to-server', 'processing', 'solved', 'failed').required(),
+  serviceId: Joi.string().trim().max(20).optional(),
+  imei: Joi.string().trim().max(15).optional()
 });
 const orderSchema = Joi.object({
   type: Joi.string().valid('imei', 'file', 'server').default('imei'),
@@ -265,7 +267,10 @@ app.post('/api/admin/job', strict, (req, res) => {
   const db = load();
   const job = db.jobs.find(j => j.id === value.id);
   if (!job) return res.status(404).json({ ok: false, error: 'Job not found.' });
-  job.status = value.status; save(db);
+  job.status = value.status;
+  if (value.serviceId !== undefined) job.serviceId = value.serviceId;
+  if (value.imei !== undefined) job.imei = value.imei;
+  save(db);
   res.json({ ok: true, job });
 });
 app.get('/api/admin/jobs', strict, (req, res) => {
@@ -498,16 +503,20 @@ app.get('/api/webhook/cdr', (req, res) => {
 });
 app.post('/api/webhook/cdr', express.urlencoded({ extended: true }), (req, res) => {
   const p = req.body || {};
+  if (!process.env.CDR_REPLY_KEY) return res.status(503).send('CDR not configured');
   const key = p.replykey || p.replyKey || p.key || p.cdrkey || p.CDRKEY || req.get('x-cdr-key') || '';
-  if (process.env.CDR_REPLY_KEY && key !== process.env.CDR_REPLY_KEY) return res.status(401).send('bad key');
-  const oid = String(p.orderid || p.orderId || p.order_id || p.ORDERID || p.referenceid || p.REFERENCEID || p.id || '');
+  if (key !== process.env.CDR_REPLY_KEY) return res.status(401).send('bad key');
+  const oid = String(p.orderid || p.orderId || p.order_id || p.ORDERID || p.referenceid || p.REFERENCEID || p.reference || p.transactionid || p.id || '').trim();
   const db = load();
-  const job = db.jobs.find(j => j.upstreamOrderId && String(j.upstreamOrderId) === oid)
+  const job = db.jobs.find(j => j.upstreamOrderId && String(j.upstreamOrderId).trim() === oid)
            || db.jobs.find(j => j.id === String(p.jobid || p.jobId || p.JOBID || ''));
   if (!job) return res.status(404).send('unknown order');
   const st = String(p.status || p.orderstatus || p.orderStatus || p.ORDERSTATUS || '').toLowerCase();
-  const code = p.code || p.unlock_code || p.unlockCode || p.reply || p.result || p.response || null;
-  if (code || st.includes('success') || st.includes('solved') || st.includes('complete')) job.status = 'solved';
+  const terminal = st.includes('success') || st.includes('solved') || st.includes('complete');
+  const explicitCode = p.code || p.unlock_code || p.unlockCode || null;
+  const code = explicitCode || (terminal ? (p.reply || p.result || p.response || null) : null);
+  if (code || terminal) job.status = 'solved';
+  else if (st.includes('process') || st.includes('pending') || st.includes('wait') || st.includes('progress')) job.status = 'processing';
   else if (st.includes('reject') || st.includes('fail') || st.includes('cancel')) job.status = 'failed';
   if (code) job.cdrCode = String(code);
   job.upstream = p; job.cdrAt = new Date().toISOString();
@@ -1291,4 +1300,3 @@ app.listen(PORT, () => {
   console.log(`  Policy: exact FastUnlockers price • rate ${load().rate} SLE • min top-up 50 Le`);
   console.log(`  Auth: EmailJS ${emailReady() ? 'ready' : 'NOT CONFIGURED'}`);
 });
-
