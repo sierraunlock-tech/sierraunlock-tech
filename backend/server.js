@@ -290,7 +290,7 @@ app.post('/api/admin/pay', strict, async (req, res) => {
   job.paid_at = new Date().toISOString(); job.status = 'sent-to-server';
   if (!fuReady()) { save(db); return res.json({ ok: true, job: job.id, warning: 'Upstream not configured.' }); }
   const up = await placeUpstream(job);
-  if (up.ok) { job.upstream = up.r.json; job.upstreamOrderId = up.orderId; }
+  if (up.ok) { job.upstream = up.r.json; saveUpstreamIds(job, up); }
   else { job.status = 'failed'; job.upstream = up.r.json || up.r.text; }
   save(db);
   res.json({ ok: up.ok, job: job.id, payment_status: job.payment_status, upstreamOrderId: up.orderId, upstream: up.r.json || up.r.text });
@@ -407,7 +407,7 @@ app.post('/api/wallet/pay', strict, async (req, res) => {
   if (fuReady()) {
     const up = await placeUpstream(job);
     if (up.ok) {
-      job.upstream = up.r.json; job.upstreamOrderId = up.orderId;
+      job.upstream = up.r.json; saveUpstreamIds(job, up);
     } else {
       job.status = 'failed';
       job.upstream = up.r.json || up.r.text;
@@ -490,7 +490,7 @@ app.post('/api/webhook/binance', express.raw({ type: '*/*' }), async (req, res) 
   job.paid_at = new Date().toISOString(); job.status = 'sent-to-server';
   if (fuReady()) {
     const up = await placeUpstream(job);
-    if (up.ok) { job.upstream = up.r.json; job.upstreamOrderId = up.orderId; }
+    if (up.ok) { job.upstream = up.r.json; saveUpstreamIds(job, up); }
     else { job.status = 'failed'; job.upstream = up.r.json || up.r.text; }
   }
   save(db);
@@ -600,9 +600,10 @@ const ORDER_ACTIONS = {
   server: ['placeserverorder', 'placecreditorder']
 };
 const STATUS_ACTIONS = {
-  imei: ['imeiorderstatus'],
-  file: ['fileorderstatus'],
-  server: ['serverorderstatus', 'creditorderstatus']
+  // DHRU Fusion v6.1 uses get*order to retrieve an existing order.
+  imei: ['getimeiorder'],
+  file: ['getfileorder'],
+  server: ['getserverorder']
 };
 
 function parseList(raw, type) {
@@ -704,7 +705,8 @@ async function placeUpstreamOnce(job) {
       return {
         ok: true,
         r,
-        orderId: record.orderid || record.order_id || record.REFERENCE || record.REFERENCEID || null
+        orderId: record.REFERENCE || record.REFERENCEID || record.reference || null,
+        providerOrderId: record.ORDERID || record.orderid || record.order_id || null
       };
     }
   }
@@ -723,10 +725,21 @@ async function placeUpstream(job) {
   return last;
 }
 
+function saveUpstreamIds(job, up) {
+  job.upstreamOrderId = up.orderId || null;
+  if (up.providerOrderId) job.upstreamProviderOrderId = String(up.providerOrderId);
+}
+
 async function statusUpstream(job) {
   const type = job.type || 'imei';
   for (const action of (STATUS_ACTIONS[type] || STATUS_ACTIONS.imei)) {
-    const r = await gsmCall(action, { ID: job.upstreamOrderId, orderid: job.upstreamOrderId, order_id: job.upstreamOrderId });
+    const reference = job.upstreamOrderId || '';
+    const providerId = job.upstreamProviderOrderId || job.providerOrderId || '';
+    const r = await gsmCall(action, {
+      ID: providerId || reference,
+      ORDERID: providerId,
+      REFERENCEID: reference
+    });
     if (r.http === 200 && r.json) return r.json;
   }
   return null;
@@ -1012,7 +1025,7 @@ app.post('/api/order', strict, async (req, res) => {
     created: new Date().toISOString()
   };
   const up = await placeUpstream(job);
-  if (up.ok) { job.upstream = up.r.json; job.upstreamOrderId = up.orderId; }
+  if (up.ok) { job.upstream = up.r.json; saveUpstreamIds(job, up); }
   else { job.status = 'failed'; job.upstream = up.r.json || up.r.text; }
   const db = load(); db.jobs.unshift(job); save(db);
   res.json({ ok: up.ok, job: job.id, upstreamOrderId: up.orderId, upstream: up.r.json || up.r.text });
@@ -1021,10 +1034,26 @@ app.post('/api/order', strict, async (req, res) => {
 app.post('/api/order-status', strict, async (req, res) => {
   const { error, value } = jobStatusSchema.validate(req.body || {});
   if (error) return res.status(400).json({ ok: false, error: 'Invalid job id.' });
-  const job = load().jobs.find(j => j.id === value.id);
+  const db = load();
+  const job = db.jobs.find(j => j.id === value.id);
   if (!job) return res.status(404).json({ ok: false, error: 'Job not found.' });
   if (fuReady() && job.upstreamOrderId) {
     const live = await statusUpstream(job);
+    if (live) {
+      job.upstream = live;
+      const record = Array.isArray(live.SUCCESS) ? (live.SUCCESS[0] || {}) : (live.SUCCESS || live);
+      const code = record.code || record.CODE || record.unlock_code || record.unlockCode || null;
+      const state = String(record.status || record.STATUS || record.orderstatus || record.ORDERSTATUS || record.message || record.MESSAGE || live.more_info || '').toLowerCase();
+      if (code || /success|solved|complete|finished/.test(state)) {
+        job.status = 'solved';
+        if (code) job.cdrCode = String(code);
+      } else if (/process|pending|wait|received|new|progress/.test(state)) {
+        job.status = 'processing';
+      } else if (/reject|fail|cancel|error/.test(state) && !live.SUCCESS) {
+        job.status = 'failed';
+      }
+      save(db);
+    }
     return res.json({ ok: true, job, live });
   }
   res.json({ ok: true, job });
@@ -1041,7 +1070,7 @@ app.post('/api/admin/retry', strict, async (req, res) => {
   if (up.ok) {
     job.status = 'sent-to-server';
     job.upstream = up.r.json;
-    job.upstreamOrderId = up.orderId;
+    saveUpstreamIds(job, up);
   } else {
     job.status = 'failed';
     job.upstream = up.r.json || up.r.text;
