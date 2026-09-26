@@ -734,7 +734,10 @@ async function statusUpstream(job) {
   const type = job.type || 'imei';
   for (const action of (STATUS_ACTIONS[type] || STATUS_ACTIONS.imei)) {
     const reference = job.upstreamOrderId || '';
-    const providerId = job.upstreamProviderOrderId || job.providerOrderId || '';
+    const stored = job.upstream && Array.isArray(job.upstream.SUCCESS)
+      ? (job.upstream.SUCCESS[0] || {}) : {};
+    const providerId = job.upstreamProviderOrderId || job.providerOrderId
+      || stored.ORDERID || stored.orderid || stored.order_id || '';
     const r = await gsmCall(action, {
       ID: providerId || reference,
       ORDERID: providerId,
