@@ -6,220 +6,150 @@
 <title>Track Your Order — SIERRAUNLOCK</title>
 <meta name="description" content="Track your SIERRAUNLOCK order live. Enter your job ID to see real-time status and receive your unlock code automatically.">
 <style>
-  :root{--green:#1EB53A;--blue:#0072C6;--navy:#0b1f33;--ink:#12263a;--bg:#f4f8fb;--warn:#ffb020;--err:#e74c3c}
+  :root{--green:#1EB53A;--blue:#0072C6;--navy:#0b1f33;--ink:#12263a;--bg:#f4f8fb;--warn:#ffb020;--err:#e74c3c;--line:#d5e3ee}
   *{box-sizing:border-box;margin:0;padding:0;font-family:Segoe UI,Arial,sans-serif}
   body{background:var(--bg);color:var(--ink);min-height:100vh;display:flex;flex-direction:column}
   header{background:linear-gradient(120deg,var(--blue),var(--green));color:#fff;padding:18px 22px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;box-shadow:0 4px 20px rgba(11,31,51,.1)}
-  header h1{font-size:22px;letter-spacing:.5px}
-  header a{color:#fff;text-decoration:none;font-weight:600;margin-left:14px}
-  main{flex:1;max-width:800px;width:100%;margin:0 auto;padding:24px 16px}
- .hero{text-align:center;margin-bottom:24px}
- .hero h2{font-size:26px;color:var(--navy);margin-bottom:8px}
- .hero p{color:#5b7186;font-size:15px}
+  header h1{font-size:22px;letter-spacing:.5px} header a{color:#fff;text-decoration:none;font-weight:600;margin-left:14px}
+  main{flex:1;max-width:840px;width:100%;margin:0 auto;padding:24px 16px}
+ .hero{text-align:center;margin-bottom:24px}.hero h2{font-size:26px;color:var(--navy);margin-bottom:8px}.hero p{color:#5b7186;font-size:15px}
  .track-box{background:#fff;border-radius:16px;padding:20px;box-shadow:0 4px 20px rgba(18,38,58,.08);margin-bottom:20px}
  .track-row{display:flex;gap:10px;flex-wrap:wrap}
- .track-row input{flex:1;min-width:200px;padding:14px 16px;border:2px solid #d5e3ee;border-radius:10px;font-size:16px;letter-spacing:.5px}
+ .track-row input{flex:1;min-width:200px;padding:14px 16px;border:2px solid var(--line);border-radius:10px;font-size:16px}
  .track-row input:focus{outline:none;border-color:var(--blue)}
- .track-row button{background:var(--blue);color:#fff;border:0;padding:14px 26px;border-radius:10px;font-weight:700;cursor:pointer;font-size:15px;transition:background.2s}
- .track-row button:hover{background:#005a9e}
- .track-row button:disabled{background:#9bb6c9;cursor:not-allowed}
+ .track-row button{background:var(--blue);color:#fff;border:0;padding:14px 26px;border-radius:10px;font-weight:700;cursor:pointer;transition:.2s}
+ .track-row button:hover{background:#005a9e}.track-row button:disabled{background:#9bb6c9;cursor:not-allowed}
  .error{background:#fdecec;border:1px solid var(--err);color:var(--err);padding:14px;border-radius:10px;margin-top:16px;display:none}
  .card{background:#fff;border-radius:16px;box-shadow:0 4px 20px rgba(18,38,58,.08);overflow:hidden;display:none}
  .card-head{background:linear-gradient(120deg,var(--navy),#1a3a5c);color:#fff;padding:18px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
- .card-head h3{font-size:18px}
- .status-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:20px;font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:.5px}
- .status-queued{background:#fff6d6;color:#7a5c00}
- .status-sent-to-server,.status-processing{background:#e0f2ff;color:#0a4a7a}
- .status-solved{background:#d8f4dd;color:#0e5c23}
- .status-failed{background:#fdecec;color:#7a1a1a}
- .pulse{width:10px;height:10px;border-radius:50%;background:currentColor;animation:pulse 1.5s infinite}
-  @keyframes pulse{0%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.3)}100%{opacity:1;transform:scale(1)}}
+ .status-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:20px;font-weight:700;font-size:12px;text-transform:uppercase}
+ .status-queued{background:#fff6d6;color:#7a5c00}.status-sent-to-server,.status-processing{background:#e0f2ff;color:#0a4a7a}.status-solved{background:#d8f4dd;color:#0e5c23}.status-failed{background:#fdecec;color:#7a1a1a}
+ .pulse{width:10px;height:10px;border-radius:50%;background:currentColor;animation:pulse 1.5s infinite}@keyframes pulse{0%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.3)}100%{opacity:1;transform:scale(1)}}
  .card-body{padding:22px 20px}
- .info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:20px}
- .info-item{padding:12px 14px;background:#f4f8fb;border-radius:10px}
- .info-item.lbl{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:#5b7186;font-weight:700;margin-bottom:4px}
- .info-item.val{font-size:15px;color:var(--ink);font-weight:600;word-break:break-all}
- .timeline{margin:20px 0;padding-left:30px;border-left:2px solid #d5e3ee;position:relative}
- .step{position:relative;padding:10px 0 10px 20px;font-size:14px;color:#5b7186}
- .step::before{content:'';position:absolute;left:-37px;top:14px;width:14px;height:14px;border-radius:50%;background:#fff;border:2px solid #d5e3ee;transition:all.3s}
- .step.done{color:var(--ink);font-weight:600}
- .step.done::before{background:var(--green);border-color:var(--green)}
- .step.active{color:var(--blue);font-weight:700}
- .step.active::before{background:var(--blue);border-color:var(--blue);animation:pulse 1.5s infinite}
- .step.fail{color:var(--err);font-weight:700}
- .step.fail::before{background:var(--err);border-color:var(--err)}
- .code-box{background:linear-gradient(120deg,#d8f4dd,#e9f9ee);border:2px solid var(--green);border-radius:14px;padding:22px;margin-top:20px;text-align:center;animation:revealCode.5s ease}
-  @keyframes revealCode{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
- .code-box.lbl{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--green);font-weight:800;margin-bottom:10px}
- .code-box.code{font-size:15px;font-weight:600;color:var(--navy);padding:16px;background:#fff;border-radius:10px;margin-bottom:12px;word-break:break-word;white-space:pre-wrap;text-align:left;line-height:1.7;font-family:'Courier New',monospace}
- .copy-btn{background:var(--green);color:#fff;border:0;padding:12px 24px;border-radius:10px;font-weight:700;cursor:pointer;font-size:14px;transition:background.2s}
- .copy-btn:hover{background:#179c31}
- .copy-btn.copied{background:#179c31}
- .fail-box{background:#fdecec;border:2px solid var(--err);border-radius:14px;padding:18px;margin-top:20px;color:#7a1a1a}
- .fail-box h4{margin-bottom:8px}
- .refresh-notice{display:flex;align-items:center;gap:8px;justify-content:center;font-size:13px;color:#5b7186;margin-top:12px;padding:8px;background:#f4f8fb;border-radius:8px}
- .refresh-notice.dot{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse 1s infinite}
- .payment-banner{padding:16px;border-radius:12px;margin-top:16px;font-weight:700;text-align:center}
- .payment-unpaid{background:#fff6d6;color:#7a5c00;border:2px solid #ffb020}
- .payment-paid{background:#d8f4dd;color:#0e5c23;border:2px solid var(--green)}
- .payment-refunded{background:#fdecec;color:#7a1a1a;border:2px solid var(--err)}
-  footer{background:var(--navy);color:#cfe3f5;text-align:center;padding:18px;font-size:13px}
-  footer a{color:#7cc4ff;text-decoration:none}
- .track-again{text-align:center;margin-top:20px}
- .track-again button{background:transparent;color:var(--blue);border:2px solid var(--blue);padding:10px 22px;border-radius:10px;font-weight:700;cursor:pointer}
+ .info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:18px}
+ .info-item{padding:12px 14px;background:#f4f8fb;border-radius:10px}.lbl{font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:#5b7186;font-weight:700;margin-bottom:4px}.val{font-size:14px;color:var(--ink);font-weight:600;word-break:break-all}
+ .timeline{margin:18px 0;padding-left:30px;border-left:2px solid var(--line);position:relative}
+ .step{position:relative;padding:10px 0 10px 20px;font-size:13.5px;color:#5b7186}
+ .step::before{content:'';position:absolute;left:-37px;top:14px;width:14px;height:14px;border-radius:50%;background:#fff;border:2px solid var(--line)}
+ .step.done{color:var(--ink);font-weight:600}.step.done::before{background:var(--green);border-color:var(--green)}
+ .step.active{color:var(--blue);font-weight:700}.step.active::before{background:var(--blue);border-color:var(--blue);animation:pulse 1.5s infinite}
+ .step.fail{color:var(--err);font-weight:700}.step.fail::before{background:var(--err);border-color:var(--err)}
+ .code-box{background:linear-gradient(120deg,#d8f4dd,#e9f9ee);border:2px solid var(--green);border-radius:14px;padding:18px;margin-top:18px;animation:reveal.5s ease}@keyframes reveal{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+ .code-box.lbl{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--green);font-weight:800;margin-bottom:12px;text-align:center}
+  /* NEW GRID FOR RESULT */
+ .result-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px}
+ .result-row{display:flex;flex-direction:column;padding:10px 12px;background:#fff;border-radius:10px;border:1px solid var(--line)}
+ .result-row b{font-size:9.5px;text-transform:uppercase;letter-spacing:.6px;color:#5b7186;margin-bottom:4px}
+ .result-row span{font-size:13px;font-weight:700;color:var(--navy);word-break:break-all;line-height:1.4}
+ .result-row.highlight{border-color:var(--green);background:#eaffea;box-shadow:0 2px 8px rgba(30,181,58,.15)}
+ .result-row.highlight b{color:var(--green)}.result-row.highlight span{font-size:15px;color:#0a5a1c}
+ .copy-btn{background:var(--green);color:#fff;border:0;padding:12px 24px;border-radius:10px;font-weight:700;cursor:pointer;display:block;margin:16px auto 0;transition:.2s}
+ .copy-btn:hover{background:#179c31}.copy-btn.copied{background:#0a5a1c}
+ .fail-box{background:#fdecec;border:2px solid var(--err);border-radius:14px;padding:18px;margin-top:18px;color:#7a1a1a}.fail-box h4{margin-bottom:8px}
+ .refresh-notice{display:flex;align-items:center;gap:8px;justify-content:center;font-size:13px;color:#5b7186;margin-top:12px;padding:8px;background:#f4f8fb;border-radius:8px}.refresh-notice.dot{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse 1s infinite}
+ .payment-banner{padding:14px;border-radius:12px;margin-top:14px;font-weight:700;text-align:center;font-size:14px}.payment-unpaid{background:#fff6d6;color:#7a5c00;border:2px solid #ffb020}.payment-paid{background:#d8f4dd;color:#0e5c23;border:2px solid var(--green)}.payment-refunded{background:#fdecec;color:#7a1a1a;border:2px solid var(--err)}
+  footer{background:var(--navy);color:#cfe3f5;text-align:center;padding:18px;font-size:13px} footer a{color:#7cc4ff;text-decoration:none}
+ .track-again{text-align:center;margin-top:20px}.track-again button{background:transparent;color:var(--blue);border:2px solid var(--blue);padding:10px 22px;border-radius:10px;font-weight:700;cursor:pointer}
 </style>
 </head>
 <body>
-<header>
-  <h1>SIERRAUNLOCK — Track Order</h1>
-  <nav><a href="index.html">Home</a><a href="live-services.html">Live Catalog</a></nav>
-</header>
+<header><h1>SIERRAUNLOCK — Track Order</h1><nav><a href="index.html">Home</a><a href="live-services.html">Live Catalog</a></nav></header>
 <main>
-  <div class="hero">
-    <h2>📍 Track Your Order</h2>
-    <p>Enter your job ID to see live status and receive your unlock code automatically.</p>
-  </div>
-  <div class="track-box">
-    <div class="track-row">
-      <input type="text" id="jobId" placeholder="e.g. SU-1757xxxxxxxxx" autocomplete="off">
-      <button id="trackBtn" onclick="trackOrder()">Track Now</button>
-    </div>
-    <div class="error" id="errorBox"></div>
-  </div>
+  <div class="hero"><h2>📍 Track Your Order</h2><p>Enter your job ID to see live status and receive your unlock code automatically.</p></div>
+  <div class="track-box"><div class="track-row"><input type="text" id="jobId" placeholder="e.g. SU-1757xxxxxxxxx" autocomplete="off"><button id="trackBtn" onclick="trackOrder()">Track Now</button></div><div class="error" id="errorBox"></div></div>
   <div class="card" id="resultCard">
-    <div class="card-head">
-      <h3 id="serviceTitle">—</h3>
-      <span class="status-badge" id="statusBadge">—</span>
-    </div>
+    <div class="card-head"><h3 id="serviceTitle">—</h3><span class="status-badge" id="statusBadge">—</span></div>
     <div class="card-body">
-      <div class="info-grid">
-        <div class="info-item"><div class="lbl">Job ID</div><div class="val" id="jId">—</div></div>
-        <div class="info-item"><div class="lbl">IMEI</div><div class="val" id="jImei">—</div></div>
-        <div class="info-item"><div class="lbl">Placed</div><div class="val" id="jDate">—</div></div>
-        <div class="info-item"><div class="lbl">Upstream Order</div><div class="val" id="jUpstream">—</div></div>
-      </div>
+      <div class="info-grid"><div class="info-item"><div class="lbl">Job ID</div><div class="val" id="jId">—</div></div><div class="info-item"><div class="lbl">IMEI</div><div class="val" id="jImei">—</div></div><div class="info-item"><div class="lbl">Placed</div><div class="val" id="jDate">—</div></div><div class="info-item"><div class="lbl">Upstream Order</div><div class="val" id="jUpstream">—</div></div></div>
       <div id="paymentBanner" class="payment-banner" style="display:none"></div>
-      <div class="timeline" id="timeline">
-        <div class="step" data-step="queued">Order received</div>
-        <div class="step" data-step="paid">Payment confirmed</div>
-        <div class="step" data-step="sent-to-server">Sent to unlock server</div>
-        <div class="step" data-step="processing">Processing</div>
-        <div class="step" data-step="solved">Completed — code delivered</div>
-      </div>
-      <div class="code-box" id="codeBox" style="display:none">
-        <div class="lbl">🎉 Your Unlock Code / Result</div>
-        <div class="code" id="codeText">—</div>
-        <button class="copy-btn" id="copyBtn" onclick="copyCode()">📋 Copy to Clipboard</button>
-      </div>
-      <div class="fail-box" id="failBox" style="display:none">
-        <h4>⚠️ Order could not be completed</h4>
-        <p id="failMsg">—</p>
-        <p style="margin-top:10px">Please contact us on WhatsApp: <a href="https://wa.me/23275908206" style="color:var(--blue);font-weight:700">+232 75 908 206</a> for a refund review.</p>
-      </div>
-      <div class="refresh-notice" id="refreshNotice">
-        <span class="dot"></span> This page refreshes automatically every 10 seconds.
-      </div>
+      <div class="timeline"><div class="step" data-step="queued">Order received</div><div class="step" data-step="paid">Payment confirmed</div><div class="step" data-step="sent-to-server">Sent to unlock server</div><div class="step" data-step="processing">Processing</div><div class="step" data-step="solved">Completed — code delivered</div></div>
+      <div class="code-box" id="codeBox" style="display:none"><div class="lbl">🎉 Your Unlock Code / Result</div><div id="codeText"></div><button class="copy-btn" id="copyBtn" onclick="copyCode()">📋 Copy to Clipboard</button></div>
+      <div class="fail-box" id="failBox" style="display:none"><h4>⚠️ Order could not be completed</h4><p id="failMsg">—</p><p style="margin-top:10px">WhatsApp: <a href="https://wa.me/23275908206" style="color:var(--blue);font-weight:700">+232 75 908 206</a></p></div>
+      <div class="refresh-notice" id="refreshNotice"><span class="dot"></span> Auto-refresh every 10s</div>
     </div>
   </div>
-  <div class="track-again" id="trackAgain" style="display:none">
-    <button onclick="resetTrack()">🔄 Track Another Order</button>
-  </div>
+  <div class="track-again" id="trackAgain" style="display:none"><button onclick="resetTrack()">🔄 Track Another Order</button></div>
 </main>
-<footer>
-  IT CAN ONLY BE GOD ✦ LEARN BEFORE YOU EARN —
-  <a href="https://sierraunlock.com">sierraunlock.com</a> •
-  <a href="https://sierraunlock.live">sierraunlock.live</a>
-</footer>
+<footer>IT CAN ONLY BE GOD ✦ LEARN BEFORE YOU EARN — <a href="https://sierraunlock.com">sierraunlock.com</a></footer>
 <script>
 const API='https://sierraunlock-tech-1-4um3.onrender.com';
-let timer=null, currentJob=null, currentCode=null;
-const $ = id => document.getElementById(id);
-const esc = s => String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const STEP_ORDER = ['queued','paid','sent-to-server','processing','solved'];
-const STATUS_LABELS = { 'queued':'⏳ Queued','paid':'💳 Payment Confirmed','sent-to-server':'📤 Sent to Server','processing':'⚙️ Processing','solved':'✅ Solved','failed':'❌ Failed' };
+let timer=null, currentCode=null;
+const $=id=>document.getElementById(id);
+const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const STEP_ORDER=['queued','paid','sent-to-server','processing','solved'];
+const STATUS_LABELS={'queued':'⏳ Queued','paid':'💳 Payment Confirmed','sent-to-server':'📤 Sent to Server','processing':'⚙️ Processing','solved':'✅ Solved','failed':'❌ Failed'};
 
-/* FIX: Remove <br> tags — convert to clean new lines */
-function cleanResult(raw){
-  if(!raw) return '';
-  let t = String(raw);
-  t = t.replace(/<br\s*\/?>/gi, '\n');
-  t = t.replace(/<\/?[^>]+(>|$)/g, '');
-  t = t.replace(/\n{3,}/g, '\n\n');
-  const d = document.createElement('textarea'); d.innerHTML = t; t = d.value;
-  return t.trim();
+/* CLEAN + PARSE */
+function cleanResult(raw){ if(!raw) return ''; let t=String(raw).replace(/<br\s*\/?>/gi,'\n').replace(/<\/?[^>]+>/g,'').trim(); const d=document.createElement('textarea'); d.innerHTML=t; return d.value.trim(); }
+function parseUnlockResult(raw){
+  const text=cleanResult(raw);
+  // Smart split: before each "Word / Word: value"
+  const parts=text.split(/\s+(?=[A-Za-z0-9 \/\-]{2,40}:\s)/g);
+  let items=[];
+  parts.forEach(p=>{
+    const m=p.match(/^([^:]{2,50}):\s*([\s\S]*)$/);
+    if(m && m[2].trim()){ items.push({label:m[1].trim(), value:m[2].trim()}); }
+    else if(p.trim()){ if(items.length>0){ items[items.length-1].value+=' '+p.trim(); } else { items.push({label:'Result', value:p.trim()}); } }
+  });
+  if(items.length===0) items=[{label:'Result', value:text}];
+  return {text, items};
+}
+function renderCodeBox(raw){
+  const {text, items}=parseUnlockResult(raw);
+  currentCode=text;
+  const container=$('codeText'); container.innerHTML='';
+  const grid=document.createElement('div'); grid.className='result-grid';
+  items.forEach(it=>{
+    const row=document.createElement('div');
+    const key=it.label.toLowerCase();
+    const isCode=/code|serial|imei|transceiver|mac|factory|activation|bar/.test(key);
+    row.className='result-row'+(isCode?' highlight':'');
+    row.innerHTML=`<b>${esc(it.label)}</b><span>${esc(it.value)}</span>`;
+    grid.appendChild(row);
+  });
+  container.appendChild(grid);
 }
 
 async function trackOrder(){
-  const raw = ($('jobId').value||'').trim();
-  const id = raw.replace(/\s+/g,'');
-  if(!id){ showError('Please enter your job ID.'); return; }
-  $('errorBox').style.display='none';
-  $('trackBtn').disabled=true; $('trackBtn').textContent='Tracking…';
+  const id=($('jobId').value||'').trim().replace(/\s+/g,'');
+  if(!id){ $('errorBox').textContent='Please enter your job ID.'; $('errorBox').style.display='block'; return; }
+  $('errorBox').style.display='none'; $('trackBtn').disabled=true; $('trackBtn').textContent='Tracking…';
   try{
-    const r = await fetch(API+'/api/track/'+encodeURIComponent(id));
-    const j = await r.json();
-    if(!j.ok){ showError(j.error || 'Job not found. Check your ID and try again.'); $('trackBtn').disabled=false; $('trackBtn').textContent='Track Now'; return; }
-    currentJob = j.job; renderJob(j.job); startAutoRefresh(j.job);
-    const url = new URL(location.href); url.searchParams.set('id', id); history.replaceState({},'',url.toString());
-  }catch(e){ showError('Network error. Please try again.'); }
+    const r=await fetch(API+'/api/track/'+encodeURIComponent(id));
+    const j=await r.json();
+    if(!j.ok){ $('errorBox').textContent=j.error||'Job not found'; $('errorBox').style.display='block'; $('trackBtn').disabled=false; $('trackBtn').textContent='Track Now'; return; }
+    renderJob(j.job); startAutoRefresh(j.job);
+    const url=new URL(location.href); url.searchParams.set('id', id); history.replaceState({},'',url);
+  }catch(e){ $('errorBox').textContent='Network error'; $('errorBox').style.display='block'; }
   $('trackBtn').disabled=false; $('trackBtn').textContent='Track Now';
 }
-function showError(msg){ $('errorBox').textContent = msg; $('errorBox').style.display = 'block'; }
 function renderJob(job){
-  $('resultCard').style.display = 'block'; $('trackAgain').style.display = 'block';
-  $('serviceTitle').textContent = job.serviceName || 'Unlock Service';
-  $('jId').textContent = job.id; $('jImei').textContent = job.imei || '—';
-  $('jDate').textContent = job.created? new Date(job.created).toLocaleString() : '—';
-  $('jUpstream').textContent = job.upstreamOrderId || 'Not yet placed';
-  const payStatus = job.payment_status || 'unpaid';
-  const payBanner = $('paymentBanner'); payBanner.style.display = 'block';
-  payBanner.className = 'payment-banner payment-' + payStatus;
-  if(payStatus === 'unpaid'){ payBanner.innerHTML = '⏳ Awaiting Payment — Please complete payment to start processing'; }
-  else if(payStatus === 'paid'){ payBanner.innerHTML = '✅ Payment Confirmed — Processing started automatically'; }
-  else if(payStatus === 'refunded'){ payBanner.innerHTML = '❌ Refunded — Contact support for details'; }
-  const status = job.status || 'queued'; const badge = $('statusBadge');
-  badge.textContent = STATUS_LABELS[status] || status; badge.className = 'status-badge status-'+status;
-  if(status!== 'solved' && status!== 'failed'){ badge.innerHTML = '<span class="pulse"></span>'+esc(STATUS_LABELS[status]||status); }
-  const fail = job.failed || status === 'failed'; const currentIdx = STEP_ORDER.indexOf(status);
-  document.querySelectorAll('.step').forEach(s => {
-    const step = s.getAttribute('data-step'); const stepIdx = STEP_ORDER.indexOf(step);
-    s.classList.remove('done','active','fail');
-    if(fail){ if(step === 'solved') s.classList.add('fail'); else if(stepIdx < Math.max(0,currentIdx)) s.classList.add('done'); }
-    else { if(stepIdx < currentIdx) s.classList.add('done'); else if(stepIdx === currentIdx) s.classList.add('active'); }
+  $('resultCard').style.display='block'; $('trackAgain').style.display='block';
+  $('serviceTitle').textContent=job.serviceName||'Unlock Service';
+  $('jId').textContent=job.id; $('jImei').textContent=job.imei||'—';
+  $('jDate').textContent=job.created? new Date(job.created).toLocaleString():'—';
+  $('jUpstream').textContent=job.upstreamOrderId||'Not yet placed';
+  const pay=job.payment_status||'unpaid'; const pb=$('paymentBanner'); pb.style.display='block'; pb.className='payment-banner payment-'+pay;
+  pb.textContent=pay==='paid'?'✅ Payment Confirmed — Processing started automatically': pay==='refunded'?'❌ Refunded': '⏳ Awaiting Payment';
+  const status=job.status||'queued'; const badge=$('statusBadge'); badge.textContent=STATUS_LABELS[status]||status; badge.className='status-badge status-'+status;
+  if(status!=='solved' && status!=='failed') badge.innerHTML='<span class="pulse"></span>'+esc(STATUS_LABELS[status]||status);
+  const currentIdx=STEP_ORDER.indexOf(status);
+  document.querySelectorAll('.step').forEach(s=>{
+    const idx=STEP_ORDER.indexOf(s.dataset.step); s.classList.remove('done','active','fail');
+    const isFail=job.failed||status==='failed';
+    if(isFail){ if(s.dataset.step==='solved') s.classList.add('fail'); else if(idx<Math.max(0,currentIdx)) s.classList.add('done'); }
+    else{ if(idx<currentIdx) s.classList.add('done'); else if(idx===currentIdx) s.classList.add('active'); }
   });
-  if(status === 'solved' && job.code){
-    currentCode = cleanResult(job.code);
-    $('codeText').textContent = currentCode;
-    $('codeBox').style.display = 'block'; $('failBox').style.display = 'none'; $('refreshNotice').style.display = 'none'; stopAutoRefresh();
-  } else if(fail){
-    $('failBox').style.display = 'block'; $('failMsg').textContent = cleanResult(job.message) || 'The order could not be completed by the upstream server.';
-    $('codeBox').style.display = 'none'; $('refreshNotice').style.display = 'none'; stopAutoRefresh();
-  } else { $('codeBox').style.display = 'none'; $('failBox').style.display = 'none'; $('refreshNotice').style.display = 'flex'; }
+  if(status==='solved' && job.code){ $('codeBox').style.display='block'; $('failBox').style.display='none'; $('refreshNotice').style.display='none'; renderCodeBox(job.code); stopAutoRefresh(); }
+  else if(job.failed||status==='failed'){ $('failBox').style.display='block'; $('failMsg').textContent=cleanResult(job.message); $('codeBox').style.display='none'; $('refreshNotice').style.display='none'; stopAutoRefresh(); }
+  else{ $('codeBox').style.display='none'; $('failBox').style.display='none'; $('refreshNotice').style.display='flex'; }
 }
-function startAutoRefresh(job){
-  stopAutoRefresh(); if(job.status === 'solved' || job.status === 'failed' || job.failed) return;
-  timer = setInterval(async () => {
-    try{ const r = await fetch(API+'/api/track/'+encodeURIComponent(job.id)); const j = await r.json();
-      if(j.ok){ currentJob = j.job; renderJob(j.job); if(j.job.status === 'solved' || j.job.status === 'failed' || j.job.failed){ stopAutoRefresh(); } }
-    }catch(e){}
-  }, 10000);
-}
+function startAutoRefresh(job){ stopAutoRefresh(); if(job.status==='solved'||job.status==='failed'||job.failed) return; timer=setInterval(async()=>{ try{ const r=await fetch(API+'/api/track/'+encodeURIComponent(job.id)); const j=await r.json(); if(j.ok){ renderJob(j.job); } }catch(e){} },10000); }
 function stopAutoRefresh(){ if(timer){ clearInterval(timer); timer=null; } }
-function copyCode(){
-  if(!currentCode) return;
-  const doFallback = () => { const ta = document.createElement('textarea'); ta.value = currentCode; document.body.appendChild(ta); ta.select(); try{ document.execCommand('copy'); }catch(e){} document.body.removeChild(ta); };
-  if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(currentCode).then(flashCopied).catch(doFallback); } else { doFallback(); flashCopied(); }
-}
-function flashCopied(){ const b = $('copyBtn'); const old = b.textContent; b.textContent = '✅ Copied!'; b.classList.add('copied'); setTimeout(() => { b.textContent = old; b.classList.remove('copied'); }, 2000); }
-function resetTrack(){
-  stopAutoRefresh(); $('jobId').value=''; $('resultCard').style.display='none'; $('trackAgain').style.display='none'; $('errorBox').style.display='none';
-  currentJob=null; currentCode=null; const url = new URL(location.href); url.searchParams.delete('id'); history.replaceState({},'',url.pathname); $('jobId').focus();
-}
-$('jobId').addEventListener('keydown', e => { if(e.key==='Enter') trackOrder(); });
-window.addEventListener('DOMContentLoaded', () => {
-  const params = new URLSearchParams(location.search); const id = params.get('id');
-  if(id){ $('jobId').value = id; setTimeout(trackOrder, 300); }
-});
+function copyCode(){ if(!currentCode) return; navigator.clipboard?.writeText(currentCode).then(()=>{ const b=$('copyBtn'); b.textContent='✅ Copied!'; b.classList.add('copied'); setTimeout(()=>{ b.textContent='📋 Copy to Clipboard'; b.classList.remove('copied'); },2000); }); }
+function resetTrack(){ stopAutoRefresh(); $('jobId').value=''; $('resultCard').style.display='none'; $('trackAgain').style.display='none'; $('errorBox').style.display='none'; currentCode=null; history.replaceState({},'',location.pathname); $('jobId').focus(); }
+$('jobId').addEventListener('keydown',e=>{ if(e.key==='Enter') trackOrder(); });
+window.addEventListener('DOMContentLoaded',()=>{ const id=new URLSearchParams(location.search).get('id'); if(id){ $('jobId').value=id; setTimeout(trackOrder,300); } });
 </script>
 </body>
 </html>
