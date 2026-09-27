@@ -1,36 +1,12 @@
 /* =====================================================================
-   SIERRAUNLOCK • GLOBAL DESIGN SYSTEM — style.css (v5 • DOCUMENTED)
-   ---------------------------------------------------------------------
-   WHAT IS THIS FILE?
-   The "Skeleton & Skin" of the website. It defines every color, font,
-   spacing, button, card, header, footer and responsive rule.
-   (animations.css adds movement; this file adds structure + looks.)
-
-   SECTION MAP:
-   00  Design tokens (:root) + base reset
-   01  Motto bar
-   02  Header + navigation (never overflows)
-   03  Buttons
-   04  Hero sections (scale phone → desktop)
-   05  Legal strip
-   06  Sections & cards
-   07  Founders
-   08  Community band
-   09  Payment badges
-   10  Footer
-   11  Responsive breakpoints (hamburger drawer)
-   12  Dropdown menus (Services ▾)
-   13  Security UI helpers (honeypot trap for bots)
-
-   OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
+   SIERRAUNLOCK • GLOBAL DESIGN SYSTEM — style.css (v5.1 CLEAN • 179 LINES)
+   OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, SL
    ===================================================================== */
-
-/* 00 • DESIGN TOKENS + RESET */
 :root{
-  --sl-green:#1EB53A; --sl-green-dark:#0F8A2A;
-  --sl-blue:#0072C6;  --sl-blue-dark:#004E8C;
-  --sl-white:#FFFFFF; --ink:#0A1B2A; --ink-soft:#334155;
-  --paper:#F8FAFC; --line:#E2E8F0; --danger:#B00020;
+  --sl-green:#1EB53A;--sl-green-dark:#0F8A2A;
+  --sl-blue:#0072C6;--sl-blue-dark:#004E8C;
+  --sl-white:#FFFFFF;--ink:#0A1B2A;--ink-soft:#334155;
+  --paper:#F8FAFC;--line:#E2E8F0;--danger:#B00020;
   --grad-brand:linear-gradient(135deg,var(--sl-green-dark) 0%,var(--sl-blue) 100%);
   --shadow-1:0 4px 20px rgba(10,27,42,.06);
   --shadow-2:0 16px 40px rgba(10,27,42,.12);
@@ -41,20 +17,21 @@
 }
 *{margin:0;padding:0;box-sizing:border-box}
 html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
-html,body{overflow-x:hidden;max-width:100%}   /* NO horizontal scroll, ever */
+html,body{overflow-x:hidden;max-width:100%}
 body{font-family:var(--font-body);color:var(--ink);background:var(--paper);line-height:1.65;-webkit-font-smoothing:antialiased;font-size:16px;letter-spacing:-.01em}
 img{max-width:100%;display:block}
 a{text-decoration:none;color:inherit;transition:color .2s}
 ul{list-style:none}
-h1,h2,h3,h4{font-family:var(--font-head);line-height:1.15;letter-spacing:-.02em;color:var(--ink);text-wrap:balance;overflow-wrap:break-word}
+h1,h2,h3,h4{font-family:var(--font-head);line-height:1.15;letter-spacing:-.02em;color:var(--ink);overflow-wrap:break-word}
+@supports (text-wrap:balance){h1,h2,h3,h4{text-wrap:balance}}
 ::selection{background:var(--sl-green);color:#fff}
 .container{max-width:1240px;margin:0 auto;padding:0 1.25rem}
 
-/* 01 • MOTTO BAR (wraps cleanly on small screens) */
+/* 01 • MOTTO BAR */
 .motto-bar{background:var(--grad-brand);color:#fff;display:flex;justify-content:center;align-items:center;gap:.9rem;padding:.65rem 1rem;font-family:var(--font-head);font-weight:800;font-size:clamp(.68rem,2.6vw,.88rem);letter-spacing:.14em;text-transform:uppercase;text-align:center;flex-wrap:wrap}
 .motto-divider{color:#D9F4E0}
 
-/* 02 • HEADER (never overflows — hamburger appears early) */
+/* 02 • HEADER */
 .site-header{position:sticky;top:0;z-index:100;background:rgba(255,255,255,.96);backdrop-filter:blur(12px);box-shadow:0 1px 0 var(--line)}
 .header-inner{max-width:1440px;margin:0 auto;display:flex;align-items:center;gap:1.1rem;padding:.6rem 1.25rem;min-height:var(--header-h)}
 .brand{display:flex;align-items:center;gap:.65rem;margin-right:auto;flex:none}
@@ -69,7 +46,7 @@ h1,h2,h3,h4{font-family:var(--font-head);line-height:1.15;letter-spacing:-.02em;
 .flag-stripe{height:6px}
 .nav-toggle{display:none;background:none;border:0;font-size:1.7rem;cursor:pointer;color:var(--sl-blue)}
 
-/* 03 • BUTTONS (fit on every screen) */
+/* 03 • BUTTONS */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:.55rem;padding:.8rem 1.6rem;border-radius:999px;font-family:var(--font-head);font-weight:800;font-size:clamp(.82rem,2.6vw,.95rem);border:0;cursor:pointer;transition:transform .25s,box-shadow .25s,background .25s;white-space:nowrap;letter-spacing:-.01em;max-width:100%}
 .btn:hover{transform:translateY(-3px)}
 .btn:active{transform:translateY(-1px) scale(.98)}
@@ -82,7 +59,7 @@ h1,h2,h3,h4{font-family:var(--font-head);line-height:1.15;letter-spacing:-.02em;
 .btn-fb{background:#1877F2;color:#fff;font-weight:800}
 .btn-sm{padding:.5rem 1rem;font-size:.78rem}
 
-/* 04 • HERO — scales perfectly phone → desktop */
+/* 04 • HERO */
 .hero,.services-hero,.mkt-hero,.shops-hero,.pay-hero,.res-hero,.about-hero,.faq-hero,.repair-hero,.contact-hero{background:radial-gradient(1200px 500px at 85% -10%,rgba(30,181,58,.3),transparent 60%),radial-gradient(1000px 450px at 10% 110%,rgba(0,114,198,.35),transparent 60%),linear-gradient(135deg,var(--sl-blue-dark) 0%,#06283F 55%,var(--sl-green-dark) 130%);color:#fff;padding:clamp(3.6rem,9vw,6rem) 1.25rem clamp(3.2rem,8vw,5.5rem);text-align:center}
 .hero-kicker{letter-spacing:clamp(.14em,1vw,.3em);text-transform:uppercase;font-weight:800;font-size:clamp(.66rem,2.4vw,.85rem);color:#CFE9FF;display:inline-block;max-width:100%}
 .hero h1,[class*="-hero"] h1{font-size:clamp(1.75rem,7.2vw,4.2rem);font-weight:900;margin:1rem 0;color:#fff}
@@ -146,7 +123,7 @@ h1,h2,h3,h4{font-family:var(--font-head);line-height:1.15;letter-spacing:-.02em;
 .footer-about{margin-top:1rem;font-size:.95rem;color:#94A3B8;line-height:1.6}
 .footer-bottom{border-top:1px solid rgba(255,255,255,.1);padding:1.4rem 1rem;text-align:center;font-size:.88rem;color:#64748B}
 
-/* 11 • RESPONSIVE — hamburger early so header NEVER overflows */
+/* 11 • RESPONSIVE */
 @media (max-width:1440px){
   .nav-toggle{display:block}
   .header-cta{display:none}
@@ -162,18 +139,18 @@ h1,h2,h3,h4{font-family:var(--font-head);line-height:1.15;letter-spacing:-.02em;
   .card{padding:1.5rem}
   .footer-grid{gap:1.8rem}
 }
-@media (max-width:380px){
-  .brand-logo{width:40px;height:40px}
-  .btn{padding:.75rem 1.2rem}
-}
+@media (max-width:380px){.brand-logo{width:40px;height:40px}.btn{padding:.75rem 1.2rem}}
 
-/* 12 • DROPDOWN MENUS (Services ▾) — hover on desktop, tap on mobile */
+/* 12 • DROPDOWN */
 .nav-item{position:relative}
 .nav-drop{position:absolute;top:100%;left:0;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow-2);min-width:210px;padding:.6rem;display:none;flex-direction:column;gap:.2rem;z-index:95}
 .nav-item:hover .nav-drop,.nav-item.open .nav-drop{display:flex}
 .nav-drop a{padding:.55rem .8rem;border-radius:10px;font-size:.9rem;font-weight:600;color:var(--ink-soft);white-space:nowrap}
 .nav-drop a:hover{background:var(--paper);color:var(--sl-green-dark)}
-@media(max-width:1440px){.nav-drop{position:static;display:flex;box-shadow:none;border:0;padding:.2rem 0 .4rem 1rem}}
+@media (max-width:1440px){
+  .nav-drop{position:static;display:none;box-shadow:none;border:0;padding:.2rem 0 .4rem 1rem;min-width:0}
+  .nav-item.open .nav-drop{display:flex}
+}
 
-/* 13 • SECURITY UI HELPERS — honeypot trap: invisible to humans, visible to bots */
+/* 13 • HONEYPOT */
 .su-honeypot{position:absolute!important;left:-9999px!important;top:auto;width:1px;height:1px;overflow:hidden}
