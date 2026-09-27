@@ -1,42 +1,28 @@
 /* =====================================================================
-   SIERRAUNLOCK • GPS SHOP MAP ENGINE — map.js (v7 • DOCUMENTED + HARDENED)
-   ---------------------------------------------------------------------
+   SIERRAUNLOCK • GPS SHOP MAP ENGINE — map.js (v7.1 CLEAN PROFESSIONAL)
+
    WHAT IS THIS FILE?
-   The "GPS Map Brain" of the website (shops.html). It powers the
-   interactive Leaflet map where customers find unlockers, repair shops,
-   electronics and spare-parts dealers near them — and where shop owners
-   add their business with a photo + exact GPS coordinates.
+   The "GPS Map Brain" of shops.html — Leaflet map, shop pins, near-you
+   list, GPS locate, town search, shop submission with photo + GPS.
 
    SECTION MAP:
-   01  Verified hub data (Waterloo + Koidu) + Sierra Leone town coordinates
-   02  Local-storage helpers + distance math (Haversine formula)
-   03  Boot — initialize Leaflet map when DOM is ready
-   04  Pin icon factory (hub pin vs. community-shop pin)
-   05  Render all shop markers on the map
-   06  "Shops Near You" list below the map (sorted by distance)
-   07  Wire controls: town search, GPS locate, shop submission form
-
-   CRITICAL NUMBER MAP (do not change without updating everywhere):
-   • Alhassan phone / Orange Money / WhatsApp desk : +232 75 908 206
-   • Alhassan Binance Pay ID (crypto ONLY)         : 754378475
-   • Baimba phone / Koidu hub                      : +232 31 363 736
-
-   SECURITY NOTES:
-   • All user-generated content (shop names, areas, owner names) is
-     HTML-escaped via esc() to prevent XSS in popups and the list.
-   • Shop submissions require a real snapshot (photo) and either a
-     captured GPS position OR a known town name in the area field.
-   • Honeypot field is checked — bots filling hidden traps are rejected.
+   01 Verified hub data + Sierra Leone town coordinates
+   02 Local-storage helpers + distance math (Haversine)
+   03 Boot — initialize Leaflet map when DOM ready
+   04 Pin icon factory (hub vs community-shop)
+   05 Render all shop markers on map
+   06 Shops Near You list (sorted by distance)
+   07 Wire controls: search, locate, GPS, submission
 
    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
    ===================================================================== */
 'use strict';
 (function () {
 
-  /* 01 • VERIFIED HUBS + SIERRA LEONE TOWNS (for town search & GPS fallback) */
+  /* 01 • VERIFIED HUBS + TOWNS */
   const HUBS = [
     { name:'SIERRAUNLOCK Waterloo Hub', owner:'Alhassan Mansaray', area:'Tombo Park, Waterloo (opposite Peninsula School)', district:'Western Area', phone:'+232 75 908 206', lat:8.3486, lng:-12.8201, verified:true, type:'Unlock Shop' },
-    { name:'SIERRAUNLOCK Koidu Hub',    owner:'Baimba Conteh',     area:'Koidu City',                                       district:'Kono',         phone:'+232 31 363 736', lat:8.6447, lng:-10.9700, verified:true, type:'Engineering Hub' }
+    { name:'SIERRAUNLOCK Koidu Hub', owner:'Baimba Conteh', area:'Koidu City', district:'Kono', phone:'+232 31 363 736', lat:8.6447, lng:-10.9700, verified:true, type:'Engineering Hub' }
   ];
 
   const TOWNS = {
@@ -47,19 +33,26 @@
     'magburaka':[8.7167,-11.9500], 'falaba':[9.5500,-11.3833]
   };
 
-  /* 02 • LOCAL-STORAGE HELPERS + HAVERSINE DISTANCE MATH */
+  /* 02 • HELPERS + HAVERSINE */
   let map = null, markers = null;
 
-  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const esc = (s) => String(s?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const loadUserShops = () => { try { return JSON.parse(localStorage.getItem('su_shops') || '[]'); } catch (e) { return []; } };
   const saveUserShops = (a) => localStorage.setItem('su_shops', JSON.stringify(a));
   const allShops = () => HUBS.concat(loadUserShops());
+  const normalizePhone = (p) => String(p||'').replace(/\s+/g,'');
+
   const hav = (a, b, c, d) => {
     const R = 6371, r = Math.PI / 180, dLa = (c - a) * r, dLo = (d - b) * r;
     const x = Math.sin(dLa / 2) ** 2 + Math.cos(a * r) * Math.cos(c * r) * Math.sin(dLo / 2) ** 2;
     return 2 * R * Math.asin(Math.sqrt(x));
   };
+
   function fileToThumb(file, cb) {
+    // Professional hardening: check type + 5MB cap + handle error
+    if (!file) return cb(null);
+    if (!file.type.startsWith('image/')) return cb(null);
+    if (file.size > 5 * 1024 * 1024) return cb(null);
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
@@ -72,14 +65,15 @@
       URL.revokeObjectURL(url);
       cb(c.toDataURL('image/jpeg', 0.62));
     };
+    img.onerror = () => { URL.revokeObjectURL(url); cb(null); };
     img.src = url;
   }
 
-  /* 03 • BOOT — initialize Leaflet map when DOM is ready */
+  /* 03 • BOOT */
   document.addEventListener('DOMContentLoaded', () => {
-    if (!document.getElementById('map')) return;                  /* only runs on shops.html */
+    if (!document.getElementById('map')) return;
     if (typeof L === 'undefined') {
-      document.getElementById('map').innerHTML = '<p style="padding:2rem;text-align:center">Map library needs internet — reconnect and refresh.</p>';
+      document.getElementById('map').innerHTML = '<p style="padding:2rem;text-align:center">Map needs internet — reconnect and refresh.</p>';
       return;
     }
     map = L.map('map', { scrollWheelZoom:false }).setView([8.6, -11.8], 7);
@@ -91,32 +85,33 @@
     wireControls();
   });
 
-  /* 04 • PIN ICON FACTORY — green hub pin or blue community-shop pin */
+  /* 04 • PIN ICON FACTORY */
   function pinIcon(verified) {
     return L.divIcon({
       className:'su-pin-wrap',
-      html:'<div class="su-pin ' + (verified ? 'pin-hub' : 'pin-shop') + '">' + (verified ? '🏢' : '🔓') + '</div>',
+      html:'<div class="su-pin ' + (verified? 'pin-hub' : 'pin-shop') + '">' + (verified? '🏢' : '🔓') + '</div>',
       iconSize:[38,38], iconAnchor:[19,38], popupAnchor:[0,-36]
     });
   }
 
-  /* 05 • RENDER ALL SHOP MARKERS ON THE MAP */
+  /* 05 • RENDER MARKERS */
   function renderMarkers() {
+    if (!markers) return;
     markers.clearLayers();
     allShops().forEach(s => {
       L.marker([s.lat, s.lng], { icon: pinIcon(s.verified) }).addTo(markers)
-        .bindPopup(
-          (s.img ? '<img src="' + s.img + '" alt="" style="width:100%;max-width:220px;border-radius:10px;margin-bottom:6px">' : '') +
+       .bindPopup(
+          (s.img? '<img src="' + s.img + '" alt="" style="width:100%;max-width:220px;border-radius:10px;margin-bottom:6px">' : '') +
           '<strong>' + esc(s.name) + '</strong><br>' + esc(s.area) + ', ' + esc(s.district) +
-          (s.type ? '<br>Type: ' + esc(s.type) : '') +
-          (s.owner ? '<br>Owner: ' + esc(s.owner) : '') +
-          '<br><a href="tel:' + esc(s.phone) + '">' + esc(s.phone) + '</a>' +
-          (s.verified ? '<br><em>✔ Verified SIERRAUNLOCK hub</em>' : '<br><em>Community shop</em>')
+          (s.type? '<br>Type: ' + esc(s.type) : '') +
+          (s.owner? '<br>Owner: ' + esc(s.owner) : '') +
+          '<br><a href="tel:' + esc(normalizePhone(s.phone)) + '">' + esc(s.phone) + '</a>' +
+          (s.verified? '<br><em>✔ Verified SIERRAUNLOCK hub</em>' : '<br><em>Community shop</em>')
         );
     });
   }
 
-  /* 06 • "SHOPS NEAR YOU" LIST BELOW THE MAP (sorted by distance) */
+  /* 06 • NEAR YOU LIST */
   function updateNear(center) {
     const list = document.getElementById('nearList');
     if (!list) return;
@@ -124,11 +119,11 @@
     if (center) shops = shops.map(s => Object.assign({}, s, { d: hav(center[0], center[1], s.lat, s.lng) })).sort((a, b) => a.d - b.d);
     list.innerHTML = shops.slice(0, 6).map(s =>
       '<div class="near-item">' +
-      (s.img ? '<img src="' + s.img + '" alt="" style="width:46px;height:46px;border-radius:8px;object-fit:cover;flex:none">' : '') +
+      (s.img? '<img src="' + s.img + '" alt="" style="width:46px;height:46px;border-radius:8px;object-fit:cover;flex:none">' : '') +
       '<div class="info"><strong>' + esc(s.name) + '</strong>' +
-      (s.verified ? ' <span class="vtag">✔ VERIFIED</span>' : '') +
+      (s.verified? ' <span class="vtag">✔ VERIFIED</span>' : '') +
       '<br><small>' + esc(s.type || 'Shop') + ' • ' + esc(s.area) + ', ' + esc(s.district) + '</small></div>' +
-      '<div style="text-align:right">' + (s.d != null ? '<span class="dist">' + s.d.toFixed(1) + ' km</span><br>' : '') +
+      '<div style="text-align:right">' + (s.d!= null? '<span class="dist">' + s.d.toFixed(1) + ' km</span><br>' : '') +
       '<button class="btn btn-brand btn-sm go-pin" data-lat="' + s.lat + '" data-lng="' + s.lng + '">View on Map</button></div></div>'
     ).join('');
     list.querySelectorAll('.go-pin').forEach(b => b.addEventListener('click', () => {
@@ -137,21 +132,19 @@
     }));
   }
 
-  /* 07 • WIRE CONTROLS — town search, GPS locate, shop submission */
+  /* 07 • WIRE CONTROLS */
   function wireControls() {
-    /* 07a • Town search — fly to the matched town */
-    document.getElementById('areaForm').addEventListener('submit', (e) => {
+    document.getElementById('areaForm')?.addEventListener('submit', (e) => {
       e.preventDefault();
-      const q = document.getElementById('areaSearch').value.trim().toLowerCase();
+      const q = document.getElementById('areaSearch')?.value.trim().toLowerCase() || '';
       const hit = Object.keys(TOWNS).find(t => t.includes(q) || q.includes(t));
-      if (!hit) { alert('Area not found — try a major town or press "Use My Location".'); return; }
+      if (!hit) { alert('Area not found — try major town or Use My Location.'); return; }
       map.setView(TOWNS[hit], 11);
       updateNear(TOWNS[hit]);
     });
 
-    /* 07b • Use My Location button */
-    document.getElementById('locateBtn').addEventListener('click', () => {
-      if (!navigator.geolocation) { alert('Geolocation not supported on this device.'); return; }
+    document.getElementById('locateBtn')?.addEventListener('click', () => {
+      if (!navigator.geolocation) { alert('Geolocation not supported.'); return; }
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           const p = [pos.coords.latitude, pos.coords.longitude];
@@ -159,41 +152,33 @@
           map.setView(p, 11);
           updateNear(p);
         },
-        () => alert('Location permission denied — use the town search instead.')
+        () => alert('Location denied — use town search.')
       );
     });
 
-    /* 07c • Get My GPS Position button (for shop submissions) */
-    document.getElementById('gpsBtn').addEventListener('click', () => {
-      if (!navigator.geolocation) { alert('Geolocation not supported on this device.'); return; }
+    document.getElementById('gpsBtn')?.addEventListener('click', () => {
+      if (!navigator.geolocation) { alert('Geolocation not supported.'); return; }
       navigator.geolocation.getCurrentPosition((pos) => {
-        document.getElementById('shopLat').value = pos.coords.latitude.toFixed(6);
-        document.getElementById('shopLng').value = pos.coords.longitude.toFixed(6);
-        alert('✔ Exact GPS captured: ' + pos.coords.latitude.toFixed(6) + ', ' + pos.coords.longitude.toFixed(6));
-      }, () => alert('GPS denied — we will use your town center instead.'));
+        const latEl = document.getElementById('shopLat'), lngEl = document.getElementById('shopLng');
+        if (latEl) latEl.value = pos.coords.latitude.toFixed(6);
+        if (lngEl) lngEl.value = pos.coords.longitude.toFixed(6);
+        alert('✔ GPS captured: ' + pos.coords.latitude.toFixed(6) + ', ' + pos.coords.longitude.toFixed(6));
+      }, () => alert('GPS denied — use town name.'));
     });
 
-    /* 07d • Shop submission form — validates, saves to localStorage, sends WhatsApp */
-    document.getElementById('shopForm').addEventListener('submit', (e) => {
+    document.getElementById('shopForm')?.addEventListener('submit', (e) => {
       e.preventDefault();
-      const g = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
-
-      /* Honeypot trap — bots auto-fill hidden fields, humans don't see them */
-      if (g('shop_hp_website') || g('shop_hp_url')) {
-        console.warn('Bot detected via honeypot — submission rejected.');
-        return;
-      }
-
-      const file = document.getElementById('shopPhoto').files[0];
-      if (!file) { alert('A snapshot of your shop is required.'); return; }
-
+      const g = (id) => document.getElementById(id)?.value.trim() || '';
+      if (g('shop_hp_website') || g('shop_hp_url')) { console.warn('Bot honeypot triggered'); return; }
+      const file = document.getElementById('shopPhoto')?.files[0];
+      if (!file) { alert('Shop snapshot required.'); return; }
       let lat = parseFloat(g('shopLat')), lng = parseFloat(g('shopLng'));
       const finish = (imgData) => {
-        /* If GPS not captured, fall back to the town center of the area mentioned */
+        if (!imgData) { alert('Invalid image — use JPG/PNG under 5MB.'); return; }
         if (isNaN(lat) || isNaN(lng)) {
           const area = g('shopArea').toLowerCase();
           const hit = Object.keys(TOWNS).find(t => area.includes(t));
-          if (!hit) { alert('Press "Get My GPS Position" for your exact location, or mention a known town in the Area field.'); return; }
+          if (!hit) { alert('Press Get My GPS or mention known town in Area.'); return; }
           lat = TOWNS[hit][0]; lng = TOWNS[hit][1];
         }
         const shop = {
@@ -203,20 +188,17 @@
         };
         const arr = loadUserShops(); arr.push(shop); saveUserShops(arr);
         renderMarkers(); updateNear(null);
-
-        /* Send shop details to Alhassan's WhatsApp desk for admin approval */
         window.open('https://wa.me/23275908206?text=' + encodeURIComponent(
           'SIERRAUNLOCK — NEW SHOP SUBMISSION\nShop: ' + shop.name + '\nType: ' + shop.type + '\nOwner: ' + shop.owner +
           '\nArea: ' + shop.area + ', ' + shop.district + '\nPhone: ' + shop.phone +
-          '\nGPS: ' + lat.toFixed(6) + ', ' + lng.toFixed(6) + '\n(Shop snapshot photo attached in this chat)'
+          '\nGPS: ' + lat.toFixed(6) + ', ' + lng.toFixed(6)
         ), '_blank');
         e.target.reset();
-        alert('✔ Your shop pin + photo are live on your map now! Attach the snapshot in the WhatsApp chat. Admin approval publishes it site-wide.');
+        alert('✔ Shop pin live! Attach snapshot in WhatsApp chat for admin approval.');
       };
       fileToThumb(file, finish);
     });
 
-    /* 07e • "View on Map" buttons on the hub cards */
     document.querySelectorAll('.view-hub').forEach(b => b.addEventListener('click', () => {
       map.setView([+b.dataset.lat, +b.dataset.lng], 15);
       document.getElementById('map').scrollIntoView({ behavior:'smooth', block:'center' });
