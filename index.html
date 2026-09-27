@@ -4,42 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SIERRAUNLOCK — Unlock • Repair • Connect | Sierra Leone</title>
-  <!--
-    =====================================================================
-    SIERRAUNLOCK • HOMEPAGE — index.html (v2 • DOCUMENTED)
-    ---------------------------------------------------------------------
-    WHAT IS THIS FILE?
-    The homepage and main landing page of SIERRAUNLOCK. This is where
-    new visitors land first. It showcases:
-    • The platform's core mission (Unlock • Repair • Connect)
-    • 7 connected services with links to their dedicated pages
-    • The 2 founders (Alhassan & Baimba) with direct phone numbers
-    • Community channels (WhatsApp + Facebook)
-    • All accepted payment methods with verified accounts
-    • Legal IMEI warning strip (required by Sierra Leone law)
-
-    SECTION MAP:
-    01  Meta tags (title, description, OG image, theme color)
-    02  Fonts & Core CSS
-    03  Motto bar
-    04  Header with Services ▾ dropdown
-    05  Hero section (main value proposition + stats)
-    06  Legal IMEI warning strip
-    07  7 service cards
-    08  Founders section (Alhassan + Baimba)
-    09  Community join section
-    10  Payments badges
-    11  Footer
-    12  Scripts (security + main)
-
-    CRITICAL NUMBER MAP:
-    • Alhassan phone / Orange Money / WhatsApp desk : +232 75 908 206
-    • Alhassan Binance Pay ID (crypto ONLY)         : 754378475
-    • Baimba phone / Koidu hub                      : +232 31 363 736
-
-    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
-    =====================================================================
-  -->
   <meta name="description" content="Sierra Leone's first professional phone unlocking platform. Legal network unlocking, expert repairs, genuine spare parts, shop map and secure payments.">
   <link rel="icon" type="image/png" href="assets/images/brand/favicon.png">
   <link rel="apple-touch-icon" href="assets/images/brand/favicon.png">
@@ -60,7 +24,7 @@
     <span>IT CAN ONLY BE GOD</span><span class="motto-divider">✦</span><span>LEARN BEFORE YOU EARN</span>
   </div>
 
-  <!-- 04 • HEADER WITH SERVICES DROPDOWN -->
+  <!-- 04 • HEADER WITH FULL MEGA MENU -->
   <header class="site-header">
     <div class="header-inner">
       <a href="index.html" class="brand" aria-label="SIERRAUNLOCK home">
@@ -70,28 +34,51 @@
       <nav class="main-nav" id="mainNav" aria-label="Main navigation">
         <a class="nav-link active" href="index.html">Home</a>
         <a class="nav-link" href="about.html">About</a>
-        <div class="nav-item">
-          <a class="nav-link" href="services.html">Services ▾</a>
-          <div class="nav-drop">
-            <a href="services.html">🔓 Unlock Services</a>
-            <a href="repair.html">🔩 Repair</a>
-            <a href="marketplace.html">🧰 Marketplace</a>
-            <a href="shops.html">📍 Shops &amp; Map</a>
+
+        <!-- FULL MEGA MENU SERVICES -->
+        <div class="nav-item has-mega" id="servicesNavItem">
+          <button class="nav-link nav-mega-trigger" id="servicesTrigger" aria-expanded="false" aria-controls="servicesMega">Services <span class="arrow">▾</span></button>
+          <div class="mega-menu" id="servicesMega">
+            <div class="mega-inner">
+              <div class="mega-head">
+                <h4>Our Tools & Services — Live in Motion</h4>
+                <p>100% LEGAL • OWNER-VERIFIED • CTIA-ALIGNED — The full arsenal we work with daily</p>
+              </div>
+              <div class="mega-grid">
+                <a href="services.html" class="mega-card"><div class="mega-icon" style="background:#E6F9E8">🔓</div><div><b>Unlock Codes</b><span>ALL BRANDS • Network Unlock</span></div></a>
+                <a href="services.html#frp" class="mega-card"><div class="mega-icon" style="background:#F3E8FF">🧠</div><div><b>FRP Reset</b><span>OWNER-VERIFIED • Google Lock</span></div></a>
+                <a href="services.html#flash" class="mega-card"><div class="mega-icon" style="background:#E0F2FF">⚡</div><div><b>Flashing & Firmware</b><span>SOFTWARE • OS Repair</span></div></a>
+                <a href="services.html#network" class="mega-card"><div class="mega-icon" style="background:#DCFCE7">📡</div><div><b>Network Config</b><span>GSM • LTE • 5G</span></div></a>
+                <a href="repair.html" class="mega-card"><div class="mega-icon" style="background:#FEF9C3">🔩</div><div><b>Screen Replacement</b><span>HARDWARE • Display</span></div></a>
+                <a href="repair.html#battery" class="mega-card"><div class="mega-icon" style="background:#D1FAE5">🔋</div><div><b>Battery Service</b><span>HARDWARE • Power</span></div></a>
+                <a href="marketplace.html" class="mega-card"><div class="mega-icon" style="background:#DBEAFE">🧰</div><div><b>Marketplace</b><span>SPARE PARTS • Genuine</span></div></a>
+                <a href="shops.html" class="mega-card"><div class="mega-icon" style="background:#FCE7F3">📍</div><div><b>Shops & Map</b><span>FIND • Waterloo • Koidu</span></div></a>
+                <a href="services.html#imei" class="mega-card"><div class="mega-icon" style="background:#E0E7FF">🔍</div><div><b>IMEI Check</b><span>LEGAL • Verification</span></div></a>
+                <a href="services.html#icloud" class="mega-card"><div class="mega-icon" style="background:#FFEDD5">☁️</div><div><b>iCloud / Mi / FRP</b><span>OWNER-VERIFIED ONLY</span></div></a>
+                <a href="services.html#os" class="mega-card"><div class="mega-icon" style="background:#F0FDF4">💻</div><div><b>OS Optimization</b><span>PERFORMANCE • Speed</span></div></a>
+                <a href="live-services.html" class="mega-card mega-view-all"><div class="mega-icon" style="background:linear-gradient(135deg,#0F8A2A,#0072C6);color:#fff">→</div><div><b>View Live Catalog</b><span>ALL SERVICES LIVE</span></div></a>
+              </div>
+              <div class="mega-footer">
+                <span>⚠️ IMEI / blacklist tampering is ILLEGAL. Legal carrier unlocks only.</span>
+                <a href="track.html" class="mega-track">Track Order →</a>
+              </div>
+            </div>
           </div>
         </div>
+
         <a class="nav-link" href="reseller.html">Resellers</a>
         <a class="nav-link" href="payments.html">Payments</a>
         <a class="nav-link" href="faq.html">FAQ</a>
         <a class="nav-link" href="contact.html">Contact</a>
+        <a class="nav-link" href="auth.html">👤 Sign In</a>
       </nav>
       <a class="btn btn-whatsapp header-cta" href="https://whatsapp.com/channel/0029VbDtNmh1XquQ7GVpp409" target="_blank" rel="noopener">WhatsApp Channel</a>
       <button class="nav-toggle" id="navToggle" aria-label="Toggle menu">☰</button>
     </div>
-    <div class="flag-stripe"></div>
+    <div class="flag-stripe" style="height:6px;background:linear-gradient(90deg,#1EB53A,#FFFFFF,#0072C6)"></div>
   </header>
 
   <main>
-    <!-- 05 • HERO SECTION -->
     <section class="hero">
       <div class="hero-inner">
         <p class="hero-kicker">Sierra Leone's First Digital Unlocking Platform</p>
@@ -111,12 +98,10 @@
       </div>
     </section>
 
-    <!-- 06 • LEGAL IMEI WARNING STRIP -->
     <div class="legal-strip">
       ⚠️ <strong>IMEI / blacklist tampering is ILLEGAL.</strong> SIERRAUNLOCK performs only legal carrier &amp; network unlocks in line with CTIA consumer standards and Sierra Leone law. Proof of ownership is required for every device. Sign in to your account to access all services.
     </div>
 
-    <!-- 07 • 7 SERVICE CARDS -->
     <section class="section">
       <div class="section-head">
         <h2>What We Do</h2>
@@ -134,107 +119,40 @@
       </div>
     </section>
 
-    <!-- 08 • FOUNDERS SECTION -->
     <section class="section section-alt" id="founders">
-      <div class="section-head">
-        <h2>Meet Our Founders</h2>
-        <div class="underline"></div>
-      </div>
+      <div class="section-head"><h2>Meet Our Founders</h2><div class="underline"></div></div>
       <div class="container founder-grid">
         <article class="founder-card">
-          <img src="assets/images/founders/alhassan-mansaray-founder.jpg" alt="Alhassan Mansaray — Founder and Chief Unlock Specialist of SIERRAUNLOCK">
-          <div class="founder-body">
-            <h3>Alhassan Mansaray</h3>
-            <p class="role">Founder • Chief Unlock Specialist</p>
-            <p class="meta">📍 Tombo Park, Waterloo — opposite Peninsula School, Western Area</p>
-            <p class="meta">📞 <a href="tel:+23275908206" style="color:var(--sl-blue);font-weight:700">+232 75 908 206</a></p>
-            <p class="bio">A well-known name in Sierra Leone's mobile industry with 20–25 years of hands-on unlocking and trading experience across the country.</p>
-          </div>
+          <img src="assets/images/founders/alhassan-mansaray-founder.jpg" alt="Alhassan Mansaray">
+          <div class="founder-body"><h3>Alhassan Mansaray</h3><p class="role">Founder • Chief Unlock Specialist</p><p class="meta">📍 Tombo Park, Waterloo — opposite Peninsula School</p><p class="meta">📞 <a href="tel:+23275908206" style="color:var(--sl-blue);font-weight:700">+232 75 908 206</a></p><p class="bio">A well-known name in Sierra Leone's mobile industry with 20–25 years of hands-on unlocking and trading experience.</p></div>
         </article>
         <article class="founder-card">
-          <img src="assets/images/founders/baimba-conteh-engineer.jpg" alt="Baimba Conteh — Co-Founder and Technical Engineer of SIERRAUNLOCK">
-          <div class="founder-body">
-            <h3>Baimba Conteh</h3>
-            <p class="role">Co-Founder • Technical Engineer</p>
-            <p class="meta">📍 Koidu City, Kono District</p>
-            <p class="meta">📞 <a href="tel:+23231363736" style="color:var(--sl-blue);font-weight:700">+232 31 363 736</a></p>
-            <p class="bio">Leads hardware diagnostics, board-level repair and engineer certification. His rule: <strong>"Learn before you earn."</strong></p>
-          </div>
+          <img src="assets/images/founders/baimba-conteh-engineer.jpg" alt="Baimba Conteh">
+          <div class="founder-body"><h3>Baimba Conteh</h3><p class="role">Co-Founder • Technical Engineer</p><p class="meta">📍 Koidu City, Kono District</p><p class="meta">📞 <a href="tel:+23231363736" style="color:var(--sl-blue);font-weight:700">+232 31 363 736</a></p><p class="bio">Leads hardware diagnostics, board-level repair and engineer certification. His rule: <strong>"Learn before you earn."</strong></p></div>
         </article>
       </div>
     </section>
 
-    <!-- 09 • COMMUNITY JOIN SECTION -->
     <section class="section community">
-      <div class="container">
-        <h2>Join the SIERRAUNLOCK Community</h2>
-        <p>Daily unlock updates, price lists and new tool alerts.</p>
-        <div class="community-btns">
-          <a class="btn btn-wa" href="https://whatsapp.com/channel/0029VbDtNmh1XquQ7GVpp409" target="_blank" rel="noopener">JOIN OUR WHATSAPP CHANNEL</a>
-          <a class="btn btn-fb" href="https://facebook.com/groups/1051882957642393/" target="_blank" rel="noopener">JOIN OUR FACEBOOK GROUP</a>
-        </div>
-        <p class="community-note">Become a <a href="reseller.html">reseller</a> or open a <a href="contact.html">business account</a> — wholesale pricing available.</p>
-      </div>
+      <div class="container"><h2>Join the SIERRAUNLOCK Community</h2><p>Daily unlock updates, price lists and new tool alerts.</p><div class="community-btns"><a class="btn btn-wa" href="https://whatsapp.com/channel/0029VbDtNmh1XquQ7GVpp409" target="_blank" rel="noopener">JOIN OUR WHATSAPP CHANNEL</a><a class="btn btn-fb" href="https://facebook.com/groups/1051882957642393/" target="_blank" rel="noopener">JOIN OUR FACEBOOK GROUP</a></div><p class="community-note">Become a <a href="reseller.html">reseller</a> or open a <a href="contact.html">business account</a> — wholesale pricing available.</p></div>
     </section>
 
-    <!-- 10 • PAYMENTS BADGES -->
     <section class="section">
-      <div class="section-head">
-        <h2>Payments We Accept</h2>
-        <div class="underline"></div>
-        <p>Leones, Dollars &amp; crypto — live conversion built in.</p>
-      </div>
-      <div class="pay-badges">
-        <span class="badge">🟠 Orange Money (+232 75 908 206)</span>
-        <span class="badge">🟡 Binance Pay (ID 754378475)</span>
-        <span class="badge">₿ Bitcoin (BTC)</span>
-        <span class="badge">💎 Ethereum (ETH)</span>
-        <span class="badge">💵 US Dollar (USD)</span>
-        <span class="badge">🇸🇱 Leone (SLE)</span>
-      </div>
+      <div class="section-head"><h2>Payments We Accept</h2><div class="underline"></div><p>Leones, Dollars &amp; crypto — live conversion built in.</p></div>
+      <div class="pay-badges"><span class="badge">🟠 Orange Money (+232 75 908 206)</span><span class="badge">🟡 Binance Pay (ID 754378475)</span><span class="badge">₿ Bitcoin (BTC)</span><span class="badge">💎 Ethereum (ETH)</span><span class="badge">💵 US Dollar (USD)</span><span class="badge">🇸🇱 Leone (SLE)</span></div>
     </section>
   </main>
 
-  <!-- 11 • FOOTER -->
   <footer class="site-footer">
     <div class="footer-grid container">
-      <div class="footer-col">
-        <a href="index.html" class="brand footer-brand">
-          <img src="assets/images/brand/sierraunlock-logo.png" alt="SIERRAUNLOCK logo" class="brand-logo">
-          <span class="brand-name">SIERRA<span>UNLOCK</span></span>
-        </a>
-        <p class="footer-about">Sierra Leone's first digital unlocking platform. Unlock • Repair • Connect.</p>
-      </div>
-      <div class="footer-col">
-        <h4>Quick Links</h4>
-        <a href="about.html">About &amp; Founders</a>
-        <a href="services.html">Unlock Services</a>
-        <a href="marketplace.html">Marketplace</a>
-        <a href="shops.html">Shops &amp; Map</a>
-        <a href="reseller.html">Become a Reseller</a>
-        <a href="auth.html">👤 Sign In / Register</a>
-      </div>
-      <div class="footer-col">
-        <h4>Contact</h4>
-        <a href="mailto:sierraunlock@gmail.com">sierraunlock@gmail.com</a>
-        <a href="tel:+23275908206">+232 75 908 206 (Alhassan — Waterloo)</a>
-        <a href="tel:+23231363736">+232 31 363 736 (Baimba — Koidu)</a>
-        <a href="https://github.com/sierraunlock-tech" target="_blank" rel="noopener">github.com/sierraunlock-tech</a>
-      </div>
-      <div class="footer-col">
-        <h4>Legal</h4>
-        <a href="services.html#legal">IMEI Policy</a>
-        <a href="repair.html#terms">Repair Terms (GTC)</a>
-        <a href="faq.html">Unlocking FAQ</a>
-        <a href="contact.html">Business / Wholesale</a>
-      </div>
+      <div class="footer-col"><a href="index.html" class="brand footer-brand"><img src="assets/images/brand/sierraunlock-logo.png" alt="logo" class="brand-logo"><span class="brand-name">SIERRA<span>UNLOCK</span></span></a><p class="footer-about">Sierra Leone's first digital unlocking platform. Unlock • Repair • Connect.</p></div>
+      <div class="footer-col"><h4>Quick Links</h4><a href="about.html">About &amp; Founders</a><a href="services.html">Unlock Services</a><a href="marketplace.html">Marketplace</a><a href="shops.html">Shops &amp; Map</a><a href="reseller.html">Become a Reseller</a><a href="auth.html">👤 Sign In / Register</a></div>
+      <div class="footer-col"><h4>Contact</h4><a href="mailto:sierraunlock@gmail.com">sierraunlock@gmail.com</a><a href="tel:+23275908206">+232 75 908 206 (Alhassan — Waterloo)</a><a href="tel:+23231363736">+232 31 363 736 (Baimba — Koidu)</a><a href="https://github.com/sierraunlock-tech" target="_blank" rel="noopener">github.com/sierraunlock-tech</a></div>
+      <div class="footer-col"><h4>Legal</h4><a href="services.html#legal">IMEI Policy</a><a href="repair.html#terms">Repair Terms (GTC)</a><a href="faq.html">Unlocking FAQ</a><a href="contact.html">Business / Wholesale</a></div>
     </div>
-    <div class="footer-bottom">
-      © <span id="year">2026</span> SIERRAUNLOCK • Unlock • Repair • Connect — Sierra Leone • <span id="siteVersion">v1.5.0</span>
-    </div>
+    <div class="footer-bottom">© <span id="year">2026</span> SIERRAUNLOCK • Unlock • Repair • Connect — Sierra Leone • <span id="siteVersion">v1.5.0</span></div>
   </footer>
 
-  <!-- 12 • SCRIPTS -->
   <script src="assets/js/security.js"></script>
   <script src="assets/js/main.js"></script>
 </body>
