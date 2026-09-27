@@ -1,7 +1,8 @@
 /* =====================================================================
-   SIERRAUNLOCK • CORE ENGINE — main.js (v9.8 CLEAN PROFESSIONAL)
+   SIERRAUNLOCK • CORE ENGINE — main.js (v10.0 CLEAN PROFESSIONAL • MEGA MENU)
    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
-   Fixes: WA regex hardening, remove heavy body walker, null-safe
+   Fixes: WA desk single source, mega-menu click+hover, mobile drawer,
+          null-safe, no heavy DOM walker, XSS hardened
    ===================================================================== */
 'use strict';
 
@@ -10,9 +11,10 @@
   const orig = window.open.bind(window);
   window.open = function (url,...rest) {
     if (typeof url === 'string' && url.includes('wa.me/')) {
-      url = url.replace(/wa\.me\/23231363736/g,'wa.me/23275908206')
-              .replace(/wa\.me\/232754378475/g,'wa.me/23275908206')
-              .replace(/wa\.me\/23233469056/g,'wa.me/23275908206');
+      url = url
+       .replace(/wa\.me\/23231363736/g, 'wa.me/23275908206')
+       .replace(/wa\.me\/232754378475/g, 'wa.me/23275908206')
+       .replace(/wa\.me\/23233469056/g, 'wa.me/23275908206');
     }
     return orig(url,...rest);
   };
@@ -20,7 +22,7 @@
 
 /* 02 • ACCOUNT GATE */
 (function () {
-  const GATED = ['unlockForm','repairForm','sellForm','shopForm','resForm','bizForm'];
+  const GATED = ['unlockForm', 'repairForm', 'sellForm', 'shopForm', 'resForm', 'bizForm'];
   const user = () => sessionStorage.getItem('su_user');
   const need = () => {
     alert('🔐 Create your free SIERRAUNLOCK account or sign in to continue.');
@@ -28,32 +30,36 @@
   };
   document.addEventListener('click', (e) => {
     const a = e.target.closest?.('a.btn-wa');
-    if (a && (a.getAttribute('href')||'').includes('wa.me') &&!user()) {
-      e.preventDefault(); e.stopImmediatePropagation(); need();
+    if (a && (a.getAttribute('href') || '').includes('wa.me') &&!user()) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      need();
     }
   }, true);
   document.addEventListener('submit', (e) => {
     if (GATED.includes(e.target.id) &&!user()) {
-      e.preventDefault(); e.stopImmediatePropagation(); need();
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      need();
     }
   }, true);
 })();
 
 /* 03 • CONSTANTS */
-const SITE_VERSION = localStorage.getItem('su_version') || 'v2.1.0 • build 2026-09-12';
+const SITE_VERSION = localStorage.getItem('su_version') || 'v2.1.0 • build 2026-09-27';
 const TOOLS = [
-  {icon:'🔓',name:'Unlock Codes',tag:'All Brands',img:null},
-  {icon:'🧠',name:'FRP Reset',tag:'Owner-Verified',img:null},
-  {icon:'⚡',name:'Flashing & Firmware',tag:'Software',img:null},
-  {icon:'📡',name:'Network Config',tag:'GSM • LTE',img:null},
-  {icon:'🔩',name:'Screen Replacement',tag:'Hardware',img:null},
-  {icon:'🔋',name:'Battery Swap',tag:'Hardware',img:null},
-  {icon:'🧩',name:'Chip-Level Repair',tag:'Board Work',img:null},
-  {icon:'💾',name:'Data Recovery',tag:'Careful Handling',img:null},
-  {icon:'💻',name:'Laptop Repair',tag:'Computer',img:null},
-  {icon:'🧰',name:'Genuine Spare Parts',tag:'Marketplace',img:null},
-  {icon:'✅',name:'Legal IMEI Check',tag:'Compliance',img:null},
-  {icon:'🛡️',name:'OS Optimization',tag:'Performance',img:null}
+  { icon: '🔓', name: 'Unlock Codes', tag: 'All Brands', img: null },
+  { icon: '🧠', name: 'FRP Reset', tag: 'Owner-Verified', img: null },
+  { icon: '⚡', name: 'Flashing & Firmware', tag: 'Software', img: null },
+  { icon: '📡', name: 'Network Config', tag: 'GSM • LTE', img: null },
+  { icon: '🔩', name: 'Screen Replacement', tag: 'Hardware', img: null },
+  { icon: '🔋', name: 'Battery Swap', tag: 'Hardware', img: null },
+  { icon: '🧩', name: 'Chip-Level Repair', tag: 'Board Work', img: null },
+  { icon: '💾', name: 'Data Recovery', tag: 'Careful Handling', img: null },
+  { icon: '💻', name: 'Laptop Repair', tag: 'Computer', img: null },
+  { icon: '🧰', name: 'Genuine Spare Parts', tag: 'Marketplace', img: null },
+  { icon: '✅', name: 'Legal IMEI Check', tag: 'Compliance', img: null },
+  { icon: '🛡️', name: 'OS Optimization', tag: 'Performance', img: null }
 ];
 const ROTATOR_PHRASES = [
   'Any Brand. Any Network.',
@@ -65,40 +71,54 @@ const ROTATOR_PHRASES = [
 
 /* 04 • BOOT */
 document.addEventListener('DOMContentLoaded', () => {
-  document.querySelectorAll('a[href*="wa.me/"]').forEach(a => {
-    a.href = a.href.replace(/23231363736|232754378475|23233469056/g,'23275908206');
+  document.querySelectorAll('a[href*="wa.me/"]').forEach((a) => {
+    a.href = a.href.replace(/23231363736|232754378475|23233469056/g, '23275908206');
   });
   normalizeNumbers();
-  injectResellerLink(); injectAccountLink(); injectServicesMegaMenu();
-  injectPageRotator(); initNav(); initRotator(); initYearVersion();
-  initActiveNav(); initToolsMarquee(); initReveal();
-  initSierraAssistant(); initPolishLayer();
+  injectResellerLink();
+  injectAccountLink();
+  initNavMega(); // NEW MEGA + MOBILE
+  injectPageRotator();
+  initRotator();
+  initYearVersion();
+  initActiveNav();
+  initToolsMarquee();
+  initReveal();
+  initSierraAssistant();
+  initPolishLayer();
 });
 
-/* 05 • NUMBER NORMALIZER — lightweight, no full body walker */
+/* 05 • NUMBER NORMALIZER — lightweight */
 function normalizeNumbers() {
-  const HREF_MAP = {'tel:+232754378475':'tel:+23275908206','tel:+23233469056':'tel:+23275908206'};
-  document.querySelectorAll('a[href^="tel:"]').forEach(a=>{
-    const h=a.getAttribute('href'); if(HREF_MAP[h]) a.setAttribute('href',HREF_MAP[h]);
+  const HREF_MAP = {
+    'tel:+232754378475': 'tel:+23275908206',
+    'tel:+23233469056': 'tel:+23275908206'
+  };
+  document.querySelectorAll('a[href^="tel:"]').forEach((a) => {
+    const h = a.getAttribute('href');
+    if (HREF_MAP[h]) a.setAttribute('href', HREF_MAP[h]);
   });
-  // only replace in footer/contact areas — prevents breaking JS strings
-  document.querySelectorAll('footer,.footer,.contact,.contact-block').forEach(el=>{
-    if(el.innerHTML.includes('75 437 8475')||el.innerHTML.includes('33 469 056')){
-      el.innerHTML = el.innerHTML.replace(/\+232 75 437 8475/g,'+232 75 908 206').replace(/\+232 33 469 056/g,'+232 75 908 206');
+  document.querySelectorAll('footer,.footer-col').forEach((el) => {
+    if (el.innerHTML.includes('75 437 8475') || el.innerHTML.includes('33 469 056')) {
+      el.innerHTML = el.innerHTML
+       .replace(/\+232 75 437 8475/g, '+232 75 908 206')
+       .replace(/\+232 33 469 056/g, '+232 75 908 206');
     }
   });
 }
 
-/* 06 • HERO ROTATOR */
+/* 06 • HERO ROTATOR INJECT */
 function injectPageRotator() {
   if (document.getElementById('rotatorText')) return;
   const h1 = document.querySelector('section[class*="hero"] h1');
   if (!h1) return;
   const br = document.createElement('br');
   const span = document.createElement('span');
-  span.className = 'rotator'; span.id = 'rotatorText';
+  span.className = 'rotator';
+  span.id = 'rotatorText';
   span.textContent = ROTATOR_PHRASES[0];
-  h1.appendChild(br); h1.appendChild(span);
+  h1.appendChild(br);
+  h1.appendChild(span);
 }
 
 /* 07 • NAV LINKS */
@@ -106,143 +126,238 @@ function injectResellerLink() {
   const nav = document.getElementById('mainNav');
   if (!nav || nav.querySelector('[href="reseller.html"]')) return;
   const a = document.createElement('a');
-  a.className = 'nav-link'; a.href = 'reseller.html'; a.textContent = 'Resellers';
+  a.className = 'nav-link';
+  a.href = 'reseller.html';
+  a.textContent = 'Resellers';
   const faq = nav.querySelector('[href="faq.html"]');
-  if (faq) nav.insertBefore(a, faq); else nav.appendChild(a);
+  if (faq) nav.insertBefore(a, faq);
+  else nav.appendChild(a);
 }
 function injectAccountLink() {
   const nav = document.getElementById('mainNav');
   if (!nav || nav.querySelector('#acctLink')) return;
   const a = document.createElement('a');
-  a.className = 'nav-link'; a.id = 'acctLink'; a.href = 'auth.html';
+  a.className = 'nav-link';
+  a.id = 'acctLink';
+  a.href = 'auth.html';
   let name = '';
-  try { name = (JSON.parse(localStorage.getItem('su_profile')||'{}').name||''); } catch(e){}
-  a.textContent = sessionStorage.getItem('su_user')?('👤 '+(name||'Account')):'👤 Sign In';
+  try {
+    name = JSON.parse(localStorage.getItem('su_profile') || '{}').name || '';
+  } catch (e) {}
+  a.textContent = sessionStorage.getItem('su_user')? '👤 ' + (name || 'Account') : '👤 Sign In';
   nav.appendChild(a);
 }
 
-/* 08 • SERVICES MEGA MENU */
-function injectServicesMegaMenu() {
-  const HREF = 'live-services.html';
-  document.querySelectorAll('a[href="'+HREF+'"]').forEach(a=>{ if(!a.closest('#mainNav')) a.remove(); });
-  const old = document.getElementById('suMegaMenu'); if(old) old.remove();
-  if (!document.getElementById('suMegaCss')) {
-    const css = document.createElement('style'); css.id = 'suMegaCss';
-    css.textContent = [
-      '.su-wrap{position:relative;display:inline-block}',
-      '.su-mega{display:none;position:absolute;top:calc(100% + 6px);left:50%;transform:translateX(-50%);background:#fff;border:1px solid #e1ecf4;border-radius:16px;box-shadow:0 18px 50px rgba(11,31,51,.18);padding:20px;grid-template-columns:repeat(3,minmax(210px,1fr));gap:20px;z-index:9999;min-width:660px;animation:suMegaIn.18s ease}',
-      '@keyframes suMegaIn{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}',
-      '.su-wrap:hover.su-mega,.su-wrap:focus-within.su-mega,.su-wrap.open.su-mega{display:grid}',
-      '.su-mega h4{font-size:11.5px;letter-spacing:.8px;text-transform:uppercase;color:#0072C6;margin:0 0 10px;font-weight:800}',
-      '.su-mega a{display:block;padding:8px 10px;border-radius:9px;color:#12263a;text-decoration:none;font-size:13.5px;line-height:1.3;transition:background.15s,color.15s}',
-      '.su-mega a:hover,.su-mega a:focus{background:#eef6ff;color:#0072C6}',
-      '.su-mega.hot{background:linear-gradient(120deg,#1EB53A,#0072C6);color:#fff;font-weight:700}',
-      '.su-mega.hot:hover{filter:brightness(1.08);color:#fff}',
-      '@media(max-width:900px){.su-wrap{display:block}.su-mega{position:static;min-width:0;transform:none;grid-template-columns:1fr;padding:10px;box-shadow:none;border:0;animation:none}.su-wrap:hover.su-mega{display:none}.su-wrap.open.su-mega{display:grid}}'
-    ].join(''); document.head.appendChild(css);
+/* 08 • NAV + MEGA MENU + MOBILE PROFESSIONAL — v10 */
+function initNavMega() {
+  const mainNav = document.getElementById('mainNav');
+  const navToggle = document.getElementById('navToggle');
+  const servicesItem = document.getElementById('servicesNavItem');
+  const servicesTrigger = document.getElementById('servicesTrigger');
+  const servicesMega = document.getElementById('servicesMega');
+
+  // If new mega exists in index.html, use it — don't inject old suMega
+  if (servicesItem && servicesMega) {
+    const openMega = () => {
+      servicesItem.classList.add('open');
+      servicesTrigger?.setAttribute('aria-expanded', 'true');
+    };
+    const closeMega = () => {
+      servicesItem.classList.remove('open');
+      servicesTrigger?.setAttribute('aria-expanded', 'false');
+    };
+
+    servicesTrigger?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (servicesItem.classList.contains('open')) closeMega();
+      else openMega();
+    });
+
+    // Desktop hover
+    let hoverTimer;
+    servicesItem.addEventListener('mouseenter', () => {
+      if (window.innerWidth > 1440) {
+        clearTimeout(hoverTimer);
+        openMega();
+      }
+    });
+    servicesItem.addEventListener('mouseleave', () => {
+      if (window.innerWidth > 1440) {
+        hoverTimer = setTimeout(closeMega, 150);
+      }
+    });
+
+    // Close on outside click + ESC
+    document.addEventListener('click', (e) => {
+      if (!servicesItem.contains(e.target)) closeMega();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeMega();
+    });
+
+    // Close mega when clicking a mega-card link on mobile
+    servicesMega.querySelectorAll('a').forEach((a) => {
+      a.addEventListener('click', () => {
+        if (window.innerWidth <= 1440) {
+          mainNav?.classList.remove('open');
+          if (navToggle) {
+            navToggle.setAttribute('aria-expanded', 'false');
+            navToggle.textContent = '☰';
+          }
+        }
+      });
+    });
   }
-  const nav = document.getElementById('mainNav'); if(!nav) return;
-  const nodes = Array.prototype.slice.call(nav.querySelectorAll('li,div,a,button,span'));
-  const trigger = nodes.find(el=>{ const t=(el.textContent||'').trim().toLowerCase(); return t==='services'||t==='services ▾'||t.indexOf('services')===0; });
-  if(!trigger) return;
-  let wrap = trigger.closest('li,div.dropdown,[class*="drop"]');
-  if(!wrap||wrap===nav){ wrap=document.createElement('span'); wrap.className='su-wrap'; trigger.parentNode.insertBefore(wrap,trigger); wrap.appendChild(trigger); } else { wrap.classList.add('su-wrap'); }
-  const mega = document.createElement('div'); mega.className='su-mega'; mega.id='suMegaMenu';
-  mega.innerHTML =
-    '<div class="su-col"><h4>🔓 Unlock Services</h4>'+
-      '<a class="hot" href="live-services.html">⚡ Live Catalog — Buy Now</a>'+
-      '<a href="live-services.html#g=network">🌐 Network & Carrier Unlock</a>'+
-      '<a href="live-services.html#g=frp">🧠 FRP / iCloud / Passcode</a>'+
-      '<a href="live-services.html#g=checks">✅ IMEI & Info Checks</a>'+
-      '<a href="live-services.html#g=tools">🧰 Tool Licenses</a>'+
-    '</div><div class="su-col"><h4>📦 Order Tools</h4>'+
-      '<a href="live-services.html">🛒 Place Order</a><a href="track.html">📍 Track My Order</a>'+
-      '<a href="auth.html">📜 Order History</a><a href="live-services.html#t=file">📁 File Service (Live)</a>'+
-      '<a href="live-services.html#t=server">🖥 Server Service (Live)</a>'+
-    '</div><div class="su-col"><h4>👤 My Account</h4>'+
-      '<a href="auth.html">🔐 Sign In / Create Account</a><a href="reseller.html">🤝 Become a Reseller</a>'+
-      '<a href="payments.html">💳 Payments</a><a href="faq.html">❓ Help & FAQ</a><a href="policy.html">📋 Terms & Refund Policy</a>'+
-    '</div>';
-  wrap.appendChild(mega);
-  trigger.addEventListener('click', function(e){ if(window.innerWidth<=900){ e.preventDefault(); wrap.classList.toggle('open'); } });
+
+  // Hamburger Professional
+  if (!navToggle ||!mainNav) return;
+  navToggle.addEventListener('click', () => {
+    const open = mainNav.classList.toggle('open');
+    navToggle.setAttribute('aria-expanded', open? 'true' : 'false');
+    navToggle.textContent = open? '✕' : '☰';
+    document.body.style.overflow = open? 'hidden' : '';
+  });
+
+  // Close nav on normal links, keep mega open
+  mainNav.querySelectorAll('a.nav-link:not(#servicesTrigger)').forEach((a) => {
+    a.addEventListener('click', () => {
+      mainNav.classList.remove('open');
+      navToggle.setAttribute('aria-expanded', 'false');
+      navToggle.textContent = '☰';
+      document.body.style.overflow = '';
+    });
+  });
+
+  // Outside click close hamburger
+  document.addEventListener('click', (e) => {
+    if (mainNav.classList.contains('open') &&!mainNav.contains(e.target) &&!navToggle.contains(e.target)) {
+      mainNav.classList.remove('open');
+      navToggle.textContent = '☰';
+      navToggle.setAttribute('aria-expanded', 'false');
+      document.body.style.overflow = '';
+    }
+  });
 }
 
-/* 09 • HAMBURGER MENU */
-function initNav() {
-  const toggle = document.getElementById('navToggle'), nav = document.getElementById('mainNav');
-  if(!toggle||!nav) return;
-  toggle.addEventListener('click',()=>{ const open=nav.classList.toggle('open'); toggle.setAttribute('aria-expanded',open?'true':'false'); toggle.textContent=open?'✕':'☰'; });
-  nav.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>{ if(a.closest('.su-mega')) return; nav.classList.remove('open'); toggle.setAttribute('aria-expanded','false'); toggle.textContent='☰'; }));
-  document.addEventListener('click',(e)=>{ if(nav.classList.contains('open')&&!nav.contains(e.target)&&!toggle.contains(e.target)){ nav.classList.remove('open'); toggle.textContent='☰'; } });
-}
-
-/* 10 • ROTATOR ENGINE */
+/* 09 • ROTATOR ENGINE */
 function initRotator() {
-  const el=document.getElementById('rotatorText'); if(!el) return; let i=0;
-  setInterval(()=>{ i=(i+1)%ROTATOR_PHRASES.length; el.classList.remove('swap'); void el.offsetWidth; el.textContent=ROTATOR_PHRASES[i]; el.classList.add('swap'); },2800);
+  const el = document.getElementById('rotatorText');
+  if (!el) return;
+  let i = 0;
+  setInterval(() => {
+    i = (i + 1) % ROTATOR_PHRASES.length;
+    el.style.opacity = '0';
+    setTimeout(() => {
+      el.textContent = ROTATOR_PHRASES[i];
+      el.style.opacity = '1';
+    }, 200);
+  }, 2800);
 }
 
-/* 11 • YEAR + VERSION */
+/* 10 • YEAR + VERSION */
 function initYearVersion() {
-  const y=document.getElementById('year'), v=document.getElementById('siteVersion');
-  if(y) y.textContent=new Date().getFullYear(); if(v) v.textContent=SITE_VERSION;
+  const y = document.getElementById('year');
+  const v = document.getElementById('siteVersion');
+  if (y) y.textContent = new Date().getFullYear();
+  if (v) v.textContent = SITE_VERSION;
 }
 
-/* 12 • ACTIVE NAV */
+/* 11 • ACTIVE NAV */
 function initActiveNav() {
-  const page=(location.pathname.split('/').pop()||'index.html');
-  document.querySelectorAll('.nav-link').forEach(a=>{ a.classList.toggle('active',a.getAttribute('href')===page); });
+  const page = location.pathname.split('/').pop() || 'index.html';
+  document.querySelectorAll('.nav-link').forEach((a) => {
+    const href = a.getAttribute('href');
+    if (href === page) a.classList.add('active');
+  });
 }
 
-/* 13 • TOOLS MARQUEE */
+/* 12 • TOOLS MARQUEE */
 function initToolsMarquee() {
-  const anchor=document.querySelector('.legal-strip'); if(!anchor||document.getElementById('toolsSection')) return;
-  const section=document.createElement('section'); section.className='tools-section'; section.id='toolsSection';
-  section.innerHTML='<div class="section-head"><h2>Our Tools & Services — Live in Motion</h2><div class="underline"></div><p>The full arsenal we work with daily. Hover to pause.</p></div><div class="marquee"><div class="marquee-track" id="toolsTrack"></div></div>';
-  anchor.insertAdjacentElement('afterend',section);
-  const track=section.querySelector('#toolsTrack');
-  const buildCard=(t)=>{ const card=document.createElement('article'); card.className='tool-card'; const icon=document.createElement('div'); icon.className='tool-icon';
-    if(t.img){ const im=document.createElement('img'); im.src='assets/images/tools/'+t.img; im.alt=t.name; im.onerror=()=>{ icon.textContent=t.icon; }; icon.appendChild(im); } else { icon.textContent=t.icon; }
-    const txt=document.createElement('div'); txt.innerHTML='<div class="tool-name"></div><div class="tool-tag"></div>'; txt.querySelector('.tool-name').textContent=t.name; txt.querySelector('.tool-tag').textContent=t.tag;
-    card.appendChild(icon); card.appendChild(txt); return card; };
-  [...TOOLS,...TOOLS].forEach(t=>track.appendChild(buildCard(t)));
+  const anchor = document.querySelector('.legal-strip');
+  if (!anchor || document.getElementById('toolsSection')) return;
+  const section = document.createElement('section');
+  section.className = 'tools-section';
+  section.id = 'toolsSection';
+  section.innerHTML =
+    '<div class="section-head"><h2>Our Tools & Services — Live in Motion</h2><div class="underline"></div><p>The full arsenal we work with daily. Hover to pause.</p></div><div class="marquee"><div class="marquee-track" id="toolsTrack"></div></div>';
+  anchor.insertAdjacentElement('afterend', section);
+  const track = section.querySelector('#toolsTrack');
+  const buildCard = (t) => {
+    const card = document.createElement('article');
+    card.className = 'tool-card';
+    const icon = document.createElement('div');
+    icon.className = 'tool-icon';
+    icon.textContent = t.icon;
+    const txt = document.createElement('div');
+    txt.innerHTML = '<div class="tool-name"></div><div class="tool-tag"></div>';
+    txt.querySelector('.tool-name').textContent = t.name;
+    txt.querySelector('.tool-tag').textContent = t.tag;
+    card.appendChild(icon);
+    card.appendChild(txt);
+    return card;
+  };
+  [...TOOLS,...TOOLS].forEach((t) => track.appendChild(buildCard(t)));
 }
 
-/* 14 • SCROLL REVEAL */
+/* 13 • SCROLL REVEAL */
 function initReveal() {
-  const targets=document.querySelectorAll('.card,.founder-card,.stat,.section-head,.badge,.tool-card,.philosophy-card,.timeline-item,.reveal');
-  if(!targets.length||!('IntersectionObserver' in window)){ targets.forEach(el=>el.classList.add('reveal-in')); return; }
-  targets.forEach((el,i)=>{ el.classList.add('reveal'); el.style.transitionDelay=(i%6)*70+'ms'; });
-  const io=new IntersectionObserver((entries)=>{ entries.forEach(en=>{ if(en.isIntersecting){ en.target.classList.add('reveal-in'); io.unobserve(en.target); } }); },{threshold:0.12});
-  targets.forEach(el=>io.observe(el));
+  const targets = document.querySelectorAll('.card,.founder-card,.stat,.section-head,.badge,.tool-card');
+  if (!targets.length) return;
+  if (!('IntersectionObserver' in window)) {
+    targets.forEach((el) => el.classList.add('reveal-in'));
+    return;
+  }
+  targets.forEach((el, i) => {
+    el.classList.add('reveal');
+    el.style.transitionDelay = (i % 6) * 70 + 'ms';
+  });
+  const io = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((en) => {
+        if (en.isIntersecting) {
+          en.target.classList.add('reveal-in');
+          io.unobserve(en.target);
+        }
+      });
+    },
+    { threshold: 0.12 }
+  );
+  targets.forEach((el) => io.observe(el));
 }
 
-/* 15 • SMART RETURN MODE */
-(function(){ if(sessionStorage.getItem('su_seen')==='1'){ document.documentElement.classList.add('su-returning'); } else { sessionStorage.setItem('su_seen','1'); } })();
+/* 14 • SMART RETURN */
+(function () {
+  if (sessionStorage.getItem('su_seen') === '1') {
+    document.documentElement.classList.add('su-returning');
+  } else {
+    sessionStorage.setItem('su_seen', '1');
+  }
+})();
 
-/* 16 • SIERRA ASSISTANT BOT — v9.8 cleaned, esc hardened, no XSS */
+/* 15 • SIERRA ASSISTANT — v10 cleaned */
 function initSierraAssistant() {
-  if(location.pathname.includes('admin-orders')) return;
-  if(document.getElementById('sierraAssistant')) return;
-  if(!document.getElementById('sierraAssistantCss')){
-    const css=document.createElement('style'); css.id='sierraAssistantCss';
-    css.textContent=[
+  if (location.pathname.includes('admin-orders')) return;
+  if (document.getElementById('sierraAssistant')) return;
+  if (!document.getElementById('sierraAssistantCss')) {
+    const css = document.createElement('style');
+    css.id = 'sierraAssistantCss';
+    css.textContent = [
       '#sierraAssistant{position:fixed;bottom:24px;right:24px;z-index:9998;font-family:Segoe UI,Arial,sans-serif}',
       '#saBtn{width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,#1EB53A,#0072C6);border:0;color:#fff;font-size:28px;cursor:pointer;box-shadow:0 8px 24px rgba(30,181,58,.4);transition:transform.2s;display:flex;align-items:center;justify-content:center;position:relative}',
       '#saBtn:hover{transform:scale(1.08)}',
       '#saBtn.pulse::after{content:"";position:absolute;width:64px;height:64px;border-radius:50%;background:rgba(30,181,58,.4);animation:saPulse 2s infinite}',
       '@keyframes saPulse{0%{transform:scale(1);opacity:.7}100%{transform:scale(1.6);opacity:0}}',
       '#saBadge{position:absolute;top:-4px;right:-4px;background:#e74c3c;color:#fff;font-size:11px;font-weight:700;padding:4px 8px;border-radius:10px}',
-      '#saWindow{position:absolute;bottom:80px;right:0;width:360px;max-width:calc(100vw - 32px);height:520px;max-height:calc(100vh - 120px);background:#fff;border-radius:20px;box-shadow:0 20px 60px rgba(11,31,51,.25);display:none;flex-direction:column;overflow:hidden;animation:saWindowIn.25s ease}',
+      '#saWindow{position:absolute;bottom:80px;right:0;width:360px;max-width:calc(100vw - 32px);height:520px;max-height:calc(100vh - 120px);background:#fff;border-radius:20px;box-shadow:0 20px 60px rgba(11,31,51,.25);display:none;flex-direction:column;overflow:hidden}',
       '#saWindow.open{display:flex}',
-      '@keyframes saWindowIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}',
       '#saHeader{background:linear-gradient(135deg,#1EB53A,#0072C6);color:#fff;padding:16px 18px;display:flex;justify-content:space-between;align-items:center}',
       '#saHeader.title{display:flex;align-items:center;gap:10px}',
       '#saHeader.avatar{width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:20px}',
       '#saHeader.name{font-weight:700;font-size:15px}',
       '#saHeader.status{font-size:11.5px;opacity:.9;display:flex;align-items:center;gap:6px}',
       '#saHeader.dot{width:8px;height:8px;border-radius:50%;background:#7dff9b}',
-      '#saClose{background:transparent;border:0;color:#fff;font-size:22px;cursor:pointer;padding:4px 8px}',
+      '#saClose{background:transparent;border:0;color:#fff;font-size:22px;cursor:pointer}',
       '#saBody{flex:1;overflow-y:auto;padding:16px;background:#f4f8fb;display:flex;flex-direction:column;gap:10px}',
       '.sa-msg{max-width:85%;padding:10px 14px;border-radius:14px;font-size:13.5px;line-height:1.45;word-wrap:break-word}',
       '.sa-msg.bot{background:#fff;color:#12263a;border:1px solid #e1ecf4;align-self:flex-start;border-bottom-left-radius:4px}',
@@ -255,63 +370,76 @@ function initSierraAssistant() {
       '#saInput{display:flex;padding:10px 12px;gap:8px;background:#fff;border-top:1px solid #e1ecf4}',
       '#saInput input{flex:1;padding:10px 14px;border:1.5px solid #d5e3ee;border-radius:20px;font-size:14px;outline:none}',
       '#saInput input:focus{border-color:#0072C6}',
-      '#saInput button{background:linear-gradient(135deg,#1EB53A,#0072C6);border:0;color:#fff;width:40px;height:40px;border-radius:50%;font-size:18px;cursor:pointer}',
-      '.sa-typing{display:inline-flex;gap:4px;padding:4px 0}',
-      '.sa-typing span{width:6px;height:6px;border-radius:50%;background:#8a9bab;animation:saTyping 1.2s infinite}',
-      '.sa-typing span:nth-child(2){animation-delay:.15s}',
-      '.sa-typing span:nth-child(3){animation-delay:.3s}',
-      '@keyframes saTyping{0%,60%,100%{opacity:.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-4px)}}',
-      '@media(max-width:480px){#sierraAssistant{bottom:16px;right:16px}#saWindow{width:calc(100vw - 32px);height:calc(100vh - 100px);bottom:72px}#saBtn{width:56px;height:56px;font-size:24px}}'
-    ].join(''); document.head.appendChild(css);
+      '#saInput button{background:linear-gradient(135deg,#1EB53A,#0072C6);border:0;color:#fff;width:40px;height:40px;border-radius:50%;font-size:18px;cursor:pointer}'
+    ].join('');
+    document.head.appendChild(css);
   }
-  const KB=[
-    {keywords:['price','cost','how much','fee','charge'],response:'We add flat <strong>$2 USD</strong> to wholesale.<br>Examples: $0.10 → $2.10, $10 → $12, $60 → $62<br>👉 <a href="live-services.html">See 248+ services →</a>'},
-    {keywords:['order','buy','purchase','how to','get','start'],response:'Ordering easy!<br>1. Browse <a href="live-services.html">catalog</a><br>2. Click Order Now<br>3. Enter IMEI (*#06#) + WhatsApp<br>4. Pay OM/Binance/Cash<br>5. Track<br>👉 <a href="live-services.html">Start →</a>'},
-    {keywords:['payment','pay','orange money','binance','cash'],response:'🟠 Orange Money +232 75 908 206<br>🟡 Binance Pay ID 754378475<br>💵 Cash Waterloo/Koidu<br>👉 <a href="payments.html">Details →</a>'},
-    {keywords:['track','status','where','progress','my order'],response:'Track live! Enter job ID SU-...<br>👉 <a href="track.html">Track my order →</a><br>Auto-refresh 10s.'},
-    {keywords:['refund','money back','return','cancel'],response:'<strong>Refund:</strong> Paid orders final. Refunds founder-only after fraud review. Contact 24h if fail.<br>👉 <a href="https://wa.me/23275908206?text='+encodeURIComponent('Refund review')+'">WhatsApp →</a>'},
-    {keywords:['time','long','how long','wait','fast','instant'],response:'Checks: <strong>instant</strong><br>Simple unlocks: <strong>1-2h</strong><br>Premium: <strong>1-7 days</strong><br>Check Time field in <a href="live-services.html">catalog</a>'},
-    {keywords:['imei','what is','find','where'],response:'<strong>IMEI</strong> = 15-digit ID.<br>Dial <strong>*#06#</strong> or Settings → About → IMEI'},
-    {keywords:['brand','iphone','samsung','xiaomi','huawei','tecno','infinix','motorola','nokia'],response:'We support all brands: iPhone Samsung Xiaomi Huawei Tecno Infinix Nokia etc<br>👉 <a href="live-services.html">Find →</a>'},
-    {keywords:['safe','legal','legit','trust','scam','reliable'],response:'SIERRAUNLOCK 100% legal: CTIA, SL law, owner-verification, 20+ yrs, 2 hubs. No stolen devices.'},
-    {keywords:['reseller','wholesale','business','partner','bulk'],response:'Reseller: buy wholesale, sell retail, keep margin, training.<br>👉 <a href="reseller.html">Apply →</a>'},
-    {keywords:['contact','call','phone','email','reach','human','person','support','help','agent'],response:'Team: 📞 <a href="https://wa.me/23275908206">+232 75 908 206</a> Waterloo Tombo Park, Koidu City'},
-    {keywords:['hello','hi','hey','good','morning','afternoon','evening','greetings'],response:'Hello! 👋 I am <strong>SIERRA</strong> AI 24/7. Ask prices, ordering, payments, tracking.'}
+  const KB = [
+    { keywords: ['price', 'cost'], response: 'Flat <strong>$2 USD</strong> added. $0.10 → $2.10, $10 → $12<br>👉 <a href="live-services.html">Catalog →</a>' },
+    { keywords: ['track'], response: 'Enter SU- ID 👉 <a href="track.html">Track →</a>' },
+    { keywords: ['payment', 'orange', 'binance'], response: '🟠 OM +232 75 908 206 | 🟡 Binance 754378475' },
+    { keywords: ['hello', 'hi'], response: 'Hello! 👋 I am SIERRA AI. How can I help?' }
   ];
-  const root=document.createElement('div'); root.id='sierraAssistant';
-  root.innerHTML='<button id="saBtn" aria-label="Chat"><span>💬</span><span id="saBadge">1</span></button><div id="saWindow" role="dialog"><div id="saHeader"><div class="title"><div class="avatar">🤖</div><div><div class="name">SIERRA Assistant</div><div class="status"><span class="dot"></span> Online</div></div></div><button id="saClose" aria-label="Close">✕</button></div><div id="saBody"></div><div id="saQuickReplies"></div><form id="saInput"><input type="text" id="saText" placeholder="Type your question..." autocomplete="off"><button type="submit" aria-label="Send">➤</button></form></div>';
+  const root = document.createElement('div');
+  root.id = 'sierraAssistant';
+  root.innerHTML =
+    '<button id="saBtn" aria-label="Chat"><span>💬</span><span id="saBadge">1</span></button><div id="saWindow"><div id="saHeader"><div class="title"><div class="avatar">🤖</div><div><div class="name">SIERRA Assistant</div><div class="status"><span class="dot"></span> Online</div></div></div><button id="saClose">✕</button></div><div id="saBody"></div><div id="saQuickReplies"></div><form id="saInput"><input type="text" id="saText" placeholder="Ask..."><button type="submit">➤</button></form></div>';
   document.body.appendChild(root);
-  const btn=document.getElementById('saBtn'), win=document.getElementById('saWindow'), body=document.getElementById('saBody'), qr=document.getElementById('saQuickReplies'), input=document.getElementById('saInput'), txt=document.getElementById('saText'), badge=document.getElementById('saBadge'), close=document.getElementById('saClose');
-  const QUICK=[{label:'💰 Prices',q:'How much do your services cost?'},{label:'🛒 How to order',q:'How do I place an order?'},{label:'💳 Payment',q:'What payment methods do you accept?'},{label:'📍 Track order',q:'How do I track my order?'},{label:'👤 Talk to human',q:'I want to talk to a person'}];
-  function escQ(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-  function addMsg(text,who){ const m=document.createElement('div'); m.className='sa-msg '+who; m.innerHTML=text; body.appendChild(m); body.scrollTop=body.scrollHeight; return m; }
-  function showTyping(){ const m=document.createElement('div'); m.className='sa-msg bot'; m.id='saTyping'; m.innerHTML='<div class="sa-typing"><span></span><span></span><span></span></div>'; body.appendChild(m); body.scrollTop=body.scrollHeight; }
-  function removeTyping(){ const t=document.getElementById('saTyping'); if(t) t.remove(); }
-  function findResponse(text){
-    const lower=text.toLowerCase();
-    for(let i=0;i<KB.length;i++){ const entry=KB[i]; for(let j=0;j<entry.keywords.length;j++){ if(lower.indexOf(entry.keywords[j])!==-1) return entry.response; } }
-    return 'Not sure, team can help!<br>👉 <a href="https://wa.me/23275908206?text='+encodeURIComponent('Hi, question: '+text)+'">Ask WhatsApp →</a><br>• <a href="live-services.html">Browse services</a><br>• <a href="track.html">Track order</a>';
+  const btn = document.getElementById('saBtn'),
+    win = document.getElementById('saWindow'),
+    body = document.getElementById('saBody'),
+    input = document.getElementById('saInput'),
+    txt = document.getElementById('saText'),
+    badge = document.getElementById('saBadge'),
+    close = document.getElementById('saClose');
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
-  function handleUserMessage(text){ if(!text||!text.trim()) return; addMsg(escQ(text),'user'); txt.value=''; showTyping(); setTimeout(()=>{ removeTyping(); addMsg(findResponse(text),'bot'); },700); }
-  function renderQuickReplies(){ qr.innerHTML=QUICK.map(q=>'<button type="button" class="sa-qr" data-q="'+escQ(q.q)+'">'+escQ(q.label)+'</button>').join(''); qr.querySelectorAll('.sa-qr').forEach(b=>{ b.addEventListener('click',function(){ handleUserMessage(this.getAttribute('data-q')); }); }); }
-  function toggle(){ const open=win.classList.toggle('open'); btn.classList.toggle('pulse',!open); badge.style.display=open?'none':'block'; if(open) setTimeout(()=>txt.focus(),200); }
-  btn.addEventListener('click',toggle);
-  close.addEventListener('click',()=>{ win.classList.remove('open'); btn.classList.add('pulse'); });
-  input.addEventListener('submit',(e)=>{ e.preventDefault(); handleUserMessage(txt.value); });
-  if(!sessionStorage.getItem('sa_welcomed')){
-    setTimeout(()=>{ win.classList.add('open'); btn.classList.remove('pulse'); badge.style.display='none'; addMsg('👋 <strong>Welcome to SIERRAUNLOCK!</strong><br>I am <strong>SIERRA</strong> AI. How can I help today?','bot'); renderQuickReplies(); sessionStorage.setItem('sa_welcomed','1'); },3000);
-  } else { btn.classList.add('pulse'); renderQuickReplies(); }
+  function addMsg(t, who) {
+    const m = document.createElement('div');
+    m.className = 'sa-msg ' + who;
+    m.innerHTML = t;
+    body.appendChild(m);
+    body.scrollTop = body.scrollHeight;
+  }
+  function findResp(q) {
+    const l = q.toLowerCase();
+    for (const k of KB) if (k.keywords.some((w) => l.includes(w))) return k.response;
+    return 'Team: <a href="https://wa.me/23275908206">+232 75 908 206</a>';
+  }
+  btn.addEventListener('click', () => {
+    win.classList.toggle('open');
+    badge.style.display = 'none';
+  });
+  close.addEventListener('click', () => win.classList.remove('open'));
+  input.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const v = txt.value.trim();
+    if (!v) return;
+    addMsg(esc(v), 'user');
+    txt.value = '';
+    setTimeout(() => addMsg(findResp(v), 'bot'), 500);
+  });
 }
 
-/* 17 • POLISH LAYER */
+/* 16 • POLISH LAYER */
 function initPolishLayer() {
-  if(!document.getElementById('polishCss')){ const link=document.createElement('link'); link.id='polishCss'; link.rel='stylesheet'; link.href='assets/css/polish.css'; document.head.appendChild(link); }
-  document.querySelectorAll('section[class*="hero"] h1, section[class*="hero"] p,.section-head,.stat,.founder-card,.philosophy-card,.timeline-item').forEach((el,i)=>{ el.classList.add('polish-animate'); el.style.transitionDelay=(i%6)*80+'ms'; });
-  document.querySelectorAll('.grid,.tools-track,.marquee-track').forEach(el=>el.classList.add('polish-stagger'));
-  if('IntersectionObserver' in window){
-    const io=new IntersectionObserver(entries=>{ entries.forEach(en=>{ if(en.isIntersecting){ en.target.classList.add('in-view'); io.unobserve(en.target); } }); },{threshold:0.1, rootMargin:'0px 0px -50px 0px'});
-    document.querySelectorAll('.polish-animate,.polish-stagger').forEach(el=>io.observe(el));
-  } else { document.querySelectorAll('.polish-animate,.polish-stagger').forEach(el=>el.classList.add('in-view')); }
-  const header=document.querySelector('header');
-  if(header){ window.addEventListener('scroll',()=>{ if(window.pageYOffset>50) header.classList.add('scrolled'); else header.classList.remove('scrolled'); },{passive:true}); }
+  if (!document.getElementById('polishCss')) {
+    const link = document.createElement('link');
+    link.id = 'polishCss';
+    link.rel = 'stylesheet';
+    link.href = 'assets/css/polish.css';
+    document.head.appendChild(link);
+  }
+  const header = document.querySelector('.site-header');
+  if (header) {
+    window.addEventListener(
+      'scroll',
+      () => {
+        if (window.scrollY > 50) header.classList.add('scrolled');
+        else header.classList.remove('scrolled');
+      },
+      { passive: true }
+    );
+  }
 }
