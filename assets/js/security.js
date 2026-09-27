@@ -1,6 +1,6 @@
 /* =====================================================================
-   SIERRAUNLOCK • SECURITY HARDENING LAYER — security.js (v4 • CLEAN)
-   ---------------------------------------------------------------------
+   SIERRAUNLOCK • SECURITY HARDENING LAYER — security.js (v4.1 • CLEAN)
+
    WHAT IS THIS FILE?
    The "Security Shield" of the entire website. It loads FIRST on every
    page (before main.js) and protects customers from:
@@ -16,41 +16,33 @@
    • Suspicious activity detection
 
    SECTION MAP:
-   01  Frame-buster (anti-clickjacking)
-   02  Self-XSS scam warning in the console
-   03  DevTools detection (warns when console is open)
-   04  Input sanitizer (strips <> as the user types)
-   05  Form rate limiter (max 3 submissions per 5 min per form)
-   06  Noopener fixer on all external links (anti tab-nabbing)
-   07  Honeypot auto-injector (adds hidden traps to every form)
-   08  CSP meta tag injector (blocks injected malicious scripts)
-   09  Copy-paste protection on password/OTP fields
-   10  Suspicious activity logger (detects automated behavior)
-   11  Backend hook for future EXT-13 integration
-
-   SECURITY NOTES:
-   • The admin key lockout is NOT here — it lives in admin.js v3 to
-     avoid double-locking and race conditions.
-   • Honeypot fields are invisible to humans but bots auto-fill them.
-   • This file MUST load before main.js in every HTML file.
-   • v4: removed ignored frame-ancestors directive from CSP meta tag
-     (clickjacking protection still active via frame-buster in Section 01).
+   01 Frame-buster (anti-clickjacking)
+   02 Self-XSS scam warning in the console
+   03 DevTools detection (warns when console is open)
+   04 Input sanitizer (strips <> as the user types)
+   05 Form rate limiter (max 3 submissions per 5 min per form)
+   06 Noopener fixer on all external links (anti tab-nabbing)
+   07 Honeypot auto-injector (adds hidden traps to every form)
+   08 CSP meta tag injector (blocks injected malicious scripts)
+   09 Copy-paste protection on password/OTP fields
+   10 Suspicious activity logger (detects automated behavior)
+   11 Backend hook for EXT-13 integration
 
    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
    ===================================================================== */
 'use strict';
 (function () {
 
-  /* 01 • FRAME-BUSTER — nobody can embed our site in a fake page (anti-clickjacking) */
-  if (window.top !== window.self) {
-    try { window.top.location.replace(window.self.location.href); } catch (e) { /* blocked by hostile frame; stay put */ }
+  /* 01 • FRAME-BUSTER */
+  if (window.top!== window.self) {
+    try { window.top.location.replace(window.self.location.href); } catch (e) {}
   }
 
-  /* 02 • SELF-XSS SCAM WARNING — protects customers who paste "codes" in the console */
+  /* 02 • SELF-XSS WARNING */
   console.log('%cSTOP!', 'font-size:3rem;font-weight:900;color:#B00020');
-  console.log('%cThis browser area is for developers. If anyone told you to copy-paste something here — it is a SCAM trying to steal your account or device. SIERRAUNLOCK staff will NEVER ask you to do this.', 'font-size:.95rem;color:#0072C6');
+  console.log('%cThis browser area is for developers. If anyone told you to copy-paste something here — it is a SCAM. SIERRAUNLOCK staff will NEVER ask you to do this.', 'font-size:.95rem;color:#0072C6');
 
-  /* 03 • DEVTOOLS DETECTION — warns when console is open (deters casual inspection) */
+  /* 03 • DEVTOOLS DETECTION */
   let devtoolsOpen = false;
   const threshold = 160;
   setInterval(() => {
@@ -59,14 +51,14 @@
     if (widthThreshold || heightThreshold) {
       if (!devtoolsOpen) {
         devtoolsOpen = true;
-        console.warn('⚠️ Developer tools detected. Remember: never paste code here that someone gave you.');
+        console.warn('⚠️ DevTools detected. Never paste code here.');
       }
     } else {
       devtoolsOpen = false;
     }
   }, 1000);
 
-  /* 04 • INPUT SANITIZER — strips HTML injection characters as the user types */
+  /* 04 • INPUT SANITIZER */
   document.addEventListener('input', function (e) {
     const t = e.target;
     if (t.matches && t.matches('input[type="text"], input[type="search"], input[type="tel"], input:not([type]), textarea')) {
@@ -74,19 +66,19 @@
     }
   }, true);
 
-  /* 05 • FORM RATE LIMITER — max 3 submissions per 5 minutes per form */
+  /* 05 • FORM RATE LIMITER */
   document.addEventListener('submit', function (e) {
     const f = e.target;
-    if (!f || !f.id) return;
+    if (!f ||!f.id) return;
     const key = 'su_rl_' + f.id;
     const now = Date.now();
     let arr = [];
     try { arr = JSON.parse(localStorage.getItem(key) || '[]'); } catch (err) { arr = []; }
-    arr = arr.filter(ts => now - ts < 300000);  /* keep only last 5 min */
+    arr = arr.filter(ts => now - ts < 300000);
     if (arr.length >= 3) {
       e.preventDefault();
       e.stopImmediatePropagation();
-      alert('⚠️ Too many submissions in a short time. Please wait a minute and try again.');
+      alert('⚠️ Too many submissions. Please wait a minute and try again.');
       return;
     }
     arr.push(now);
@@ -95,21 +87,19 @@
 
   document.addEventListener('DOMContentLoaded', function () {
 
-    /* 06 • NOOPENER FIXER — adds rel="noopener noreferrer" to all external links (anti tab-nabbing) */
+    /* 06 • NOOPENER FIXER */
     document.querySelectorAll('a[target="_blank"]').forEach(a => {
       const rel = a.getAttribute('rel') || '';
       if (!rel.includes('noopener')) a.setAttribute('rel', (rel + ' noopener noreferrer').trim());
     });
 
-    /* 07 • HONEYPOT AUTO-INJECTOR — adds hidden trap fields to every form */
-    /* Bots auto-fill hidden fields; humans never see them. If filled = bot = reject. */
+    /* 07 • HONEYPOT AUTO-INJECTOR */
     document.querySelectorAll('form').forEach(f => {
       const hp1 = document.createElement('input');
       hp1.type = 'text'; hp1.name = 'website_url'; hp1.id = f.id + '_hp_url';
       hp1.tabIndex = -1; hp1.autocomplete = 'off';
       hp1.style.cssText = 'position:absolute!important;left:-9999px!important;top:auto;width:1px;height:1px;overflow:hidden';
       f.appendChild(hp1);
-
       const hp2 = document.createElement('input');
       hp2.type = 'text'; hp2.name = 'company_website'; hp2.id = f.id + '_hp_company';
       hp2.tabIndex = -1; hp2.autocomplete = 'off';
@@ -117,33 +107,31 @@
       f.appendChild(hp2);
     });
 
-    /* 08 • CSP META TAG INJECTOR — blocks injected malicious scripts (basic XSS protection) */
-    /* v4: frame-ancestors directive removed (ignored in meta tags; clickjacking protection
-       still enforced by the frame-buster JavaScript in Section 01 above). */
+    /* 08 • CSP META TAG — v4.1 fixed */
     if (!document.querySelector('meta[http-equiv="Content-Security-Policy"]')) {
       const csp = document.createElement('meta');
       csp.setAttribute('http-equiv', 'Content-Security-Policy');
-      csp.setAttribute('content', "default-src 'self' 'unsafe-inline' 'unsafe-eval' https: data: blob:; img-src 'self' https: data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net https://api.binance.com https://cdn.emailjs.com; connect-src 'self' https://sierraunlock-tech-1-4um3.onrender.com https://api.binance.com https://api.emailjs.com");
+      csp.setAttribute('content', "default-src 'self' 'unsafe-inline' https: data: blob:; img-src 'self' https: data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net https://cdn.emailjs.com; connect-src 'self' https://sierraunlock-tech-1-4um3.onrender.com https://api.binance.com https://api.emailjs.com https://api.ipify.org");
       document.head.appendChild(csp);
     }
 
-    /* 09 • COPY-PASTE PROTECTION — blocks paste on password/OTP fields (prevents credential stuffing) */
+    /* 09 • COPY-PASTE PROTECTION */
     document.querySelectorAll('input[type="password"], input[id*="Code"], input[id*="Pin"], input[id*="OTP"]').forEach(el => {
       el.addEventListener('paste', (e) => {
         e.preventDefault();
-        alert('⚠️ For your security, please type this manually. Copy-paste is disabled on sensitive fields.');
+        alert('⚠️ For security, please type this manually. Paste is disabled here.');
       });
     });
 
-    /* 10 • SUSPICIOUS ACTIVITY LOGGER — detects rapid automated behavior */
+    /* 10 • SUSPICIOUS ACTIVITY LOGGER */
     let clickCount = 0;
     let lastClickTime = Date.now();
     document.addEventListener('click', () => {
       const now = Date.now();
-      if (now - lastClickTime < 100) {  /* clicks faster than 100ms = suspicious */
+      if (now - lastClickTime < 100) {
         clickCount++;
         if (clickCount > 20) {
-          console.warn('⚠️ Suspicious rapid clicking detected. Automated behavior?');
+          console.warn('⚠️ Rapid clicking detected.');
           clickCount = 0;
         }
       } else {
@@ -153,6 +141,6 @@
     });
   });
 
-  /* 11 • HOOK FOR THE FUTURE BACKEND (EXT-13) — signals security layer is ready */
-  window.SU_SEC = { layer: 'frontend-v4', ready: true };
+  /* 11 • BACKEND HOOK */
+  window.SU_SEC = { layer: 'frontend-v4.1', ready: true };
 })();
