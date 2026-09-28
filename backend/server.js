@@ -1,12 +1,14 @@
 /* =====================================================================
-   SIERRAUNLOCK • BACKEND API — server.js (v3.38 • DHRU + CDR + NO-STUCK)
+   SIERRAUNLOCK • BACKEND API — server.js (v3.39 • DHRU + CDR + NO-STUCK + REGISTERED CUSTOMERS)
 
-   v3.38 fixes:
-   • Keeps v3.37 exact pricing (no flat fee) + serviceId required
+   v3.39 fixes:
+   • Keeps v3.38 exact pricing (no flat fee) + serviceId required
    • FIXES STUCK: /api/track/:id now polls live getimeiorder if pending
    • Background cron every 60s syncs all pending orders (CDR miss safety)
    • Parses STATUS 4=completed and saves CODE to cdrCode
    • CORS fix: allows /track/* subpaths
+   • NEW: /api/admin/customers — Registered Customers table for Founder Desk
+         GET list + POST block/unblock + DELETE
    • All features intact: Vault, Wallet, Auth, Binance webhook, CDR webhook
    ===================================================================== */
 
@@ -121,7 +123,7 @@ const FALLBACK_ORIGINS = [
   'https://sierraunlock-tech.github.io'
 ];
 const ALLOWED = process.env.FRONTEND_URL
- ? process.env.FRONTEND_URL.split(',').map(s => s.trim()).filter(Boolean)
+? process.env.FRONTEND_URL.split(',').map(s => s.trim()).filter(Boolean)
   : FALLBACK_ORIGINS;
 app.use(cors({
   origin: (origin, cb) => {
@@ -137,7 +139,10 @@ app.use(rateLimit({ windowMs: 60 * 1000, max: 60 }));
 const strict = rateLimit({ windowMs: 60 * 1000, max: 6 });
 
 /* 04 • AUTH */
-const adminOk = (req) =>!!process.env.ADMIN_TOKEN && req.get('x-admin-token') === process.env.ADMIN_TOKEN;
+const adminOk = (req) => {
+  const token = req.get('x-admin-token') || (req.get('authorization')||'').replace(/^Bearer\s+/i,'');
+  return!!process.env.ADMIN_TOKEN && token === process.env.ADMIN_TOKEN;
+};
 const verificationCodes = new Map();
 const resetCodes = new Map();
 const TRUSTED_PHONES = (process.env.OM_TRUSTED_PHONES || '').split(',').map(s => s.replace(/\D/g, '')).filter(Boolean);
@@ -185,9 +190,9 @@ const adminRefundSchema = Joi.object({
 });
 
 /* 06 • PUBLIC HEALTH */
-app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.38.0', docs: '/api/health' }));
+app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.39.0', docs: '/api/health' }));
 app.get('/api/health', (req, res) => res.json({
-  ok: true, service: 'SIERRAUNLOCK API', version: '3.38.0',
+  ok: true, service: 'SIERRAUNLOCK API', version: '3.39.0',
   mode: fuReady()? 'connected-to-fastunlockers' : 'manual-mode',
   vault: ghReady()? 'github' : 'local-only',
   catalogs: ['imei', 'file', 'server'],
@@ -219,6 +224,10 @@ app.post('/api/unlock', strict, async (req, res) => {
     return res.status(400).json({ ok: false, error: 'File/Server orders need email + details.' });
   }
   const db = load();
+  // block check
+  const phoneNorm = String(value.phone||'').replace(/\D/g,'');
+  const user = db.users[phoneNorm];
+  if (user && user.blocked) return res.status(403).json({ ok:false, error:'Your account is blocked. Contact founder.' });
   const job = {
     id: 'SU-' + Date.now(), type,
     imei: value.imei || '', details: value.details || '',
@@ -346,7 +355,7 @@ app.post('/api/wallet/topup', strict, (req, res) => {
   res.json({
     ok: true, topup: tp.id,
     pay_to: method === 'orange_money'
-     ? 'Orange Money +232 75 908 206 (Alhassan)'
+    ? 'Orange Money +232 75 908 206 (Alhassan)'
       : 'Binance Pay ID 754378475',
     note: 'Send the amount now, include ref ' + tp.id + '. Binance auto-approves via webhook; Orange Money needs one founder click.'
   });
@@ -357,6 +366,8 @@ app.post('/api/wallet/pay', strict, async (req, res) => {
   const phone = String(b.phone || '').replace(/\D/g, '');
   const db = load(); db.wallets = db.wallets || {};
   const w = db.wallets[phone] = db.wallets[phone] || { balance: 0, tx: [] };
+  const user = db.users[phone];
+  if (user && user.blocked) return res.status(403).json({ ok:false, error:'Your account is BLOCKED by founder. Contact support.' });
 
   const services = fuReady()? await fetchCatalog() : null;
   const svc = (services || []).find(s => s.id === String(b.serviceId));
@@ -445,6 +456,118 @@ app.post('/api/admin/wallet/reject', strict, (req, res) => {
   res.json({ ok: true, topup: tp.id });
 });
 
+/* 08f • REGISTERED CUSTOMERS — NEW v3.39 — FOR FOUNDER DESK */
+app.get('/api/admin/customers', strict, (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  const db = load();
+  const users = db.users || {};
+  const jobs = db.jobs || [];
+  const wallets = db.wallets || {};
+
+  // aggregate per phone
+  const agg = {};
+  jobs.forEach(j=>{
+    const ph = String(j.phone||'').replace(/\D/g,'');
+    if(!ph) return;
+    if(!agg[ph]) agg[ph] = { totalOrders:0, totalSpent:0, lastService:'—', lastImei:'', lastDate:'' };
+    agg[ph].totalOrders += 1;
+    // estimate spent from wallet debit tx or paid jobs
+    if(j.payment_status==='paid'){
+      // try to find price from serviceId if catalog cached, else fallback 0
+      // we sum from wallet tx later
+      agg[ph].lastService = j.serviceName || j.service || agg[ph].lastService;
+      agg[ph].lastImei = j.imei || j.details?.slice(0,20) || '';
+      agg[ph].lastDate = j.created || agg[ph].lastDate;
+    }
+  });
+  // calculate spent from wallet debit
+  Object.keys(wallets).forEach(ph=>{
+    const tx = wallets[ph]?.tx || [];
+    let spent = 0;
+    tx.forEach(t=>{ if(t.type==='debit') spent += Number(t.amount||0); });
+    if(agg[ph]) agg[ph].totalSpent = Math.round(spent*100)/100;
+  });
+
+  const customers = Object.values(users).map(u=>{
+    const ph = String(u.phone||'').replace(/\D/g,'');
+    const stat = agg[ph] || { totalOrders: jobs.filter(j=>String(j.phone||'').replace(/\D/g,'')===ph).length, totalSpent:0, lastService:'—', lastImei:'', lastDate:'' };
+    // if totalSpent still 0, calculate from jobs that are paid and have price guess
+    if(!stat.totalSpent && stat.totalOrders>0){
+      // fallback: count $2 per job estimate if no wallet
+      stat.totalSpent = 0;
+    }
+    return {
+      id: u.phone,
+      _id: u.phone,
+      phone: u.phone,
+      name: u.name || u.fullName || '',
+      email: u.email || '',
+      created: u.createdAt || u.created || '',
+      createdAt: u.createdAt || u.created || '',
+      totalOrders: stat.totalOrders || 0,
+      totalSpent: stat.totalSpent || 0,
+      lastService: stat.lastService || '—',
+      lastOrder: stat.lastService || '—',
+      lastOrderService: stat.lastService || '—',
+      lastImei: stat.lastImei || '',
+      blocked:!!u.blocked
+    };
+  }).sort((a,b)=> new Date(b.createdAt||0) - new Date(a.createdAt||0));
+
+  // also include phones that ordered but never registered (guest orders)
+  Object.keys(agg).forEach(ph=>{
+    if(!users[ph]){
+      customers.push({
+        id: ph, _id: ph, phone: ph, name: '(Guest) '+ph, email: '',
+        created: agg[ph].lastDate||'', createdAt: agg[ph].lastDate||'',
+        totalOrders: agg[ph].totalOrders, totalSpent: agg[ph].totalSpent,
+        lastService: agg[ph].lastService, lastOrder: agg[ph].lastService,
+        lastOrderService: agg[ph].lastService, lastImei: agg[ph].lastImei,
+        blocked: false, guest:true
+      });
+    }
+  });
+
+  res.json({ ok:true, customers, count: customers.length });
+});
+
+app.post('/api/admin/customers/:id/block', strict, (req,res)=>{
+  if (!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' });
+  const id = String(req.params.id||'').replace(/\D/g,'');
+  const db = load(); db.users = db.users||{};
+  const u = db.users[id];
+  if(!u) return res.status(404).json({ ok:false, error:'Customer not found.' });
+  u.blocked = true; save(db);
+  res.json({ ok:true, id, blocked:true });
+});
+
+app.post('/api/admin/customers/:id/unblock', strict, (req,res)=>{
+  if (!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' });
+  const id = String(req.params.id||'').replace(/\D/g,'');
+  const db = load(); db.users = db.users||{};
+  const u = db.users[id];
+  if(!u) return res.status(404).json({ ok:false, error:'Customer not found.' });
+  u.blocked = false; save(db);
+  res.json({ ok:true, id, blocked:false });
+});
+
+app.delete('/api/admin/customers/:id', strict, (req,res)=>{
+  if (!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' });
+  const id = String(req.params.id||'').replace(/\D/g,'');
+  const db = load(); db.users = db.users||{};
+  if(!db.users[id]) return res.status(404).json({ ok:false, error:'Customer not found.' });
+  const del = db.users[id];
+  delete db.users[id];
+  // keep wallet/jobs for accounting but block sessions
+  db.sessions = db.sessions||{};
+  Object.keys(db.sessions).forEach(t=>{ if(db.sessions[t].phone===id) delete db.sessions[t]; });
+  db.adminLog = db.adminLog||[];
+  db.adminLog.unshift({ action:'customer-delete', phone:id, email:del.email, at:new Date().toISOString() });
+  db.adminLog = db.adminLog.slice(0,200);
+  save(db);
+  res.json({ ok:true, deleted:id });
+});
+
 /* 09 • BINANCE WEBHOOK */
 app.post('/api/webhook/binance', express.raw({ type: '*/*' }), async (req, res) => {
   const secret = process.env.BINANCE_WEBHOOK_SECRET;
@@ -528,18 +651,18 @@ function fuReady() { return!!(FU.base && FU.key && FU.username); }
 
 function xmlEscape(value) {
   return String(value)
-   .replace(/&/g, '&amp;')
-   .replace(/</g, '&lt;')
-   .replace(/>/g, '&gt;')
-   .replace(/"/g, '&quot;')
-   .replace(/'/g, '&apos;');
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&apos;');
 }
 
 function dhruParameters(extraParams) {
   const entries = Object.entries(extraParams || {})
-   .filter(([, value]) => value!== undefined && value!== null && value!== '')
-   .map(([key, value]) => `<${String(key).toUpperCase()}>${xmlEscape(value)}</${String(key).toUpperCase()}>`)
-   .join('');
+  .filter(([, value]) => value!== undefined && value!== null && value!== '')
+  .map(([key, value]) => `<${String(key).toUpperCase()}>${xmlEscape(value)}</${String(key).toUpperCase()}>`)
+  .join('');
   return `<PARAMETERS>${entries}</PARAMETERS>`;
 }
 
@@ -1026,7 +1149,7 @@ app.post('/api/auth/verify', strict, (req, res) => {
   if (rec.code!== String(code).trim()) return res.status(400).json({ ok: false, error: 'Wrong code. Try again.' });
   const db = load(); db.users = db.users || {};
   const hash = bcrypt.hashSync(rec.password, 10);
-  db.users[p] = { phone: p, email: rec.email, name: rec.name, passwordHash: hash, verified: true, createdAt: new Date().toISOString(), lastLogin: new Date().toISOString() };
+  db.users[p] = { phone: p, email: rec.email, name: rec.name, passwordHash: hash, verified: true, blocked:false, createdAt: new Date().toISOString(), lastLogin: new Date().toISOString() };
   verificationCodes.delete(p);
   const token = 'u-' + p + '-' + Date.now();
   db.sessions = db.sessions || {}; db.sessions[token] = { phone: p, created: new Date().toISOString() }; save(db);
@@ -1040,6 +1163,7 @@ app.post('/api/auth/login', strict, (req, res) => {
   if (/^\d{9,}$/.test(p)) { user = db.users[p]; phone = p; }
   else { const entry = Object.entries(db.users).find(([k, u]) => u.email && u.email.toLowerCase() === String(emailOrPhone).toLowerCase()); if (entry) { phone = entry[0]; user = entry[1]; } }
   if (!user) return res.status(401).json({ ok: false, error: 'Account not found. Please register.' });
+  if (user.blocked) return res.status(403).json({ ok:false, error:'Account BLOCKED by founder.' });
   if (!bcrypt.compareSync(password || '', user.passwordHash)) return res.status(401).json({ ok: false, error: 'Wrong password.' });
   user.lastLogin = new Date().toISOString(); db.sessions = db.sessions || {}; const token = 'u-' + phone + '-' + Date.now(); db.sessions[token] = { phone, created: new Date().toISOString() }; save(db);
   res.json({ ok: true, token, user: { phone, email: user.email, name: user.name } });
@@ -1055,14 +1179,14 @@ app.post('/api/auth/logout', strict, (req, res) => { const token = req.get('x-us
 app.post('/api/auth/resend', strict, async (req, res) => { const { phone } = req.body || {}; const p = String(phone || '').replace(/\D/g, ''); const rec = verificationCodes.get(p); if (!rec) return res.status(400).json({ ok: false, error: 'No pending verification. Please register again.' }); rec.code = String(Math.floor(100000 + Math.random() * 900000)); rec.expires = Date.now() + 600000; verificationCodes.set(p, rec); const sent = await sendVerificationEmail(rec.email, rec.name, rec.code); res.json(sent.ok? { ok: true, note: 'New code sent to ' + rec.email } : { ok: false, error: 'Email send failed. ' + (sent.detail || '') }); });
 app.post('/api/auth/forgot', strict, async (req, res) => { const { emailOrPhone } = req.body || {}; const p = String(emailOrPhone || '').replace(/\D/g, ''); const db = load(); db.users = db.users || {}; let user = null, phone = null; if (/^\d{9,}$/.test(p)) { user = db.users[p]; phone = p; } else { const entry = Object.entries(db.users).find(([k, u]) => u.email && u.email.toLowerCase() === String(emailOrPhone).toLowerCase()); if (entry) { phone = entry[0]; user = entry[1]; } } if (user && phone) { const code = String(Math.floor(100000 + Math.random() * 900000)); resetCodes.set(phone, { code, expires: Date.now() + 600000 }); await sendVerificationEmail(user.email, user.name, code); } res.json({ ok: true, note: 'If that account exists, a 6-digit reset code was sent to its email.' }); });
 app.post('/api/auth/reset', strict, (req, res) => { const { emailOrPhone, code, newPassword } = req.body || {}; const p = String(emailOrPhone || '').replace(/\D/g, ''); const db = load(); db.users = db.users || {}; let phone = null; if (/^\d{9,}$/.test(p) && db.users[p]) phone = p; else { const entry = Object.entries(db.users).find(([k, u]) => u.email && u.email.toLowerCase() === String(emailOrPhone).toLowerCase()); if (entry) phone = entry[0]; } if (!phone) return res.status(400).json({ ok: false, error: 'Account not found.' }); const rec = resetCodes.get(phone); if (!rec) return res.status(400).json({ ok: false, error: 'No reset requested. Click Forgot Password first.' }); if (Date.now() > rec.expires) { resetCodes.delete(phone); return res.status(400).json({ ok: false, error: 'Code expired. Request a new one.' }); } if (rec.code!== String(code).trim()) return res.status(400).json({ ok: false, error: 'Wrong code.' }); if (!newPassword || newPassword.length < 6) return res.status(400).json({ ok: false, error: 'New password min 6 chars.' }); db.users[phone].passwordHash = bcrypt.hashSync(newPassword, 10); resetCodes.delete(phone); db.sessions = db.sessions || {}; Object.keys(db.sessions).forEach(t => { if (db.sessions[t].phone === phone) delete db.sessions[t]; }); save(db); res.json({ ok: true, note: 'Password changed. Sign in with your new password.' }); });
-app.get('/api/admin/users', strict, (req, res) => { if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' }); const db = load(); db.users = db.users || {}; const list = Object.values(db.users).map(u => ({ phone: u.phone, email: u.email, name: u.name, createdAt: u.createdAt, lastLogin: u.lastLogin, balance: ((db.wallets || {})[u.phone] || {}).balance || 0, orders: (db.jobs || []).filter(j => (j.phone || '').replace(/\D/g, '') === u.phone).length })); res.json({ ok: true, count: list.length, users: list }); });
+app.get('/api/admin/users', strict, (req, res) => { if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' }); const db = load(); db.users = db.users || {}; const list = Object.values(db.users).map(u => ({ phone: u.phone, email: u.email, name: u.name, createdAt: u.createdAt, lastLogin: u.lastLogin, balance: ((db.wallets || {})[u.phone] || {}).balance || 0, orders: (db.jobs || []).filter(j => (j.phone || '').replace(/\D/g, '') === u.phone).length, blocked:!!u.blocked })); res.json({ ok: true, count: list.length, users: list }); });
 app.post('/api/admin/user/delete', strict, (req, res) => { if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' }); const { phone, reason } = req.body || {}; const p = String(phone || '').replace(/\D/g, ''); if (!p) return res.status(400).json({ ok: false, error: 'Phone required.' }); const db = load(); db.users = db.users || {}; if (!db.users[p]) return res.status(404).json({ ok: false, error: 'Account not found.' }); const deleted = db.users[p]; delete db.users[p]; db.sessions = db.sessions || {}; Object.keys(db.sessions).forEach(t => { if (db.sessions[t].phone === p) delete db.sessions[t]; }); db.adminLog = db.adminLog || []; db.adminLog.unshift({ action: 'user-delete', phone: p, email: deleted.email, reason: String(reason || ''), at: new Date().toISOString() }); db.adminLog = db.adminLog.slice(0, 200); save(db); res.json({ ok: true, note: 'Account deleted. Wallet/order records kept for accounting.' }); });
 
 /* 14 • BOOT */
 app.use((req, res) => res.status(404).json({ ok: false, error: 'Not found.' }));
 app.use((err, req, res, next) => { console.error('[ERR]', err.message); res.status(err.status || 500).json({ ok: false, error: 'Server error.' }); });
 app.listen(PORT, () => {
-  console.log(`SIERRAUNLOCK API v3.38 online on :${PORT} — mode: ${fuReady()? 'CONNECTED' : 'MANUAL'}`);
+  console.log(`SIERRAUNLOCK API v3.39 online on :${PORT} — mode: ${fuReady()? 'CONNECTED' : 'MANUAL'}`);
   console.log(` Vault: ${ghReady()? 'GitHub (' + GH.repo + ')' : 'LOCAL ONLY'}`);
-  console.log(` Fix: track live poll + cron 60s - no more SENT_TO_SERVER stuck`);
+  console.log(` Fix: track live poll + cron 60s + registered customers table`);
 });
