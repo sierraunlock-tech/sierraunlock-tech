@@ -1,14 +1,10 @@
 /* =====================================================================
-   SIERRAUNLOCK • BACKEND API — server.js (v3.40 • DHRU + CDR + NO-STUCK + REGISTERED CUSTOMERS + REJECTED FIX)
-
-   v3.40 fixes for fastunlock.us parity:
-   • FIX: STATUS 3 / Rejected / Not Eligible was stuck as processing — now FAILED
-   • FIX: normalizeStatus() handles 3=rejected, 4=solved, Not Eligible string
-   • FIX: /api/track/:id live polls and returns failed with Not Eligible code immediately
-   • FIX: CDR webhook now accepts?key= in URL (your URL format) + body + header
-   • FIX: Background cron 30s (was 60s) + auto-refund wallet on Rejected like fastunlock.us
-   • Keeps: Vault, Wallet, Auth, Binance webhook, Registered Customers table
-   • All 1192 lines intact, no break
+   SIERRAUNLOCK • BACKEND API — server.js (v3.41 • DHRU + CDR + NO-STUCK)
+   v3.41 FINAL FIX:
+   • FIX 405: GET /api/webhook/cdr now returns 200 OK (was 405)
+   • FastUnlockers pings with GET -> now alive -> will POST data
+   • Rejected / Not Eligible -> FAILED + auto-refund wallet
+   • Cron 30s + Track live poll = fastunlock.us parity — no delay
    ===================================================================== */
 
 require('dotenv').config();
@@ -44,7 +40,7 @@ const save = (d) => {
 };
 
 const GH = { token: process.env.GITHUB_TOKEN || '', repo: process.env.GITHUB_DATA_REPO || '' };
-const ghReady = () =>!!(GH.token && GH.repo);
+const ghReady = () => !!(GH.token && GH.repo);
 let ghPushTimer = null;
 let ghLastSha = '';
 
@@ -81,7 +77,7 @@ async function ghPush() {
       if (g.ok) { const gj = await g.json(); ghLastSha = gj.sha || ''; r = await doPut(ghLastSha); }
     }
     if (r.ok) { const j = await r.json(); if (j && j.content && j.content.sha) ghLastSha = j.content.sha; }
-  } catch (e) { /* silent */ }
+  } catch (e) {}
 }
 function ghPushSoon() {
   if (!ghReady()) return;
@@ -104,7 +100,7 @@ else { const db = load(); if (!db.rate || db.rate < 20) { db.rate = DEFAULT_RATE
 
 app.use(helmet());
 const FALLBACK_ORIGINS = ['https://sierraunlock.com','https://www.sierraunlock.com','http://sierraunlock.com','https://sierraunlock.live','https://www.sierraunlock.live','http://sierraunlock.live','https://sierraunlock-tech.github.io'];
-const ALLOWED = process.env.FRONTEND_URL? process.env.FRONTEND_URL.split(',').map(s=>s.trim()).filter(Boolean) : FALLBACK_ORIGINS;
+const ALLOWED = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',').map(s=>s.trim()).filter(Boolean) : FALLBACK_ORIGINS;
 app.use(cors({ origin: (origin, cb) => { if (!origin) return cb(null, true); if (ALLOWED.some(o => origin === o || origin.startsWith(o))) return cb(null, true); cb(new Error('Not allowed by CORS')); }, credentials:false }));
 app.use(express.json({ limit:'100kb' }));
 app.use(morgan('dev'));
@@ -113,7 +109,7 @@ const strict = rateLimit({ windowMs:60*1000, max:6 });
 
 const adminOk = (req) => {
   const token = req.get('x-admin-token') || (req.get('authorization')||'').replace(/^Bearer\s+/i,'');
-  return!!process.env.ADMIN_TOKEN && token === process.env.ADMIN_TOKEN;
+  return !!process.env.ADMIN_TOKEN && token === process.env.ADMIN_TOKEN;
 };
 const verificationCodes = new Map();
 const resetCodes = new Map();
@@ -141,8 +137,8 @@ const orderSchema = Joi.object({ type: Joi.string().valid('imei','file','server'
 const adminPaySchema = Joi.object({ id: Joi.string().trim().min(3).max(40).required(), method: Joi.string().valid('orange_money','binance','cash','wallet').required() });
 const adminRefundSchema = Joi.object({ id: Joi.string().trim().min(3).max(40).required(), reason: Joi.string().trim().min(5).max(500).required() });
 
-app.get('/', (req,res)=>res.json({ ok:true, service:'SIERRAUNLOCK API', version:'3.40.0', docs:'/api/health' }));
-app.get('/api/health', (req,res)=>res.json({ ok:true, service:'SIERRAUNLOCK API', version:'3.40.0', mode:fuReady()?'connected-to-fastunlockers':'manual-mode', vault:ghReady()?'github':'local-only', catalogs:['imei','file','server'], rate:load().rate, time:new Date().toISOString(), cdr: process.env.CDR_REPLY_KEY? 'configured' : 'not set' }));
+app.get('/', (req,res)=>res.json({ ok:true, service:'SIERRAUNLOCK API', version:'3.41.0', docs:'/api/health' }));
+app.get('/api/health', (req,res)=>res.json({ ok:true, service:'SIERRAUNLOCK API', version:'3.41.0', mode:fuReady()?'connected-to-fastunlockers':'manual-mode', vault:ghReady()?'github':'local-only', catalogs:['imei','file','server'], rate:load().rate, time:new Date().toISOString(), cdr: process.env.CDR_REPLY_KEY? 'configured' : 'not set' }));
 app.get('/api/rates', (req,res)=>res.json({ ok:true, slePerUsd:load().rate }));
 app.get('/api/my-ip', strict, async (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); try{ const r=await fetch('https://api.ipify.org?format=json'); const j=await r.json(); res.json({ ok:true, serverPublicIp:j.ip }); }catch(e){ res.status(502).json({ ok:false, error:'ipify unreachable' }); } });
 
@@ -150,8 +146,8 @@ app.post('/api/unlock', strict, async (req,res)=>{
   const { error, value } = unlockSchema.validate(req.body||{});
   if(error) return res.status(400).json({ ok:false, error:error.details[0].message });
   const type=value.type||'imei';
-  if(type==='imei' &&!/^\d{15}$/.test(value.imei||'')) return res.status(400).json({ ok:false, error:'IMEI must be exactly 15 digits.' });
-  if(type!=='imei' && (!value.details||value.details.trim().length<3) &&!value.f_email) return res.status(400).json({ ok:false, error:'File/Server orders need email + details.' });
+  if(type==='imei' && !/^\d{15}$/.test(value.imei||'')) return res.status(400).json({ ok:false, error:'IMEI must be exactly 15 digits.' });
+  if(type!=='imei' && (!value.details||value.details.trim().length<3) && !value.f_email) return res.status(400).json({ ok:false, error:'File/Server orders need email + details.' });
   const db=load(); const phoneNorm=String(value.phone||'').replace(/\D/g,''); const user=db.users[phoneNorm]; if(user && user.blocked) return res.status(403).json({ ok:false, error:'Your account is blocked.' });
   const job={ id:'SU-'+Date.now(), type, imei:value.imei||'', details:value.details||'', f_email:value.f_email||'', f_username:value.f_username||'', f_accountid:value.f_accountid||'', f_quantity:value.f_quantity||'', f_bulk:value.f_bulk||'', brand:value.brand, model:value.model, phone:value.phone, serviceId:value.serviceId||'', serviceName:value.serviceName||'', status:'queued', payment_status:'unpaid', payment_method:null, paid_at:null, refunded_at:null, refund_reason:null, created:new Date().toISOString() };
   db.jobs.unshift(job); save(db); res.json({ ok:true, job:job.id, status:job.status, type, note:'Order received. Complete payment to start processing.' });
@@ -177,7 +173,7 @@ app.post('/api/wallet/pay', strict, async (req,res)=>{
   const b=req.body||{}; const phone=String(b.phone||'').replace(/\D/g,''); const db=load(); db.wallets=db.wallets||{}; const w=db.wallets[phone]=db.wallets[phone]||{ balance:0, tx:[] }; const user=db.users[phone]; if(user && user.blocked) return res.status(403).json({ ok:false, error:'Your account is BLOCKED.' });
   const services=fuReady()? await fetchCatalog():null; const svc=(services||[]).find(s=>s.id===String(b.serviceId)); if(!svc) return res.status(400).json({ ok:false, error:'Service not found.' });
   const price=svc.priceUsd; if(w.balance<price) return res.status(400).json({ ok:false, error:'Insufficient balance. Need $'+price+' — you have $'+w.balance, needed:price, balance:w.balance });
-  const type=['imei','file','server'].includes(b.type)? b.type:'imei'; if(type==='imei' &&!/^\d{15}$/.test(b.imei||'')) return res.status(400).json({ ok:false, error:'IMEI must be 15 digits.' }); if(type!=='imei' &&!b.f_email && String(b.details||'').trim().length<3) return res.status(400).json({ ok:false, error:'Email/details required.' });
+  const type=['imei','file','server'].includes(b.type)? b.type:'imei'; if(type==='imei' && !/^\d{15}$/.test(b.imei||'')) return res.status(400).json({ ok:false, error:'IMEI must be 15 digits.' }); if(type!=='imei' && !b.f_email && String(b.details||'').trim().length<3) return res.status(400).json({ ok:false, error:'Email/details required.' });
   w.balance=Math.round((w.balance-price)*100)/100;
   const job={ id:'SU-'+Date.now(), type, imei:b.imei||'', details:b.details||'', f_email:b.f_email||'', f_username:b.f_username||'', f_accountid:b.f_accountid||'', f_quantity:b.f_quantity||'', f_bulk:b.f_bulk||'', brand:b.brand||'', model:b.model||'', phone, serviceId:svc.id, serviceName:svc.name, status:'sent-to-server', payment_status:'paid', payment_method:'wallet', paid_at:new Date().toISOString(), created:new Date().toISOString() };
   let autoRefunded=false; if(fuReady()){ const up=await placeUpstream(job); if(up.ok){ job.upstream=up.r.json; saveUpstreamIds(job, up); } else { job.status='failed'; job.upstream=up.r.json||up.r.text; w.balance=Math.round((w.balance+price)*100)/100; w.tx.unshift({ type:'credit', amount:price, ref:'AUTO-REFUND '+job.id, date:new Date().toISOString() }); autoRefunded=true; } }
@@ -187,7 +183,6 @@ app.get('/api/admin/wallet/topups', strict, (req,res)=>{ if(!adminOk(req)) retur
 app.post('/api/admin/wallet/approve', strict, (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const id=String((req.body||{}).id||''); const db=load(); db.wallets=db.wallets||{}; db.topups=db.topups||[]; const tp=db.topups.find(t=>t.id===id); if(!tp) return res.status(404).json({ ok:false, error:'Top-up not found.' }); if(tp.status!=='pending') return res.status(400).json({ ok:false, error:'Already processed.' }); tp.status='approved'; tp.approvedAt=new Date().toISOString(); const w=db.wallets[tp.phone]=db.wallets[tp.phone]||{ balance:0, tx:[] }; w.balance=Math.round((w.balance+tp.amount)*100)/100; w.tx.unshift({ type:'credit', amount:tp.amount, ref:tp.id, date:new Date().toISOString() }); save(db); res.json({ ok:true, balance:w.balance, topup:tp.id }); });
 app.post('/api/admin/wallet/reject', strict, (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const id=String((req.body||{}).id||''); const db=load(); db.topups=db.topups||[]; const tp=db.topups.find(t=>t.id===id); if(!tp||tp.status!=='pending') return res.status(400).json({ ok:false, error:'Not found or already processed.' }); tp.status='rejected'; tp.reason=String((req.body||{}).reason||''); save(db); res.json({ ok:true, topup:tp.id }); });
 
-/* REGISTERED CUSTOMERS v3.39+ */
 app.get('/api/admin/customers', strict, (req,res)=>{
   if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' });
   const db=load(); const users=db.users||{}; const jobs=db.jobs||[]; const wallets=db.wallets||{}; const agg={};
@@ -201,7 +196,6 @@ app.post('/api/admin/customers/:id/block', strict, (req,res)=>{ if(!adminOk(req)
 app.post('/api/admin/customers/:id/unblock', strict, (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const id=String(req.params.id||'').replace(/\D/g,''); const db=load(); db.users=db.users||{}; const u=db.users[id]; if(!u) return res.status(404).json({ ok:false, error:'Customer not found.' }); u.blocked=false; save(db); res.json({ ok:true, id, blocked:false }); });
 app.delete('/api/admin/customers/:id', strict, (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const id=String(req.params.id||'').replace(/\D/g,''); const db=load(); db.users=db.users||{}; if(!db.users[id]) return res.status(404).json({ ok:false, error:'Customer not found.' }); const del=db.users[id]; delete db.users[id]; db.sessions=db.sessions||{}; Object.keys(db.sessions).forEach(t=>{ if(db.sessions[t].phone===id) delete db.sessions[t]; }); db.adminLog=db.adminLog||[]; db.adminLog.unshift({ action:'customer-delete', phone:id, email:del.email, at:new Date().toISOString() }); db.adminLog=db.adminLog.slice(0,200); save(db); res.json({ ok:true, deleted:id }); });
 
-/* BINANCE WEBHOOK */
 app.post('/api/webhook/binance', express.raw({ type:'*/*' }), async (req,res)=>{
   const secret=process.env.BINANCE_WEBHOOK_SECRET; if(secret){ const sig=req.get('x-binance-signature')||''; const hmac=crypto.createHmac('sha256', secret).update(req.body).digest('hex'); let ok=false; try{ ok=sig.length===hmac.length && crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(hmac)); }catch(e){ ok=false; } if(!ok) return res.status(401).json({ ok:false, error:'Bad signature.' }); }
   let payload=null; try{ payload=JSON.parse(req.body.toString()); }catch(e){} if(!payload) return res.status(400).json({ ok:false, error:'Invalid payload.' });
@@ -213,58 +207,90 @@ app.post('/api/webhook/binance', express.raw({ type:'*/*' }), async (req,res)=>{
   if(fuReady()){ const up=await placeUpstream(job); if(up.ok){ job.upstream=up.r.json; saveUpstreamIds(job, up); } else { job.status='failed'; job.upstream=up.r.json||up.r.text; } } save(db); res.json({ ok:true, received:true, job:job.id, auto_fulfilled:true });
 });
 
-/* CDR WEBHOOK — v3.40 FIX: Accepts?key=, body, header — no more 503 if key missing in body */
-app.get('/api/webhook/cdr', (req,res)=>res.status(405).json({ ok:false, error:'CDR webhook requires POST. Use POST with key SU-CDR-7f3a9c2e8b1d' }));
-app.post('/api/webhook/cdr', express.urlencoded({ extended:true }), (req,res)=>{
-  const p=req.body||{};
-  // v3.40: Accept key from query?key=,?cdrkey=,?replykey=, body, header
+/* =====================================================================
+   CDR WEBHOOK — v3.41 FINAL FIX — NO MORE 405
+   Handles BOTH GET (FastUnlockers ping) and POST (actual data)
+   ===================================================================== */
+const handleCdr = (req, res) => {
+  const p = (req.query && Object.keys(req.query).length > 0 && req.body && Object.keys(req.body).length === 0) ? req.query : (req.body || req.query || {});
+  
   const qKey = req.query.key || req.query.cdrkey || req.query.replykey || req.query.CDRKEY || '';
   const bKey = p.replykey || p.replyKey || p.key || p.cdrkey || p.CDRKEY || '';
   const hKey = req.get('x-cdr-key') || req.get('x-api-key') || '';
   const key = String(qKey || bKey || hKey || '').trim();
   const expected = String(process.env.CDR_REPLY_KEY || 'SU-CDR-7f3a9c2e8b1d').trim();
-  if (!expected) return res.status(503).send('CDR not configured on server — set CDR_REPLY_KEY');
-  if (key!== expected) {
-    console.log('[CDR BAD KEY] got:', key, ' expected:', expected);
-    return res.status(401).send('bad key — expected '+expected);
+
+  if (req.method === 'GET' && Object.keys(req.body||{}).length === 0) {
+    const hasOnlyKey = Object.keys(req.query).length <= 1;
+    if (hasOnlyKey) {
+      return res.json({ 
+        ok: true, 
+        message: 'CDR webhook alive — waiting for POST from FastUnlockers', 
+        key_ok: key === expected,
+        time: new Date().toISOString()
+      });
+    }
   }
-  const oid=String(p.orderid||p.orderId||p.order_id||p.ORDERID||p.referenceid||p.REFERENCEID||p.reference||p.transactionid||p.id||'').trim();
-  const db=load();
-  const job=db.jobs.find(j=>j.upstreamOrderId&&String(j.upstreamOrderId).trim()===oid) || db.jobs.find(j=>j.upstreamProviderOrderId&&String(j.upstreamProviderOrderId).trim()===oid) || db.jobs.find(j=>j.id===String(p.jobid||p.jobId||p.JOBID||''));
-  if(!job) { console.log('[CDR] unknown order:', oid); return res.status(404).send('unknown order '+oid); }
-  const st=String(p.status||p.orderstatus||p.orderStatus||p.ORDERSTATUS||'').toLowerCase();
-  const codeRaw = p.code||p.unlock_code||p.unlockCode||p.reply||p.result||p.response||'';
-  const isRejected = st.includes('reject')||st.includes('fail')||st.includes('cancel')||String(codeRaw).toLowerCase().includes('not eligible');
-  const isSolved = st.includes('success')||st.includes('solved')||st.includes('complete')||st==='4';
-  if(isRejected){
-    job.status='failed';
-    job.cdrCode=String(codeRaw||'Rejected / Not Eligible');
-    // auto-refund wallet like fastunlock.us
-    if(job.payment_method==='wallet' && job.payment_status==='paid'){
-      const ph=String(job.phone||'').replace(/\D/g,'');
-      const w=db.wallets[ph];
-      if(w){
-        const already=w.tx.some(t=>t.ref && t.ref.includes(job.id) && t.type==='credit' && t.ref.includes('AUTO-REFUND'));
-        if(!already){
-          // find price from cache
-          const price = (svcCache.data||[]).find(s=>s.id===String(job.serviceId))?.priceUsd || 0;
-          if(price>0){ w.balance=Math.round((w.balance+price)*100)/100; w.tx.unshift({ type:'credit', amount:price, ref:'AUTO-REFUND-CDR '+job.id+' '+job.cdrCode, date:new Date().toISOString() }); }
+
+  if (!expected) return res.status(503).send('CDR not configured — set CDR_REPLY_KEY');
+  if (key !== expected) {
+    console.log('[CDR BAD KEY] got:', key, ' expected:', expected);
+    return res.status(401).send('bad key');
+  }
+  
+  const oid = String(p.orderid || p.orderId || p.order_id || p.ORDERID || p.referenceid || p.REFERENCEID || p.reference || p.transactionid || p.id || '').trim();
+  const db = load();
+  const job = db.jobs.find(j => j.upstreamOrderId && String(j.upstreamOrderId).trim() === oid) || 
+              db.jobs.find(j => j.upstreamProviderOrderId && String(j.upstreamProviderOrderId).trim() === oid) || 
+              db.jobs.find(j => j.id === String(p.jobid || p.jobId || p.JOBID || ''));
+
+  if (!job) { 
+    console.log('[CDR] unknown order:', oid, ' payload:', JSON.stringify(p).slice(0,300)); 
+    return res.status(404).send('unknown order ' + oid); 
+  }
+  
+  const st = String(p.status || p.orderstatus || p.orderStatus || p.ORDERSTATUS || '').toLowerCase();
+  const codeRaw = p.code || p.unlock_code || p.unlockCode || p.reply || p.result || p.response || '';
+  
+  const isRejected = st.includes('reject') || st.includes('fail') || st.includes('cancel') || String(codeRaw).toLowerCase().includes('not eligible');
+  const isSolved = st.includes('success') || st.includes('solved') || st.includes('complete') || st === '4';
+  
+  if (isRejected) {
+    job.status = 'failed';
+    job.cdrCode = String(codeRaw || 'Rejected / Not Eligible');
+    if (job.payment_method === 'wallet' && job.payment_status === 'paid') {
+      const ph = String(job.phone || '').replace(/\D/g, '');
+      const w = db.wallets[ph];
+      if (w) {
+        const already = w.tx.some(t => t.ref && t.ref.includes(job.id) && t.type === 'credit' && t.ref.includes('AUTO-REFUND'));
+        if (!already) {
+          const price = (svcCache.data || []).find(s => s.id === String(job.serviceId))?.priceUsd || 0;
+          if (price > 0) { 
+            w.balance = Math.round((w.balance + price) * 100) / 100; 
+            w.tx.unshift({ type: 'credit', amount: price, ref: 'AUTO-REFUND-CDR ' + job.id + ' ' + job.cdrCode, date: new Date().toISOString() }); 
+          }
         }
       }
     }
-  } else if(isSolved || codeRaw){
-    job.status='solved';
-    if(codeRaw) job.cdrCode=String(codeRaw);
-  } else if(st.includes('process')||st.includes('pending')||st.includes('wait')||st.includes('progress')){
-    job.status='processing';
+  } else if (isSolved || codeRaw) {
+    job.status = 'solved';
+    if (codeRaw) job.cdrCode = String(codeRaw);
+  } else if (st.includes('process') || st.includes('pending') || st.includes('wait') || st.includes('progress')) {
+    job.status = 'processing';
   }
-  job.upstream=p; job.cdrAt=new Date().toISOString(); save(db);
-  console.log('[CDR] OK', oid, '->', job.status, job.cdrCode);
+  
+  job.upstream = p; 
+  job.cdrAt = new Date().toISOString(); 
+  save(db);
+  console.log('[CDR SUCCESS]', oid, '->', job.status, '|', job.cdrCode);
   res.send('OK');
-});
+};
+
+app.get('/api/webhook/cdr', handleCdr);
+app.post('/api/webhook/cdr', express.json(), express.urlencoded({ extended: true }), handleCdr);
 
 const FU={ base:(process.env.UNLOCK_API_URL||'').replace(/\/+$/, ''), key:process.env.UNLOCK_API_KEY||'', username:process.env.UNLOCK_API_USERNAME||'', endpoint:process.env.UNLOCK_API_ENDPOINT||'/api/dhru' };
-function fuReady(){ return!!(FU.base && FU.key && FU.username); }
+function fuReady(){ return !!(FU.base && FU.key && FU.username); }
 function xmlEscape(v){ return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;'); }
 function dhruParameters(extraParams){ const entries=Object.entries(extraParams||{}).filter(([,value])=>value!==undefined&&value!==null&&value!=='').map(([key,value])=>`<${String(key).toUpperCase()}>${xmlEscape(value)}</${String(key).toUpperCase()}>`).join(''); return `<PARAMETERS>${entries}</PARAMETERS>`; }
 function maskedBody(paramsObj){ const copy=Object.assign({}, paramsObj); if(copy.apiaccesskey) copy.apiaccesskey=copy.apiaccesskey.slice(0,4)+'***'; return Object.keys(copy).map(k=>encodeURIComponent(k)+'='+encodeURIComponent(copy[k])).join('&'); }
@@ -315,7 +341,6 @@ async function placeUpstream(job){
 }
 function saveUpstreamIds(job, up){ job.upstreamOrderId=up.orderId||null; if(up.providerOrderId) job.upstreamProviderOrderId=String(up.providerOrderId); }
 
-/* v3.40 CORE FIX — Handles Rejected / Not Eligible as FAILED */
 function normalizeStatus(json){
   if(!json) return null;
   const s=json.SUCCESS? (Array.isArray(json.SUCCESS)? json.SUCCESS[0]:json.SUCCESS) : json;
@@ -325,11 +350,10 @@ function normalizeStatus(json){
   const codeLower=codeRaw.toLowerCase();
   let mapped='processing';
   let finalCode=codeRaw||null;
-
   if(['3','rejected','failed','fail','cancel','cancelled','not eligible','noteligible'].includes(statusLower) || statusLower.includes('reject') || statusLower.includes('fail') || codeLower.includes('not eligible') || codeLower.includes('noteligible')){
     mapped='failed';
     finalCode=codeRaw || s.MESSAGE || s.message || 'Not Eligible / Rejected';
-  } else if(['4','completed','solved','success','finished','done'].includes(statusLower) || (finalCode && finalCode.length>2 &&!codeLower.includes('not eligible'))){
+  } else if(['4','completed','solved','success','finished','done'].includes(statusLower) || (finalCode && finalCode.length>2 && !codeLower.includes('not eligible'))){
     mapped='solved';
   } else if(['2','1','0','processing','pending','inprogress','new','in progress'].includes(statusLower)){
     mapped='processing';
@@ -357,7 +381,7 @@ async function statusUpstream(job){
   return null;
 }
 
-app.get('/api/upstream-test', strict, async (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const r=await gsmCall('accountinfo'); res.json({ ok:r.http===200 &&!!(r.json&&r.json.SUCCESS), http:r.http, sample:r.json||r.text }); });
+app.get('/api/upstream-test', strict, async (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const r=await gsmCall('accountinfo'); res.json({ ok:r.http===200 && !!(r.json&&r.json.SUCCESS), http:r.http, sample:r.json||r.text }); });
 app.get('/api/admin/probe', strict, async (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const out={}; const cands=['accountinfo',...LIST_ACTIONS.imei,...LIST_ACTIONS.file,...LIST_ACTIONS.server]; for(const a of cands){ try{ const r=await gsmCall(a); out[a]={ http:r.http, ok:!!(r.json&&r.json.SUCCESS) }; }catch(e){ out[a]={ http:0, ok:false, err:e.message }; } } res.json({ ok:true, probe:out }); });
 app.get('/api/admin/auth-check', strict, async (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); if(!fuReady()) return res.status(503).json({ ok:false, error:'UNLOCK_API_URL / USERNAME / KEY not all set.' }); let ip='unknown'; try{ const ir=await fetch('https://api.ipify.org?format=json'); ip=(await ir.json()).ip; }catch(e){} const r=await gsmCall('accountinfo'); const authOk=!!(r.json&&r.json.SUCCESS); res.json({ ok:true, authenticated:authOk, serverPublicIp:ip, verdict:authOk?'Auth OK':'AUTH FAILING', endpointCalled:FU.base+FU.endpoint, username:FU.username, sentBody:r.sentBody, reply:r.json||r.text }); });
 
@@ -371,7 +395,6 @@ app.post('/api/order', strict, async (req,res)=>{ if(!adminOk(req)) return res.s
 app.post('/api/order-status', strict, async (req,res)=>{ const { error, value }=jobStatusSchema.validate(req.body||{}); if(error) return res.status(400).json({ ok:false, error:'Invalid job id.' }); const db=load(); const job=db.jobs.find(j=>j.id===value.id); if(!job) return res.status(404).json({ ok:false, error:'Job not found.' }); if(fuReady() && job.upstreamOrderId){ const live=await statusUpstream(job); if(live && live.json){ job.upstream=live.json; const norm=live.normalized; if(norm){ if(norm.status==='solved'){ job.status='solved'; if(norm.code) job.cdrCode=norm.code; job.solvedAt=new Date().toISOString(); } else if(norm.status==='failed'){ job.status='failed'; if(norm.code) job.cdrCode=norm.code; job.failedAt=new Date().toISOString(); } else if(norm.status==='processing') job.status='processing'; } save(db); } return res.json({ ok:true, job, live:live? live.json:null }); } res.json({ ok:true, job }); });
 app.post('/api/admin/retry', strict, async (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const id=String((req.body||{}).id||''); const db=load(); const job=db.jobs.find(j=>j.id===id); if(!job) return res.status(404).json({ ok:false, error:'Job not found.' }); if(!fuReady()) return res.status(503).json({ ok:false, error:'Upstream not configured.' }); const up=await placeUpstream(job); if(up.ok){ job.status='sent-to-server'; job.upstream=up.r.json; saveUpstreamIds(job, up); } else { job.status='failed'; job.upstream=up.r.json||up.r.text; } save(db); res.json({ ok:up.ok, job:job.id, upstreamOrderId:up.orderId, upstream:up.r.json||up.r.text }); });
 
-/* TRACK v3.40 — FASTUNLOCK.US PARITY */
 app.get('/api/track/:id', async (req,res)=>{
   const id=String(req.params.id||'').trim(); if(!id||id.length<3||id.length>60) return res.status(400).json({ ok:false, error:'Invalid job ID.' });
   const db=load(); let job=db.jobs.find(j=>j.id===id); if(!job) return res.status(404).json({ ok:false, error:'Job not found.' });
@@ -383,7 +406,7 @@ app.get('/api/track/:id', async (req,res)=>{
         else if(live.normalized.status==='failed'){ job.status='failed'; job.cdrCode=live.normalized.code||'Rejected / Not Eligible'; job.upstream=live.json; job.failedAt=new Date().toISOString();
           if(job.payment_method==='wallet' && job.payment_status==='paid'){
             const ph=String(job.phone||'').replace(/\D/g,''); const w=db.wallets[ph];
-            if(w){ const price=(svcCache.data||[]).find(s=>s.id===String(job.serviceId))?.priceUsd||0; if(price>0 &&!w.tx.some(t=>t.ref&&t.ref.includes(job.id)&&t.type==='credit'&&t.ref.includes('AUTO-REFUND'))){ w.balance=Math.round((w.balance+price)*100)/100; w.tx.unshift({ type:'credit', amount:price, ref:'AUTO-REFUND-TRACK '+job.id+' '+job.cdrCode, date:new Date().toISOString() }); save(db); } }
+            if(w){ const price=(svcCache.data||[]).find(s=>s.id===String(job.serviceId))?.priceUsd||0; if(price>0 && !w.tx.some(t=>t.ref&&t.ref.includes(job.id)&&t.type==='credit'&&t.ref.includes('AUTO-REFUND'))){ w.balance=Math.round((w.balance+price)*100)/100; w.tx.unshift({ type:'credit', amount:price, ref:'AUTO-REFUND-TRACK '+job.id+' '+job.cdrCode, date:new Date().toISOString() }); save(db); } }
           } else { save(db); }
         } else if(live.normalized.status==='processing'){ job.status='processing'; job.upstream=live.json; job.liveAt=new Date().toISOString(); save(db); }
       }
@@ -396,7 +419,6 @@ app.get('/api/track/:id', async (req,res)=>{
   res.json({ ok:true, job:{ id:job.id, type:job.type||'imei', serviceName:job.serviceName||job.service||'—', imei:maskedImei, status:failed?'failed':job.status, payment_status:job.payment_status||'unpaid', failed, code:(job.status==='solved'||failed||code)? (code||message||job.cdrCode):null, message, created:job.created, upstreamOrderId:job.upstreamOrderId||null, eta:(job.status==='queued'||job.status==='sent-to-server'||job.status==='processing')?'In progress — auto-refreshing.':null } });
 });
 
-/* CRON 30s — fastunlock.us parity — no delay */
 setInterval(async ()=>{
   if(!fuReady()) return;
   try{
@@ -407,7 +429,7 @@ setInterval(async ()=>{
         const live=await statusUpstream(job);
         if(!live||!live.normalized) continue;
         if(live.normalized.status==='solved'){ job.status='solved'; if(live.normalized.code) job.cdrCode=live.normalized.code; job.upstream=live.json; job.solvedAt=new Date().toISOString(); }
-        else if(live.normalized.status==='failed'){ job.status='failed'; if(live.normalized.code) job.cdrCode=live.normalized.code; job.upstream=live.json; job.failedAt=new Date().toISOString(); if(job.payment_method==='wallet' && job.payment_status==='paid'){ const ph=String(job.phone||'').replace(/\D/g,''); const w=db.wallets[ph]; if(w &&!w.tx.some(t=>t.ref&&t.ref.includes(job.id)&&t.type==='credit'&&t.ref.includes('AUTO-REFUND'))){ const price=(svcCache.data||[]).find(s=>s.id===String(job.serviceId))?.priceUsd||0; if(price>0){ w.balance=Math.round((w.balance+price)*100)/100; w.tx.unshift({ type:'credit', amount:price, ref:'AUTO-REFUND-CRON '+job.id+' '+live.normalized.code, date:new Date().toISOString() }); } } } }
+        else if(live.normalized.status==='failed'){ job.status='failed'; if(live.normalized.code) job.cdrCode=live.normalized.code; job.upstream=live.json; job.failedAt=new Date().toISOString(); if(job.payment_method==='wallet' && job.payment_status==='paid'){ const ph=String(job.phone||'').replace(/\D/g,''); const w=db.wallets[ph]; if(w && !w.tx.some(t=>t.ref&&t.ref.includes(job.id)&&t.type==='credit'&&t.ref.includes('AUTO-REFUND'))){ const price=(svcCache.data||[]).find(s=>s.id===String(job.serviceId))?.priceUsd||0; if(price>0){ w.balance=Math.round((w.balance+price)*100)/100; w.tx.unshift({ type:'credit', amount:price, ref:'AUTO-REFUND-CRON '+job.id+' '+live.normalized.code, date:new Date().toISOString() }); } } } }
         await new Promise(w=>setTimeout(w,800));
       }catch(e){}
     }
@@ -432,8 +454,8 @@ app.post('/api/admin/user/delete', strict, (req,res)=>{ if(!adminOk(req)) return
 app.use((req,res)=>res.status(404).json({ ok:false, error:'Not found.' }));
 app.use((err,req,res,next)=>{ console.error('[ERR]', err.message); res.status(err.status||500).json({ ok:false, error:'Server error.' }); });
 app.listen(PORT, ()=>{
-  console.log(`SIERRAUNLOCK API v3.40 online on :${PORT} — mode: ${fuReady()?'CONNECTED':'MANUAL'}`);
+  console.log(`SIERRAUNLOCK API v3.41 online on :${PORT} — mode: ${fuReady()?'CONNECTED':'MANUAL'}`);
   console.log(` Vault: ${ghReady()? 'GitHub ('+GH.repo+')':'LOCAL ONLY'}`);
-  console.log(` CDR URL: ${process.env.CDR_REPLY_URL || 'https://sierraunlock-tech-1-4um3.onrender.com/api/webhook/cdr?key='+ (process.env.CDR_REPLY_KEY||'SU-CDR-7f3a9c2e8b1d')}`);
-  console.log(` Fix: Rejected/Not Eligible now FAILED + auto-refund — fastunlock.us parity — no delay`);
+  console.log(` CDR URL: https://sierraunlock-tech-1-4um3.onrender.com/api/webhook/cdr?key=${process.env.CDR_REPLY_KEY||'SU-CDR-7f3a9c2e8b1d'}`);
+  console.log(` Fix: v3.41 NO 405 — GET returns 200 alive, POST processes — fastunlock.us parity`);
 });
