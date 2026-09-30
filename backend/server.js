@@ -1,11 +1,12 @@
 /* =====================================================================
-   SIERRAUNLOCK • BACKEND API — server.js (v3.44.6 • FINAL LOGIN FIX)
-   v3.44.6 FINAL — CLEAN PROFESSIONAL — PRODUCTION READY
-   • FIX: Login now accepts "emailOrPhone" field from frontend
-   • FIX: Backward compatible with existing email/phone separate fields
-   • KEEP: All v3.44.5 features (CDR webhook, wallet, admin, auth)
-   • KEEP: All existing user accounts work perfectly
+   SIERRAUNLOCK • BACKEND API — server.js (v3.44.7 • FINAL PRODUCTION)
+   v3.44.7 FINAL — CLEAN PROFESSIONAL — PRODUCTION READY
+   • FIX: Enhanced CORS for all frontend origins
+   • FIX: Better error handling and logging
+   • FIX: emailOrPhone login support (frontend compatible)
+   • KEEP: All existing features (CDR, wallet, admin, auth)
    • KEEP: DHRU 4-ID support, IP whitelist, service catalogs
+   • KEEP: All v3.44.2 endpoints intact
    ===================================================================== */
 
 require('dotenv').config();
@@ -103,31 +104,58 @@ else { const db = load(); if (!db.rate || db.rate < 20) { db.rate = DEFAULT_RATE
   } catch (e) { console.log('[VAULT] pull skipped: ' + e.message); }
 })();
 
+// =====================================================================
+// ENHANCED CORS CONFIGURATION
+// =====================================================================
 app.use(helmet());
-const FALLBACK_ORIGINS = ['https://sierraunlock.com','https://www.sierraunlock.com','http://sierraunlock.com','https://sierraunlock.live','https://www.sierraunlock.live','http://sierraunlock.live','https://sierraunlock-tech.github.io'];
-const ALLOWED = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',').map(s=>s.trim()).filter(Boolean) : FALLBACK_ORIGINS;
-app.use(cors({ origin: (origin, cb) => { if (!origin) return cb(null, true); if (ALLOWED.some(o => origin === o || origin.startsWith(o))) return cb(null, true); cb(new Error('Not allowed by CORS')); }, credentials:false }));
-app.use(express.json({ limit:'100kb' }));
+const FALLBACK_ORIGINS = [
+  'https://sierraunlock.com',
+  'https://www.sierraunlock.com',
+  'http://sierraunlock.com',
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:5173',
+  'https://sierraunlock.live',
+  'https://www.sierraunlock.live',
+  'http://sierraunlock.live',
+  'https://sierraunlock-tech.github.io'
+];
+const ALLOWED = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',').map(s => s.trim()).filter(Boolean) : FALLBACK_ORIGINS;
+
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true);
+    if (ALLOWED.some(o => origin === o || origin.startsWith(o))) return cb(null, true);
+    console.log('[CORS] Blocked origin:', origin);
+    cb(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-token', 'x-session-token']
+}));
+
+app.use(express.json({ limit: '100kb' }));
 app.use(morgan('dev'));
-app.use(rateLimit({ windowMs:60*1000, max:60 }));
-const strict = rateLimit({ windowMs:60*1000, max:6 });
+app.use(rateLimit({ windowMs: 60 * 1000, max: 60 }));
+const strict = rateLimit({ windowMs: 60 * 1000, max: 6 });
 
 const adminOk = (req) => {
-  const token = req.get('x-admin-token') || (req.get('authorization')||'').replace(/^Bearer\s+/i,'');
+  const token = req.get('x-admin-token') || (req.get('authorization') || '').replace(/^Bearer\s+/i, '');
   return !!process.env.ADMIN_TOKEN && token === process.env.ADMIN_TOKEN;
 };
 
 const verificationCodes = new Map();
 const resetCodes = new Map();
-const TRUSTED_PHONES = (process.env.OM_TRUSTED_PHONES || '').split(',').map(s=>s.replace(/\D/g,'')).filter(Boolean);
+const TRUSTED_PHONES = (process.env.OM_TRUSTED_PHONES || '').split(',').map(s => s.replace(/\D/g, '')).filter(Boolean);
 
-/* =====================================================================
-   AUTH SCHEMAS — v3.44.6 UPDATED FOR emailOrPhone SUPPORT
-   ===================================================================== */
+// =====================================================================
+// AUTH SCHEMAS — v3.44.7
+// =====================================================================
 const loginSchema = Joi.object({
   email: Joi.string().trim().max(120).optional(),
   phone: Joi.string().trim().min(9).max(20).optional(),
-  emailOrPhone: Joi.string().trim().max(120).optional(), // Support frontend field
+  emailOrPhone: Joi.string().trim().max(120).optional(),
   password: Joi.string().trim().min(6).max(100).required()
 });
 
@@ -139,7 +167,7 @@ const registerSchema = Joi.object({
 });
 
 const unlockSchema = Joi.object({
-  type: Joi.string().valid('imei','file','server').default('imei'),
+  type: Joi.string().valid('imei', 'file', 'server').default('imei'),
   imei: Joi.string().trim().allow('').max(15).optional(),
   details: Joi.string().trim().allow('').max(2000).optional(),
   brand: Joi.string().trim().min(2).max(40).required(),
@@ -156,42 +184,49 @@ const unlockSchema = Joi.object({
 
 const jobStatusSchema = Joi.object({ id: Joi.string().trim().min(3).max(40).required() });
 const adminRateSchema = Joi.object({ slePerUsd: Joi.number().positive().max(100000).required() });
-const adminJobSchema = Joi.object({ id: Joi.string().trim().min(3).max(40).required(), status: Joi.string().valid('queued','sent-to-server','processing','solved','failed').required(), serviceId: Joi.string().trim().max(20).optional(), imei: Joi.string().trim().max(15).optional() });
-const orderSchema = Joi.object({ type: Joi.string().valid('imei','file','server').default('imei'), service: Joi.alternatives(Joi.string().max(60), Joi.number()).required(), imei: Joi.string().trim().allow('').max(15).optional(), details: Joi.string().trim().allow('').max(2000).optional(), brand: Joi.string().trim().max(40).optional(), model: Joi.string().trim().max(60).optional(), customer: Joi.string().trim().max(60).optional() });
-const adminPaySchema = Joi.object({ id: Joi.string().trim().min(3).max(40).required(), method: Joi.string().valid('orange_money','binance','cash','wallet').required() });
+const adminJobSchema = Joi.object({ id: Joi.string().trim().min(3).max(40).required(), status: Joi.string().valid('queued', 'sent-to-server', 'processing', 'solved', 'failed').required(), serviceId: Joi.string().trim().max(20).optional(), imei: Joi.string().trim().max(15).optional() });
+const orderSchema = Joi.object({ type: Joi.string().valid('imei', 'file', 'server').default('imei'), service: Joi.alternatives(Joi.string().max(60), Joi.number()).required(), imei: Joi.string().trim().allow('').max(15).optional(), details: Joi.string().trim().allow('').max(2000).optional(), brand: Joi.string().trim().max(40).optional(), model: Joi.string().trim().max(60).optional(), customer: Joi.string().trim().max(60).optional() });
+const adminPaySchema = Joi.object({ id: Joi.string().trim().min(3).max(40).required(), method: Joi.string().valid('orange_money', 'binance', 'cash', 'wallet').required() });
 const adminRefundSchema = Joi.object({ id: Joi.string().trim().min(3).max(40).required(), reason: Joi.string().trim().min(5).max(500).required() });
 
-app.get('/', (req,res)=>res.json({ ok:true, service:'SIERRAUNLOCK API', version:'3.44.6', docs:'/api/health' }));
-app.get('/api/health', (req,res)=>res.json({ ok:true, service:'SIERRAUNLOCK API', version:'3.44.6', mode:fuReady()?'connected-to-fastunlockers':'manual-mode', vault:ghReady()?'github':'local-only', catalogs:['imei','file','server'], rate:load().rate, time:new Date().toISOString(), cdr: process.env.CDR_REPLY_KEY? 'configured' : 'not set' }));
-app.get('/api/rates', (req,res)=>res.json({ ok:true, slePerUsd:load().rate }));
+// =====================================================================
+// HEALTH CHECK ENDPOINTS
+// =====================================================================
+app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.44.7', docs: '/api/health' }));
+app.get('/api/health', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.44.7', mode: fuReady() ? 'connected-to-fastunlockers' : 'manual-mode', vault: ghReady() ? 'github' : 'local-only', catalogs: ['imei', 'file', 'server'], rate: load().rate, time: new Date().toISOString(), cdr: process.env.CDR_REPLY_KEY ? 'configured' : 'not set' }));
+app.get('/api/rates', (req, res) => res.json({ ok: true, slePerUsd: load().rate }));
 
-app.get('/api/my-ip', strict, async (req,res)=>{
-  if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' });
-  try{
-    const r=await fetch('https://api.ipify.org?format=json');
-    const j=await r.json();
-    res.json({ ok:true, serverPublicIp:j.ip, ranges:["74.220.48.0/24","74.220.56.0/24"], whitelistForFastUnlockers:["74.220.48.*","74.220.56.*", j.ip], verifiedAt:new Date().toISOString(), note:"Whitelist these in FastUnlockers Allowed IPs" });
-  }catch(e){ res.status(502).json({ ok:false, error:'ipify unreachable' }); }
+app.get('/api/my-ip', strict, async (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  try {
+    const r = await fetch('https://api.ipify.org?format=json');
+    const j = await r.json();
+    res.json({ ok: true, serverPublicIp: j.ip, ranges: ["74.220.48.0/24", "74.220.56.0/24"], whitelistForFastUnlockers: ["74.220.48.*", "74.220.56.*", j.ip], verifiedAt: new Date().toISOString(), note: "Whitelist these in FastUnlockers Allowed IPs" });
+  } catch (e) { res.status(502).json({ ok: false, error: 'ipify unreachable' }); }
 });
 
-/* =====================================================================
-   AUTH ENDPOINTS — v3.44.6 WITH emailOrPhone SUPPORT
-   ===================================================================== */
-app.post('/api/auth/register', strict, async (req,res)=>{
-  const { error, value } = registerSchema.validate(req.body||{});
-  if(error) return res.status(400).json({ ok:false, error:error.details[0].message });
-  
+// =====================================================================
+// AUTH ENDPOINTS — v3.44.7 WITH ENHANCED ERROR HANDLING
+// =====================================================================
+app.post('/api/auth/register', strict, async (req, res) => {
+  console.log('[AUTH] Register attempt:', req.body.email || req.body.phone);
+  const { error, value } = registerSchema.validate(req.body || {});
+  if (error) {
+    console.log('[AUTH] Register validation error:', error.details[0].message);
+    return res.status(400).json({ ok: false, error: error.details[0].message });
+  }
+
   const db = load();
-  const phoneNorm = String(value.phone||'').replace(/\D/g,'');
-  
-  // Check if user already exists
-  if(db.users[phoneNorm]) return res.status(400).json({ ok:false, error:'User already exists with this phone number.' });
-  
-  // Hash password
+  const phoneNorm = String(value.phone || '').replace(/\D/g, '');
+
+  if (db.users[phoneNorm]) {
+    console.log('[AUTH] User already exists:', phoneNorm);
+    return res.status(400).json({ ok: false, error: 'User already exists with this phone number.' });
+  }
+
   const salt = await bcrypt.genSalt(10);
   const hashedPassword = await bcrypt.hash(value.password, salt);
-  
-  // Create user
+
   const user = {
     id: phoneNorm,
     phone: phoneNorm,
@@ -201,291 +236,306 @@ app.post('/api/auth/register', strict, async (req,res)=>{
     createdAt: new Date().toISOString(),
     blocked: false
   };
-  
+
   db.users[phoneNorm] = user;
   save(db);
-  
-  // Create session token
+
   const sessionToken = crypto.randomBytes(32).toString('hex');
   db.sessions[sessionToken] = { phone: phoneNorm, createdAt: new Date().toISOString() };
   save(db);
-  
-  res.json({ 
-    ok:true, 
-    message:'Registration successful', 
+
+  console.log('[AUTH] Register successful:', phoneNorm);
+  res.json({
+    ok: true,
+    message: 'Registration successful',
     token: sessionToken,
     user: { phone: user.phone, name: user.name, email: user.email }
   });
 });
 
-app.post('/api/auth/login', strict, async (req,res)=>{
-  const { error, value } = loginSchema.validate(req.body||{});
-  if(error) return res.status(400).json({ ok:false, error:error.details[0].message });
-  
+app.post('/api/auth/login', strict, async (req, res) => {
+  console.log('[AUTH] Login attempt:', req.body.emailOrPhone || req.body.email);
+  const { error, value } = loginSchema.validate(req.body || {});
+  if (error) {
+    console.log('[AUTH] Login validation error:', error.details[0].message);
+    return res.status(400).json({ ok: false, error: error.details[0].message });
+  }
+
   const db = load();
-  
-  // Support both emailOrPhone (frontend) and separate email/phone fields
+
   let email = value.email || null;
-  let phone = value.phone ? String(value.phone).replace(/\D/g,'') : null;
-  
-  // Handle emailOrPhone field from frontend
+  let phone = value.phone ? String(value.phone).replace(/\D/g, '') : null;
+
   if (!email && !phone && value.emailOrPhone) {
     const input = value.emailOrPhone.trim();
     if (input.includes('@')) {
       email = input.toLowerCase();
     } else {
-      phone = input.replace(/\D/g,'');
+      phone = input.replace(/\D/g, '');
     }
   }
-  
-  // Find user by phone or email
+
   let user = null;
   let userKey = null;
-  
-  if(phone && db.users[phone]) {
+
+  if (phone && db.users[phone]) {
     user = db.users[phone];
     userKey = phone;
-  } else if(email) {
+  } else if (email) {
     const found = Object.values(db.users).find(u => u.email && u.email.toLowerCase() === email);
-    if(found) {
+    if (found) {
       user = found;
       userKey = found.phone;
     }
   }
-  
-  if(!user) return res.status(404).json({ ok:false, error:'User not found.' });
-  
-  // Check if blocked
-  if(user.blocked) return res.status(403).json({ ok:false, error:'Your account is blocked.' });
-  
-  // Verify password
+
+  if (!user) {
+    console.log('[AUTH] User not found');
+    return res.status(404).json({ ok: false, error: 'User not found.' });
+  }
+
+  if (user.blocked) {
+    console.log('[AUTH] Account blocked:', userKey);
+    return res.status(403).json({ ok: false, error: 'Your account is blocked.' });
+  }
+
   const validPassword = await bcrypt.compare(value.password, user.password);
-  if(!validPassword) return res.status(401).json({ ok:false, error:'Invalid password.' });
-  
-  // Create session token
+  if (!validPassword) {
+    console.log('[AUTH] Invalid password for:', userKey);
+    return res.status(401).json({ ok: false, error: 'Invalid password.' });
+  }
+
   const sessionToken = crypto.randomBytes(32).toString('hex');
   db.sessions[sessionToken] = { phone: userKey, createdAt: new Date().toISOString() };
   save(db);
-  
-  res.json({ 
-    ok:true, 
-    message:'Login successful', 
+
+  console.log('[AUTH] Login successful:', userKey);
+  res.json({
+    ok: true,
+    message: 'Login successful',
     token: sessionToken,
     user: { phone: user.phone, name: user.name, email: user.email }
   });
 });
 
-app.post('/api/auth/logout', strict, (req,res)=>{
-  const token = req.get('x-session-token') || (req.get('authorization')||'').replace(/^Bearer\s+/i,'');
-  if(!token) return res.status(400).json({ ok:false, error:'No token provided.' });
-  
+app.post('/api/auth/logout', strict, (req, res) => {
+  const token = req.get('x-session-token') || (req.get('authorization') || '').replace(/^Bearer\s+/i, '');
+  if (!token) return res.status(400).json({ ok: false, error: 'No token provided.' });
+
   const db = load();
-  if(db.sessions[token]) {
+  if (db.sessions[token]) {
     delete db.sessions[token];
     save(db);
   }
-  
-  res.json({ ok:true, message:'Logged out successfully.' });
+
+  res.json({ ok: true, message: 'Logged out successfully.' });
 });
 
-app.get('/api/auth/me', strict, (req,res)=>{
-  const token = req.get('x-session-token') || (req.get('authorization')||'').replace(/^Bearer\s+/i,'');
-  if(!token) return res.status(401).json({ ok:false, error:'No token provided.' });
-  
+app.get('/api/auth/me', strict, (req, res) => {
+  const token = req.get('x-session-token') || (req.get('authorization') || '').replace(/^Bearer\s+/i, '');
+  if (!token) return res.status(401).json({ ok: false, error: 'No token provided.' });
+
   const db = load();
   const session = db.sessions[token];
-  if(!session) return res.status(401).json({ ok:false, error:'Invalid or expired session.' });
-  
+  if (!session) return res.status(401).json({ ok: false, error: 'Invalid or expired session.' });
+
   const user = db.users[session.phone];
-  if(!user) return res.status(404).json({ ok:false, error:'User not found.' });
-  
-  res.json({ 
-    ok:true, 
+  if (!user) return res.status(404).json({ ok: false, error: 'User not found.' });
+
+  res.json({
+    ok: true,
     user: { phone: user.phone, name: user.name, email: user.email, createdAt: user.createdAt }
   });
 });
 
-app.post('/api/auth/forgot-password', strict, async (req,res)=>{
+app.post('/api/auth/forgot-password', strict, async (req, res) => {
   const { phone, email } = req.body || {};
-  if(!phone && !email) return res.status(400).json({ ok:false, error:'Phone or email required.' });
-  
+  if (!phone && !email) return res.status(400).json({ ok: false, error: 'Phone or email required.' });
+
   const db = load();
-  const phoneNorm = phone ? String(phone).replace(/\D/g,'') : null;
+  const phoneNorm = phone ? String(phone).replace(/\D/g, '') : null;
   const emailNorm = email ? String(email).trim().toLowerCase() : null;
-  
+
   let user = null;
-  if(phoneNorm && db.users[phoneNorm]) user = db.users[phoneNorm];
-  else if(emailNorm) user = Object.values(db.users).find(u => u.email && u.email.toLowerCase() === emailNorm);
-  
-  if(!user) return res.status(404).json({ ok:false, error:'User not found.' });
-  
-  // Generate reset code
+  if (phoneNorm && db.users[phoneNorm]) user = db.users[phoneNorm];
+  else if (emailNorm) user = Object.values(db.users).find(u => u.email && u.email.toLowerCase() === emailNorm);
+
+  if (!user) return res.status(404).json({ ok: false, error: 'User not found.' });
+
   const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
-  resetCodes.set(user.phone, { code: resetCode, expires: Date.now() + 15*60*1000 });
-  
-  // In production, send SMS/email here
+  resetCodes.set(user.phone, { code: resetCode, expires: Date.now() + 15 * 60 * 1000 });
+
   console.log('[AUTH] Password reset code for', user.phone, ':', resetCode);
-  
-  res.json({ ok:true, message:'Reset code generated. Check your phone/email.' });
+
+  res.json({ ok: true, message: 'Reset code generated. Check your phone/email.' });
 });
 
-app.post('/api/auth/reset-password', strict, async (req,res)=>{
+app.post('/api/auth/reset-password', strict, async (req, res) => {
   const { phone, code, newPassword } = req.body || {};
-  if(!phone || !code || !newPassword) return res.status(400).json({ ok:false, error:'Phone, code, and new password required.' });
-  
-  const phoneNorm = String(phone).replace(/\D/g,'');
+  if (!phone || !code || !newPassword) return res.status(400).json({ ok: false, error: 'Phone, code, and new password required.' });
+
+  const phoneNorm = String(phone).replace(/\D/g, '');
   const reset = resetCodes.get(phoneNorm);
-  
-  if(!reset) return res.status(400).json({ ok:false, error:'No reset code found.' });
-  if(reset.expires < Date.now()) {
+
+  if (!reset) return res.status(400).json({ ok: false, error: 'No reset code found.' });
+  if (reset.expires < Date.now()) {
     resetCodes.delete(phoneNorm);
-    return res.status(400).json({ ok:false, error:'Reset code expired.' });
+    return res.status(400).json({ ok: false, error: 'Reset code expired.' });
   }
-  if(reset.code !== String(code)) return res.status(400).json({ ok:false, error:'Invalid reset code.' });
-  
+  if (reset.code !== String(code)) return res.status(400).json({ ok: false, error: 'Invalid reset code.' });
+
   const db = load();
   const user = db.users[phoneNorm];
-  if(!user) return res.status(404).json({ ok:false, error:'User not found.' });
-  
+  if (!user) return res.status(404).json({ ok: false, error: 'User not found.' });
+
   const salt = await bcrypt.genSalt(10);
   user.password = await bcrypt.hash(newPassword, salt);
   save(db);
-  
+
   resetCodes.delete(phoneNorm);
-  res.json({ ok:true, message:'Password reset successful.' });
+  res.json({ ok: true, message: 'Password reset successful.' });
 });
 
-app.post('/api/unlock', strict, async (req,res)=>{
-  const { error, value } = unlockSchema.validate(req.body||{});
-  if(error) return res.status(400).json({ ok:false, error:error.details[0].message });
-  const type=value.type||'imei';
-  if(type==='imei' &&!/^\d{15}$/.test(value.imei||'')) return res.status(400).json({ ok:false, error:'IMEI must be exactly 15 digits.' });
-  if(type!=='imei' && (!value.details||value.details.trim().length<3) &&!value.f_email) return res.status(400).json({ ok:false, error:'File/Server orders need email + details.' });
-  const db=load(); const phoneNorm=String(value.phone||'').replace(/\D/g,''); const user=db.users[phoneNorm]; if(user && user.blocked) return res.status(403).json({ ok:false, error:'Your account is blocked.' });
-  const job={ id:'SU-'+Date.now(), type, imei:value.imei||'', details:value.details||'', f_email:value.f_email||'', f_username:value.f_username||'', f_accountid:value.f_accountid||'', f_quantity:value.f_quantity||'', f_bulk:value.f_bulk||'', brand:value.brand, model:value.model, phone:value.phone, serviceId:value.serviceId||'', serviceName:value.serviceName||'', status:'queued', payment_status:'unpaid', payment_method:null, paid_at:null, refunded_at:null, refund_reason:null, created:new Date().toISOString() };
-  db.jobs.unshift(job); save(db); res.json({ ok:true, job:job.id, status:job.status, type, note:'Order received. Complete payment to start processing.' });
+// =====================================================================
+// UNLOCK & JOB ENDPOINTS
+// =====================================================================
+app.post('/api/unlock', strict, async (req, res) => {
+  const { error, value } = unlockSchema.validate(req.body || {});
+  if (error) return res.status(400).json({ ok: false, error: error.details[0].message });
+  const type = value.type || 'imei';
+  if (type === 'imei' && !/^\d{15}$/.test(value.imei || '')) return res.status(400).json({ ok: false, error: 'IMEI must be exactly 15 digits.' });
+  if (type !== 'imei' && (!value.details || value.details.trim().length < 3) && !value.f_email) return res.status(400).json({ ok: false, error: 'File/Server orders need email + details.' });
+  const db = load(); const phoneNorm = String(value.phone || '').replace(/\D/g, ''); const user = db.users[phoneNorm]; if (user && user.blocked) return res.status(403).json({ ok: false, error: 'Your account is blocked.' });
+  const job = { id: 'SU-' + Date.now(), type, imei: value.imei || '', details: value.details || '', f_email: value.f_email || '', f_username: value.f_username || '', f_accountid: value.f_accountid || '', f_quantity: value.f_quantity || '', f_bulk: value.f_bulk || '', brand: value.brand, model: value.model, phone: value.phone, serviceId: value.serviceId || '', serviceName: value.serviceName || '', status: 'queued', payment_status: 'unpaid', payment_method: null, paid_at: null, refunded_at: null, refund_reason: null, created: new Date().toISOString() };
+  db.jobs.unshift(job); save(db); res.json({ ok: true, job: job.id, status: job.status, type, note: 'Order received. Complete payment to start processing.' });
 });
 
-app.post('/api/job-status', strict, (req,res)=>{ const { error, value }=jobStatusSchema.validate(req.body||{}); if(error) return res.status(400).json({ ok:false, error:'Invalid job id.' }); const job=load().jobs.find(j=>j.id===value.id); if(!job) return res.status(404).json({ ok:false, error:'Job not found.' }); res.json({ ok:true, job }); });
+app.post('/api/job-status', strict, (req, res) => { const { error, value } = jobStatusSchema.validate(req.body || {}); if (error) return res.status(400).json({ ok: false, error: 'Invalid job id.' }); const job = load().jobs.find(j => j.id === value.id); if (!job) return res.status(404).json({ ok: false, error: 'Job not found.' }); res.json({ ok: true, job }); });
 
-app.post('/api/admin/rate', strict, (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const { error, value }=adminRateSchema.validate(req.body||{}); if(error) return res.status(400).json({ ok:false, error:'Invalid rate.' }); const db=load(); db.rate=value.slePerUsd; save(db); svcCache.ts=0; res.json({ ok:true, slePerUsd:value.slePerUsd }); });
+app.post('/api/admin/rate', strict, (req, res) => { if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' }); const { error, value } = adminRateSchema.validate(req.body || {}); if (error) return res.status(400).json({ ok: false, error: 'Invalid rate.' }); const db = load(); db.rate = value.slePerUsd; save(db); svcCache.ts = 0; res.json({ ok: true, slePerUsd: value.slePerUsd }); });
 
-app.post('/api/admin/job', strict, (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const { error, value }=adminJobSchema.validate(req.body||{}); if(error) return res.status(400).json({ ok:false, error:'Invalid payload.' }); const db=load(); const job=db.jobs.find(j=>j.id===value.id); if(!job) return res.status(404).json({ ok:false, error:'Job not found.' }); job.status=value.status; if(value.serviceId!==undefined) job.serviceId=value.serviceId; if(value.imei!==undefined) job.imei=value.imei; save(db); res.json({ ok:true, job }); });
+app.post('/api/admin/job', strict, (req, res) => { if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' }); const { error, value } = adminJobSchema.validate(req.body || {}); if (error) return res.status(400).json({ ok: false, error: 'Invalid payload.' }); const db = load(); const job = db.jobs.find(j => j.id === value.id); if (!job) return res.status(404).json({ ok: false, error: 'Job not found.' }); job.status = value.status; if (value.serviceId !== undefined) job.serviceId = value.serviceId; if (value.imei !== undefined) job.imei = value.imei; save(db); res.json({ ok: true, job }); });
 
-app.get('/api/admin/jobs', strict, (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); res.json({ ok:true, jobs:load().jobs }); });
+app.get('/api/admin/jobs', strict, (req, res) => { if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' }); res.json({ ok: true, jobs: load().jobs }); });
 
-app.post('/api/admin/pay', strict, async (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const { error, value }=adminPaySchema.validate(req.body||{}); if(error) return res.status(400).json({ ok:false, error:error.details[0].message }); const db=load(); const job=db.jobs.find(j=>j.id===value.id); if(!job) return res.status(404).json({ ok:false, error:'Job not found.' }); if(job.payment_status==='paid') return res.status(400).json({ ok:false, error:'Job already paid.' }); job.payment_status='paid'; job.payment_method=value.method; job.paid_at=new Date().toISOString(); job.status='sent-to-server'; if(!fuReady()){ save(db); return res.json({ ok:true, job:job.id, warning:'Upstream not configured.' }); } const up=await placeUpstream(job); if(up.ok){ job.upstream=up.r.json; saveUpstreamIds(job, up); } else { job.status='failed'; job.upstream=up.r.json||up.r.text; } save(db); res.json({ ok:up.ok, job:job.id, payment_status:job.payment_status, upstreamOrderId:up.orderId, upstream:up.r.json||up.r.text }); });
+app.post('/api/admin/pay', strict, async (req, res) => { if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' }); const { error, value } = adminPaySchema.validate(req.body || {}); if (error) return res.status(400).json({ ok: false, error: error.details[0].message }); const db = load(); const job = db.jobs.find(j => j.id === value.id); if (!job) return res.status(404).json({ ok: false, error: 'Job not found.' }); if (job.payment_status === 'paid') return res.status(400).json({ ok: false, error: 'Job already paid.' }); job.payment_status = 'paid'; job.payment_method = value.method; job.paid_at = new Date().toISOString(); job.status = 'sent-to-server'; if (!fuReady()) { save(db); return res.json({ ok: true, job: job.id, warning: 'Upstream not configured.' }); } const up = await placeUpstream(job); if (up.ok) { job.upstream = up.r.json; saveUpstreamIds(job, up); } else { job.status = 'failed'; job.upstream = up.r.json || up.r.text; } save(db); res.json({ ok: up.ok, job: job.id, payment_status: job.payment_status, upstreamOrderId: up.orderId, upstream: up.r.json || up.r.text }); });
 
-app.post('/api/admin/refund', strict, (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const { error, value }=adminRefundSchema.validate(req.body||{}); if(error) return res.status(400).json({ ok:false, error:error.details[0].message }); const db=load(); const job=db.jobs.find(j=>j.id===value.id); if(!job) return res.status(404).json({ ok:false, error:'Job not found.' }); if(job.payment_status!=='paid') return res.status(400).json({ ok:false, error:'Only paid jobs can be refunded.' }); job.payment_status='refunded'; job.refunded_at=new Date().toISOString(); job.refund_reason=value.reason; job.status='failed'; save(db); res.json({ ok:true, job:job.id, payment_status:job.payment_status, refund_reason:job.refund_reason }); });
+app.post('/api/admin/refund', strict, (req, res) => { if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' }); const { error, value } = adminRefundSchema.validate(req.body || {}); if (error) return res.status(400).json({ ok: false, error: error.details[0].message }); const db = load(); const job = db.jobs.find(j => j.id === value.id); if (!job) return res.status(404).json({ ok: false, error: 'Job not found.' }); if (job.payment_status !== 'paid') return res.status(400).json({ ok: false, error: 'Only paid jobs can be refunded.' }); job.payment_status = 'refunded'; job.refunded_at = new Date().toISOString(); job.refund_reason = value.reason; job.status = 'failed'; save(db); res.json({ ok: true, job: job.id, payment_status: job.payment_status, refund_reason: job.refund_reason }); });
 
-app.get('/api/wallet/:phone', async (req,res)=>{ const phone=String(req.params.phone||'').replace(/\D/g,''); if(phone.length<9) return res.status(400).json({ ok:false, error:'Invalid phone.' }); const db=load(); const w=(db.wallets||{})[phone]||{ balance:0, tx:[] }; const pending=(db.topups||[]).filter(t=>t.phone===phone&&t.status==='pending'); res.json({ ok:true, balance:w.balance, tx:(w.tx||[]).slice(0,30), pending }); });
+// =====================================================================
+// WALLET ENDPOINTS
+// =====================================================================
+app.get('/api/wallet/:phone', async (req, res) => { const phone = String(req.params.phone || '').replace(/\D/g, ''); if (phone.length < 9) return res.status(400).json({ ok: false, error: 'Invalid phone.' }); const db = load(); const w = (db.wallets || {})[phone] || { balance: 0, tx: [] }; const pending = (db.topups || []).filter(t => t.phone === phone && t.status === 'pending'); res.json({ ok: true, balance: w.balance, tx: (w.tx || []).slice(0, 30), pending }); });
 
-app.post('/api/wallet/topup', strict, (req,res)=>{
-  const b=req.body||{}; const phone=String(b.phone||'').replace(/\D/g,''); const amount=parseFloat(b.amount); const method=['orange_money','binance'].includes(b.method)? b.method:null;
-  if(phone.length<9||!amount||amount<=0||amount>10000||!method) return res.status(400).json({ ok:false, error:'Invalid top-up request.' });
-  const db=load(); db.topups=db.topups||[]; const minUsd=Math.round((50/(db.rate||DEFAULT_RATE))*100)/100; if(amount<minUsd) return res.status(400).json({ ok:false, error:'Minimum top-up is 50 Le (about $'+minUsd.toFixed(2)+')' });
-  const tp={ id:'TP-'+Date.now(), phone, amount:Math.round(amount*100)/100, method, ref:String(b.ref||''), status:'pending', created:new Date().toISOString() };
-  if(method==='orange_money' && TRUSTED_PHONES.includes(phone)){ tp.status='approved'; tp.approvedAt=new Date().toISOString(); tp.auto='trusted-phone-bot'; db.topups.unshift(tp); db.wallets=db.wallets||{}; const w=db.wallets[phone]=db.wallets[phone]||{ balance:0, tx:[] }; w.balance=Math.round((w.balance+tp.amount)*100)/100; w.tx.unshift({ type:'credit', amount:tp.amount, ref:tp.id+' (trusted-auto)', date:new Date().toISOString() }); save(db); return res.json({ ok:true, topup:tp.id, auto_approved:true, balance:w.balance, note:'Trusted phone: credited instantly.' }); }
-  db.topups.unshift(tp); save(db); res.json({ ok:true, topup:tp.id, pay_to: method==='orange_money'?'Orange Money +232 75 908 206 (Alhassan)':'Binance Pay ID 754378475', note:'Send amount now, include ref '+tp.id });
+app.post('/api/wallet/topup', strict, (req, res) => {
+  const b = req.body || {}; const phone = String(b.phone || '').replace(/\D/g, ''); const amount = parseFloat(b.amount); const method = ['orange_money', 'binance'].includes(b.method) ? b.method : null;
+  if (phone.length < 9 || !amount || amount <= 0 || amount > 10000 || !method) return res.status(400).json({ ok: false, error: 'Invalid top-up request.' });
+  const db = load(); db.topups = db.topups || []; const minUsd = Math.round((50 / (db.rate || DEFAULT_RATE)) * 100) / 100; if (amount < minUsd) return res.status(400).json({ ok: false, error: 'Minimum top-up is 50 Le (about $' + minUsd.toFixed(2) + ')' });
+  const tp = { id: 'TP-' + Date.now(), phone, amount: Math.round(amount * 100) / 100, method, ref: String(b.ref || ''), status: 'pending', created: new Date().toISOString() };
+  if (method === 'orange_money' && TRUSTED_PHONES.includes(phone)) { tp.status = 'approved'; tp.approvedAt = new Date().toISOString(); tp.auto = 'trusted-phone-bot'; db.topups.unshift(tp); db.wallets = db.wallets || {}; const w = db.wallets[phone] = db.wallets[phone] || { balance: 0, tx: [] }; w.balance = Math.round((w.balance + tp.amount) * 100) / 100; w.tx.unshift({ type: 'credit', amount: tp.amount, ref: tp.id + ' (trusted-auto)', date: new Date().toISOString() }); save(db); return res.json({ ok: true, topup: tp.id, auto_approved: true, balance: w.balance, note: 'Trusted phone: credited instantly.' }); }
+  db.topups.unshift(tp); save(db); res.json({ ok: true, topup: tp.id, pay_to: method === 'orange_money' ? 'Orange Money +232 75 908 206 (Alhassan)' : 'Binance Pay ID 754378475', note: 'Send amount now, include ref ' + tp.id });
 });
 
-app.post('/api/wallet/pay', strict, async (req,res)=>{
-  const b=req.body||{}; const phone=String(b.phone||'').replace(/\D/g,''); const db=load(); db.wallets=db.wallets||{}; const w=db.wallets[phone]=db.wallets[phone]||{ balance:0, tx:[] }; const user=db.users[phone]; if(user && user.blocked) return res.status(403).json({ ok:false, error:'Your account is BLOCKED.' });
-  const services=fuReady()? await fetchCatalog():null; const svc=(services||[]).find(s=>s.id===String(b.serviceId)); if(!svc) return res.status(400).json({ ok:false, error:'Service not found.' });
-  const price=svc.priceUsd; if(w.balance<price) return res.status(400).json({ ok:false, error:'Insufficient balance. Need $'+price+' — you have $'+w.balance, needed:price, balance:w.balance });
-  const type=['imei','file','server'].includes(b.type)? b.type:'imei'; if(type==='imei' &&!/^\d{15}$/.test(b.imei||'')) return res.status(400).json({ ok:false, error:'IMEI must be 15 digits.' }); if(type!=='imei' &&!b.f_email && String(b.details||'').trim().length<3) return res.status(400).json({ ok:false, error:'Email/details required.' });
-  w.balance=Math.round((w.balance-price)*100)/100;
-  const job={ id:'SU-'+Date.now(), type, imei:b.imei||'', details:b.details||'', f_email:b.f_email||'', f_username:b.f_username||'', f_accountid:b.f_accountid||'', f_quantity:b.f_quantity||'', f_bulk:b.f_bulk||'', brand:b.brand||'', model:b.model||'', phone, serviceId:svc.id, serviceName:svc.name, status:'sent-to-server', payment_status:'paid', payment_method:'wallet', paid_at:new Date().toISOString(), created:new Date().toISOString() };
-  let autoRefunded=false; if(fuReady()){ const up=await placeUpstream(job); if(up.ok){ job.upstream=up.r.json; saveUpstreamIds(job, up); } else { job.status='failed'; job.upstream=up.r.json||up.r.text; w.balance=Math.round((w.balance+price)*100)/100; w.tx.unshift({ type:'credit', amount:price, ref:'AUTO-REFUND '+job.id, date:new Date().toISOString() }); autoRefunded=true; } }
-  w.tx.unshift({ type:'debit', amount:price, ref:job.id, date:new Date().toISOString() }); db.jobs.unshift(job); save(db); res.json({ ok:true, job:job.id, balance:w.balance, status:job.status, auto_refunded:autoRefunded });
+app.post('/api/wallet/pay', strict, async (req, res) => {
+  const b = req.body || {}; const phone = String(b.phone || '').replace(/\D/g, ''); const db = load(); db.wallets = db.wallets || {}; const w = db.wallets[phone] = db.wallets[phone] || { balance: 0, tx: [] }; const user = db.users[phone]; if (user && user.blocked) return res.status(403).json({ ok: false, error: 'Your account is BLOCKED.' });
+  const services = fuReady() ? await fetchCatalog() : null; const svc = (services || []).find(s => s.id === String(b.serviceId)); if (!svc) return res.status(400).json({ ok: false, error: 'Service not found.' });
+  const price = svc.priceUsd; if (w.balance < price) return res.status(400).json({ ok: false, error: 'Insufficient balance. Need $' + price + ' — you have $' + w.balance, needed: price, balance: w.balance });
+  const type = ['imei', 'file', 'server'].includes(b.type) ? b.type : 'imei'; if (type === 'imei' && !/^\d{15}$/.test(b.imei || '')) return res.status(400).json({ ok: false, error: 'IMEI must be 15 digits.' }); if (type !== 'imei' && !b.f_email && String(b.details || '').trim().length < 3) return res.status(400).json({ ok: false, error: 'Email/details required.' });
+  w.balance = Math.round((w.balance - price) * 100) / 100;
+  const job = { id: 'SU-' + Date.now(), type, imei: b.imei || '', details: b.details || '', f_email: b.f_email || '', f_username: b.f_username || '', f_accountid: b.f_accountid || '', f_quantity: b.f_quantity || '', f_bulk: b.f_bulk || '', brand: b.brand || '', model: b.model || '', phone, serviceId: svc.id, serviceName: svc.name, status: 'sent-to-server', payment_status: 'paid', payment_method: 'wallet', paid_at: new Date().toISOString(), created: new Date().toISOString() };
+  let autoRefunded = false; if (fuReady()) { const up = await placeUpstream(job); if (up.ok) { job.upstream = up.r.json; saveUpstreamIds(job, up); } else { job.status = 'failed'; job.upstream = up.r.json || up.r.text; w.balance = Math.round((w.balance + price) * 100) / 100; w.tx.unshift({ type: 'credit', amount: price, ref: 'AUTO-REFUND ' + job.id, date: new Date().toISOString() }); autoRefunded = true; } }
+  w.tx.unshift({ type: 'debit', amount: price, ref: job.id, date: new Date().toISOString() }); db.jobs.unshift(job); save(db); res.json({ ok: true, job: job.id, balance: w.balance, status: job.status, auto_refunded: autoRefunded });
 });
 
-app.get('/api/admin/wallet/topups', strict, (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); res.json({ ok:true, topups:(load().topups||[]).slice(0,100) }); });
+app.get('/api/admin/wallet/topups', strict, (req, res) => { if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' }); res.json({ ok: true, topups: (load().topups || []).slice(0, 100) }); });
 
-app.post('/api/admin/wallet/approve', strict, (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const id=String((req.body||{}).id||''); const db=load(); db.wallets=db.wallets||{}; db.topups=db.topups||[]; const tp=db.topups.find(t=>t.id===id); if(!tp) return res.status(404).json({ ok:false, error:'Top-up not found.' }); if(tp.status!=='pending') return res.status(400).json({ ok:false, error:'Already processed.' }); tp.status='approved'; tp.approvedAt=new Date().toISOString(); const w=db.wallets[tp.phone]=db.wallets[tp.phone]||{ balance:0, tx:[] }; w.balance=Math.round((w.balance+tp.amount)*100)/100; w.tx.unshift({ type:'credit', amount:tp.amount, ref:tp.id, date:new Date().toISOString() }); save(db); res.json({ ok:true, balance:w.balance, topup:tp.id }); });
+app.post('/api/admin/wallet/approve', strict, (req, res) => { if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' }); const id = String((req.body || {}).id || ''); const db = load(); db.wallets = db.wallets || {}; db.topups = db.topups || []; const tp = db.topups.find(t => t.id === id); if (!tp) return res.status(404).json({ ok: false, error: 'Top-up not found.' }); if (tp.status !== 'pending') return res.status(400).json({ ok: false, error: 'Already processed.' }); tp.status = 'approved'; tp.approvedAt = new Date().toISOString(); const w = db.wallets[tp.phone] = db.wallets[tp.phone] || { balance: 0, tx: [] }; w.balance = Math.round((w.balance + tp.amount) * 100) / 100; w.tx.unshift({ type: 'credit', amount: tp.amount, ref: tp.id, date: new Date().toISOString() }); save(db); res.json({ ok: true, balance: w.balance, topup: tp.id }); });
 
-app.post('/api/admin/wallet/reject', strict, (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const id=String((req.body||{}).id||''); const db=load(); db.topups=db.topups||[]; const tp=db.topups.find(t=>t.id===id); if(!tp||tp.status!=='pending') return res.status(400).json({ ok:false, error:'Not found or already processed.' }); tp.status='rejected'; tp.reason=String((req.body||{}).reason||''); save(db); res.json({ ok:true, topup:tp.id }); });
+app.post('/api/admin/wallet/reject', strict, (req, res) => { if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' }); const id = String((req.body || {}).id || ''); const db = load(); db.topups = db.topups || []; const tp = db.topups.find(t => t.id === id); if (!tp || tp.status !== 'pending') return res.status(400).json({ ok: false, error: 'Not found or already processed.' }); tp.status = 'rejected'; tp.reason = String((req.body || {}).reason || ''); save(db); res.json({ ok: true, topup: tp.id }); });
 
-app.get('/api/admin/customers', strict, (req,res)=>{
-  if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' });
-  const db=load(); const users=db.users||{}; const jobs=db.jobs||[]; const wallets=db.wallets||{}; const agg={};
-  jobs.forEach(j=>{ const ph=String(j.phone||'').replace(/\D/g,''); if(!ph) return; if(!agg[ph]) agg[ph]={ totalOrders:0, totalSpent:0, lastService:'—', lastImei:'', lastDate:'' }; agg[ph].totalOrders+=1; if(j.payment_status==='paid'){ agg[ph].lastService=j.serviceName||j.service||agg[ph].lastService; agg[ph].lastImei=j.imei||''; agg[ph].lastDate=j.created||agg[ph].lastDate; } });
-  Object.keys(wallets).forEach(ph=>{ const tx=wallets[ph]?.tx||[]; let spent=0; tx.forEach(t=>{ if(t.type==='debit') spent+=Number(t.amount||0); }); if(agg[ph]) agg[ph].totalSpent=Math.round(spent*100)/100; });
-  const customers=Object.values(users).map(u=>{ const ph=String(u.phone||'').replace(/\D/g,''); const stat=agg[ph]||{ totalOrders:0, totalSpent:0, lastService:'—', lastImei:'', lastDate:'' }; return { id:u.phone, _id:u.phone, phone:u.phone, name:u.name||'', email:u.email||'', created:u.createdAt||'', createdAt:u.createdAt||'', totalOrders:stat.totalOrders||0, totalSpent:stat.totalSpent||0, lastService:stat.lastService, lastOrder:stat.lastService, lastOrderService:stat.lastService, lastImei:stat.lastImei, blocked:!!u.blocked }; }).sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0));
-  Object.keys(agg).forEach(ph=>{ if(!users[ph]) customers.push({ id:ph, _id:ph, phone:ph, name:'(Guest) '+ph, email:'', created:agg[ph].lastDate||'', createdAt:agg[ph].lastDate||'', totalOrders:agg[ph].totalOrders, totalSpent:agg[ph].totalSpent, lastService:agg[ph].lastService, lastOrder:agg[ph].lastService, lastOrderService:agg[ph].lastService, lastImei:agg[ph].lastImei, blocked:false, guest:true }); });
-  res.json({ ok:true, customers, count:customers.length });
+// =====================================================================
+// ADMIN CUSTOMERS
+// =====================================================================
+app.get('/api/admin/customers', strict, (req, res) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' });
+  const db = load(); const users = db.users || {}; const jobs = db.jobs || []; const wallets = db.wallets || {}; const agg = {};
+  jobs.forEach(j => { const ph = String(j.phone || '').replace(/\D/g, ''); if (!ph) return; if (!agg[ph]) agg[ph] = { totalOrders: 0, totalSpent: 0, lastService: '—', lastImei: '', lastDate: '' }; agg[ph].totalOrders += 1; if (j.payment_status === 'paid') { agg[ph].lastService = j.serviceName || j.service || agg[ph].lastService; agg[ph].lastImei = j.imei || ''; agg[ph].lastDate = j.created || agg[ph].lastDate; } });
+  Object.keys(wallets).forEach(ph => { const tx = wallets[ph]?.tx || []; let spent = 0; tx.forEach(t => { if (t.type === 'debit') spent += Number(t.amount || 0); }); if (agg[ph]) agg[ph].totalSpent = Math.round(spent * 100) / 100; });
+  const customers = Object.values(users).map(u => { const ph = String(u.phone || '').replace(/\D/g, ''); const stat = agg[ph] || { totalOrders: 0, totalSpent: 0, lastService: '—', lastImei: '', lastDate: '' }; return { id: u.phone, _id: u.phone, phone: u.phone, name: u.name || '', email: u.email || '', created: u.createdAt || '', createdAt: u.createdAt || '', totalOrders: stat.totalOrders || 0, totalSpent: stat.totalSpent || 0, lastService: stat.lastService, lastOrder: stat.lastService, lastOrderService: stat.lastService, lastImei: stat.lastImei, blocked: !!u.blocked }; }).sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  Object.keys(agg).forEach(ph => { if (!users[ph]) customers.push({ id: ph, _id: ph, phone: ph, name: '(Guest) ' + ph, email: '', created: agg[ph].lastDate || '', createdAt: agg[ph].lastDate || '', totalOrders: agg[ph].totalOrders, totalSpent: agg[ph].totalSpent, lastService: agg[ph].lastService, lastOrder: agg[ph].lastService, lastOrderService: agg[ph].lastService, lastImei: agg[ph].lastImei, blocked: false, guest: true }); });
+  res.json({ ok: true, customers, count: customers.length });
 });
 
-app.post('/api/admin/customers/:id/block', strict, (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const id=String(req.params.id||'').replace(/\D/g,''); const db=load(); db.users=db.users||{}; const u=db.users[id]; if(!u) return res.status(404).json({ ok:false, error:'Customer not found.' }); u.blocked=true; save(db); res.json({ ok:true, id, blocked:true }); });
+app.post('/api/admin/customers/:id/block', strict, (req, res) => { if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' }); const id = String(req.params.id || '').replace(/\D/g, ''); const db = load(); db.users = db.users || {}; const u = db.users[id]; if (!u) return res.status(404).json({ ok: false, error: 'Customer not found.' }); u.blocked = true; save(db); res.json({ ok: true, id, blocked: true }); });
 
-app.post('/api/admin/customers/:id/unblock', strict, (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const id=String(req.params.id||'').replace(/\D/g,''); const db=load(); db.users=db.users||{}; const u=db.users[id]; if(!u) return res.status(404).json({ ok:false, error:'Customer not found.' }); u.blocked=false; save(db); res.json({ ok:true, id, blocked:false }); });
+app.post('/api/admin/customers/:id/unblock', strict, (req, res) => { if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' }); const id = String(req.params.id || '').replace(/\D/g, ''); const db = load(); db.users = db.users || {}; const u = db.users[id]; if (!u) return res.status(404).json({ ok: false, error: 'Customer not found.' }); u.blocked = false; save(db); res.json({ ok: true, id, blocked: false }); });
 
-app.delete('/api/admin/customers/:id', strict, (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const id=String(req.params.id||'').replace(/\D/g,''); const db=load(); db.users=db.users||{}; if(!db.users[id]) return res.status(404).json({ ok:false, error:'Customer not found.' }); const del=db.users[id]; delete db.users[id]; db.sessions=db.sessions||{}; Object.keys(db.sessions).forEach(t=>{ if(db.sessions[t].phone===id) delete db.sessions[t]; }); db.adminLog=db.adminLog||[]; db.adminLog.unshift({ action:'customer-delete', phone:id, email:del.email, at:new Date().toISOString() }); db.adminLog=db.adminLog.slice(0,200); save(db); res.json({ ok:true, deleted:id }); });
+app.delete('/api/admin/customers/:id', strict, (req, res) => { if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' }); const id = String(req.params.id || '').replace(/\D/g, ''); const db = load(); db.users = db.users || {}; if (!db.users[id]) return res.status(404).json({ ok: false, error: 'Customer not found.' }); const del = db.users[id]; delete db.users[id]; db.sessions = db.sessions || {}; Object.keys(db.sessions).forEach(t => { if (db.sessions[t].phone === id) delete db.sessions[t]; }); db.adminLog = db.adminLog || []; db.adminLog.unshift({ action: 'customer-delete', phone: id, email: del.email, at: new Date().toISOString() }); db.adminLog = db.adminLog.slice(0, 200); save(db); res.json({ ok: true, deleted: id }); });
 
-/* =====================================================================
-   CDR WEBHOOK — v3.44.6 FIXED — SIMPLE & RELIABLE
-   ===================================================================== */
+// =====================================================================
+// CDR WEBHOOK
+// =====================================================================
 const handleCdr = (req, res) => {
-  console.log('[CDR WEBHOOK] Method:', req.method, 'Query:', JSON.stringify(req.query).slice(0,200), 'Body:', JSON.stringify(req.body).slice(0,200));
-  
+  console.log('[CDR WEBHOOK] Method:', req.method, 'Query:', JSON.stringify(req.query).slice(0, 200), 'Body:', JSON.stringify(req.body).slice(0, 200));
+
   const p = req.method === 'GET' ? req.query : (req.body || {});
-  
+
   const qKey = req.query.key || req.query.cdrkey || req.query.replykey || req.query.CDRKEY || '';
   const bKey = p.replykey || p.replyKey || p.key || p.cdrkey || p.CDRKEY || '';
   const hKey = req.get('x-cdr-key') || req.get('x-api-key') || '';
   const key = String(qKey || bKey || hKey || '').trim();
   const expected = String(process.env.CDR_REPLY_KEY || 'SU-CDR-7f3a9c2e8b1d').trim();
-  
+
   console.log('[CDR] Key check - Got:', key, 'Expected:', expected, 'Match:', key === expected);
-  
+
   if (req.method === 'GET' && Object.keys(p).length <= 1) {
     return res.json({ ok: true, message: 'CDR webhook alive — waiting for POST from FastUnlockers', key_ok: key === expected, time: new Date().toISOString() });
   }
-  
+
   if (!expected) {
     console.log('[CDR ERROR] CDR_REPLY_KEY not configured');
     return res.status(503).send('CDR not configured — set CDR_REPLY_KEY');
   }
-  
+
   if (key !== expected) {
     console.log('[CDR ERROR] Bad key - got:', key);
     return res.status(401).send('bad key');
   }
-  
+
   const oid = String(p.orderid || p.orderId || p.order_id || p.ORDERID || p.referenceid || p.REFERENCEID || p.reference || p.transactionid || p.id || '').trim();
   console.log('[CDR] Order ID:', oid);
-  
+
   if (!oid) {
     console.log('[CDR ERROR] No order ID in payload');
     return res.status(400).send('no order id');
   }
-  
+
   const db = load();
-  
+
   const job = db.jobs.find(j => j.upstreamOrderId && String(j.upstreamOrderId).trim() === oid) ||
-              db.jobs.find(j => j.upstreamProviderOrderId && String(j.upstreamProviderOrderId).trim() === oid) ||
-              db.jobs.find(j => j.id === String(p.jobid || p.jobId || p.JOBID || ''));
-  
+    db.jobs.find(j => j.upstreamProviderOrderId && String(j.upstreamProviderOrderId).trim() === oid) ||
+    db.jobs.find(j => j.id === String(p.jobid || p.jobId || p.JOBID || ''));
+
   if (!job) {
     console.log('[CDR ERROR] Unknown order:', oid);
     return res.status(404).send('unknown order ' + oid);
   }
-  
+
   console.log('[CDR] Found job:', job.id, 'Current status:', job.status);
-  
+
   const st = String(p.status || p.orderstatus || p.orderStatus || p.ORDERSTATUS || '').toLowerCase();
   const codeRaw = String(p.code || p.unlock_code || p.unlockCode || p.reply || p.result || p.response || p.info || p.INFO || p.message || p.MESSAGE || '').trim();
-  
+
   console.log('[CDR] Status:', st, 'Code length:', codeRaw.length);
-  
+
   const isRejected = st.includes('reject') || st.includes('fail') || st.includes('cancel') || codeRaw.toLowerCase().includes('not eligible');
   const isSolved = st.includes('success') || st.includes('solved') || st.includes('complet') || st === '4' || (codeRaw && codeRaw.length > 10 && !codeRaw.toLowerCase().includes('not eligible'));
-  
+
   if (isRejected) {
     console.log('[CDR] Marking as FAILED');
     job.status = 'failed';
     job.cdrCode = codeRaw || 'Rejected / Not Eligible';
-    
+
     if (job.payment_method === 'wallet' && job.payment_status === 'paid') {
       const ph = String(job.phone || '').replace(/\D/g, '');
       const w = db.wallets[ph];
@@ -509,122 +559,125 @@ const handleCdr = (req, res) => {
     console.log('[CDR] Still processing');
     job.status = 'processing';
   }
-  
+
   job.upstream = p;
   job.cdrAt = new Date().toISOString();
   save(db);
-  
-  console.log('[CDR SUCCESS] Order', job.id, '-> Status:', job.status, 'Code:', (job.cdrCode||'').slice(0,100));
+
+  console.log('[CDR SUCCESS] Order', job.id, '-> Status:', job.status, 'Code:', (job.cdrCode || '').slice(0, 100));
   res.send('OK');
 };
 
 app.get('/api/webhook/cdr', handleCdr);
 app.post('/api/webhook/cdr', express.json(), express.urlencoded({ extended: true }), handleCdr);
 
-const FU={ base:(process.env.UNLOCK_API_URL||'').replace(/\/+$/, ''), key:process.env.UNLOCK_API_KEY||'', username:process.env.UNLOCK_API_USERNAME||'', endpoint:process.env.UNLOCK_API_ENDPOINT||'/api/dhru' };
-function fuReady(){ return !!(FU.base && FU.key && FU.username); }
+// =====================================================================
+// FASTUNLOCKERS / DHRU 4-ID INTEGRATION
+// =====================================================================
+const FU = { base: (process.env.UNLOCK_API_URL || '').replace(/\/+$/, ''), key: process.env.UNLOCK_API_KEY || '', username: process.env.UNLOCK_API_USERNAME || '', endpoint: process.env.UNLOCK_API_ENDPOINT || '/api/dhru' };
+function fuReady() { return !!(FU.base && FU.key && FU.username); }
 
-function xmlEscape(v){ return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;'); }
+function xmlEscape(v) { return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;'); }
 
-function dhruParameters(extraParams){ const entries=Object.entries(extraParams||{}).filter(([,value])=>value!==undefined&&value!==null&&value!=='').map(([key,value])=>`<${String(key).toUpperCase()}>${xmlEscape(value)}</${String(key).toUpperCase()}>`).join(''); return `<PARAMETERS>${entries}</PARAMETERS>`; }
+function dhruParameters(extraParams) { const entries = Object.entries(extraParams || {}).filter(([, value]) => value !== undefined && value !== null && value !== '').map(([key, value]) => `<${String(key).toUpperCase()}>${xmlEscape(value)}</${String(key).toUpperCase()}>`).join(''); return `<PARAMETERS>${entries}</PARAMETERS>`; }
 
-function maskedBody(paramsObj){ const copy=Object.assign({}, paramsObj); if(copy.apiaccesskey) copy.apiaccesskey=copy.apiaccesskey.slice(0,4)+'***'; return Object.keys(copy).map(k=>encodeURIComponent(k)+'='+encodeURIComponent(copy[k])).join('&'); }
+function maskedBody(paramsObj) { const copy = Object.assign({}, paramsObj); if (copy.apiaccesskey) copy.apiaccesskey = copy.apiaccesskey.slice(0, 4) + '***'; return Object.keys(copy).map(k => encodeURIComponent(k) + '=' + encodeURIComponent(copy[k])).join('&'); }
 
-async function gsmCall(action, extraParams={}, opts={}){
-  if(!fuReady()) throw new Error('Upstream not configured.');
-  const params={ username:FU.username, apiaccesskey:FU.key, action, requestformat:'JSON', parameters:dhruParameters(extraParams) };
-  const body=new URLSearchParams(params).toString();
-  const ctrl=new AbortController(); const t=setTimeout(()=>ctrl.abort(),15000);
-  try{
-    const r=await fetch(FU.base+FU.endpoint, { method:'POST', headers:{ 'Accept':'application/json','Content-Type':'application/x-www-form-urlencoded' }, body, signal:ctrl.signal });
-    const text=await r.text(); let json=null; try{ json=JSON.parse(text); }catch(e){}
-    if(opts.debug){ console.log('[UPSTREAM OUT]', action, maskedBody(params)); console.log('[UPSTREAM IN ]', action, text.slice(0,1000)); }
-    return { http:r.status, json, text:text.slice(0,1500), sentBody:maskedBody(params) };
-  }catch(e){ return { http:0, json:null, text:'network error: '+e.message, sentBody:maskedBody(params) }; }finally{ clearTimeout(t); }
+async function gsmCall(action, extraParams = {}, opts = {}) {
+  if (!fuReady()) throw new Error('Upstream not configured.');
+  const params = { username: FU.username, apiaccesskey: FU.key, action, requestformat: 'JSON', parameters: dhruParameters(extraParams) };
+  const body = new URLSearchParams(params).toString();
+  const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 15000);
+  try {
+    const r = await fetch(FU.base + FU.endpoint, { method: 'POST', headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' }, body, signal: ctrl.signal });
+    const text = await r.text(); let json = null; try { json = JSON.parse(text); } catch (e) { }
+    if (opts.debug) { console.log('[UPSTREAM OUT]', action, maskedBody(params)); console.log('[UPSTREAM IN ]', action, text.slice(0, 1000)); }
+    return { http: r.status, json, text: text.slice(0, 1500), sentBody: maskedBody(params) };
+  } catch (e) { return { http: 0, json: null, text: 'network error: ' + e.message, sentBody: maskedBody(params) }; } finally { clearTimeout(t); }
 }
 
-const LIST_ACTIONS={ imei:['imeiservicelist'], file:['fileservicelist','filelist','fileandservicelist','servicelistfile'], server:['serverservicelist','serverlist','creditservicelist','servicelistserver','serverandservicelist'] };
-const ORDER_ACTIONS={ imei:['placeimeiorder'], file:['placefileorder'], server:['placeserverorder','placecreditorder'] };
-const STATUS_ACTIONS={ imei:['getimeiorder'], file:['getfileorder'], server:['getserverorder'] };
-const ALL_STATUS_ACTIONS=[...STATUS_ACTIONS.imei,...STATUS_ACTIONS.file,...STATUS_ACTIONS.server];
+const LIST_ACTIONS = { imei: ['imeiservicelist'], file: ['fileservicelist', 'filelist', 'fileandservicelist', 'servicelistfile'], server: ['serverservicelist', 'serverlist', 'creditservicelist', 'servicelistserver', 'serverandservicelist'] };
+const ORDER_ACTIONS = { imei: ['placeimeiorder'], file: ['placefileorder'], server: ['placeserverorder', 'placecreditorder'] };
+const STATUS_ACTIONS = { imei: ['getimeiorder'], file: ['getfileorder'], server: ['getserverorder'] };
+const ALL_STATUS_ACTIONS = [...STATUS_ACTIONS.imei, ...STATUS_ACTIONS.file, ...STATUS_ACTIONS.server];
 
-function parseList(raw, type){
-  const listObj=(Array.isArray(raw)&&raw[0]&&raw[0].LIST)? raw[0].LIST : (raw&&raw.LIST? raw.LIST : (raw&&typeof raw==='object'? raw:{}));
-  const rate=load().rate; const flat=0; const splitStr=(process.env.UNLOCK_COMMISSION_SPLIT||'0.75,0.25').split(','); const su=Math.max(0,Math.min(1,parseFloat(splitStr[0])||0.75)); const al=Math.max(0,Math.min(1,parseFloat(splitStr[1])||0.25)); const out=[];
-  Object.keys(listObj).forEach(gname=>{ const svcs=(listObj[gname]||{}).SERVICES||{}; Object.keys(svcs).forEach(sid=>{ const s=svcs[sid]||{}; const credit=parseFloat(s.CREDIT||'0'); const priceUsd=Math.round((credit+flat)*100)/100; const profit=priceUsd-credit; out.push({ id:String(s.SERVICEID||sid), name:String(s.SERVICENAME||'').trim(), group:String(gname), type, costUsd:credit, priceUsd, profitUsd:Math.round(profit*100)/100, sierraunlockShareUsd:Math.round(profit*su*100)/100, alhassanShareUsd:Math.round(profit*al*100)/100, priceSle:Math.round(priceUsd*rate), time:String(s.TIME||''), info:String(s.INFO||'') }); }); });
+function parseList(raw, type) {
+  const listObj = (Array.isArray(raw) && raw[0] && raw[0].LIST) ? raw[0].LIST : (raw && raw.LIST ? raw.LIST : (raw && typeof raw === 'object' ? raw : {}));
+  const rate = load().rate; const flat = 0; const splitStr = (process.env.UNLOCK_COMMISSION_SPLIT || '0.75,0.25').split(','); const su = Math.max(0, Math.min(1, parseFloat(splitStr[0]) || 0.75)); const al = Math.max(0, Math.min(1, parseFloat(splitStr[1]) || 0.25)); const out = [];
+  Object.keys(listObj).forEach(gname => { const svcs = (listObj[gname] || {}).SERVICES || {}; Object.keys(svcs).forEach(sid => { const s = svcs[sid] || {}; const credit = parseFloat(s.CREDIT || '0'); const priceUsd = Math.round((credit + flat) * 100) / 100; const profit = priceUsd - credit; out.push({ id: String(s.SERVICEID || sid), name: String(s.SERVICENAME || '').trim(), group: String(gname), type, costUsd: credit, priceUsd, profitUsd: Math.round(profit * 100) / 100, sierraunlockShareUsd: Math.round(profit * su * 100) / 100, alhassanShareUsd: Math.round(profit * al * 100) / 100, priceSle: Math.round(priceUsd * rate), time: String(s.TIME || ''), info: String(s.INFO || '') }); }); });
   return out;
 }
 
-async function fetchList(type){
-  const merged=[]; const seen={};
-  for(const action of (LIST_ACTIONS[type]||[])){
-    try{ const r=await gsmCall(action); if(r.http===200 && r.json && r.json.SUCCESS){ parseList(r.json.SUCCESS, type).forEach(s=>{ const k=s.type+':'+s.id; if(!seen[k]){ seen[k]=1; merged.push(s); } }); } }catch(e){}
+async function fetchList(type) {
+  const merged = []; const seen = {};
+  for (const action of (LIST_ACTIONS[type] || [])) {
+    try { const r = await gsmCall(action); if (r.http === 200 && r.json && r.json.SUCCESS) { parseList(r.json.SUCCESS, type).forEach(s => { const k = s.type + ':' + s.id; if (!seen[k]) { seen[k] = 1; merged.push(s); } }); } } catch (e) { }
   }
   return merged;
 }
 
-async function placeUpstreamOnce(job){
-  const type=job.type||'imei'; let last={ http:0, json:null, text:'no attempt' };
-  const sid=String(job.serviceId||job.service||'').trim();
-  if(!sid) return { ok:false, r:{ http:400, json:{ ERROR:[{ MESSAGE:'Local: Missing serviceId' }] }, text:'missing serviceId', sentBody:'' }, orderId:null };
-  for(const action of (ORDER_ACTIONS[type]||ORDER_ACTIONS.imei)){
-    const params={ ID:sid, IMEI:job.imei||'', CUSTOMER:job.id, BRAND:job.brand||'', MODEL:job.model||'' };
-    if(job.details) params.DETAILS=job.details; if(job.f_email) params.EMAIL=job.f_email; if(job.f_accountid) params.ACCOUNTID=job.f_accountid; if(job.f_quantity) params.QUANTITY=job.f_quantity; if(job.f_bulk) params.BULKIMEI=job.f_bulk;
-    const r=await gsmCall(action, params, { debug:true }); last=r;
-    const success=r.json && r.json.SUCCESS;
-    if(r.http===200 && success){ const record=Array.isArray(success)? (success[0]||{}) : success; return { ok:true, r, orderId:record.REFERENCE||record.REFERENCEID||record.reference||null, providerOrderId:record.ORDERID||record.orderid||record.order_id||null }; }
+async function placeUpstreamOnce(job) {
+  const type = job.type || 'imei'; let last = { http: 0, json: null, text: 'no attempt' };
+  const sid = String(job.serviceId || job.service || '').trim();
+  if (!sid) return { ok: false, r: { http: 400, json: { ERROR: [{ MESSAGE: 'Local: Missing serviceId' }] }, text: 'missing serviceId', sentBody: '' }, orderId: null };
+  for (const action of (ORDER_ACTIONS[type] || ORDER_ACTIONS.imei)) {
+    const params = { ID: sid, IMEI: job.imei || '', CUSTOMER: job.id, BRAND: job.brand || '', MODEL: job.model || '' };
+    if (job.details) params.DETAILS = job.details; if (job.f_email) params.EMAIL = job.f_email; if (job.f_accountid) params.ACCOUNTID = job.f_accountid; if (job.f_quantity) params.QUANTITY = job.f_quantity; if (job.f_bulk) params.BULKIMEI = job.f_bulk;
+    const r = await gsmCall(action, params, { debug: true }); last = r;
+    const success = r.json && r.json.SUCCESS;
+    if (r.http === 200 && success) { const record = Array.isArray(success) ? (success[0] || {}) : success; return { ok: true, r, orderId: record.REFERENCE || record.REFERENCEID || record.reference || null, providerOrderId: record.ORDERID || record.orderid || record.order_id || null }; }
   }
-  return { ok:false, r:last, orderId:null };
+  return { ok: false, r: last, orderId: null };
 }
 
-async function placeUpstream(job){
-  let last=null; for(let attempt=1; attempt<=3; attempt++){ last=await placeUpstreamOnce(job); if(last.ok) return last; const msg=JSON.stringify((last.r&&last.r.json)||(last.r&&last.r.text)||''); if(/Required|Invalid|Not enough|balance|Denied/i.test(msg)) break; if(attempt<3) await new Promise(w=>setTimeout(w,2000)); } return last;
+async function placeUpstream(job) {
+  let last = null; for (let attempt = 1; attempt <= 3; attempt++) { last = await placeUpstreamOnce(job); if (last.ok) return last; const msg = JSON.stringify((last.r && last.r.json) || (last.r && last.r.text) || ''); if (/Required|Invalid|Not enough|balance|Denied/i.test(msg)) break; if (attempt < 3) await new Promise(w => setTimeout(w, 2000)); } return last;
 }
 
-function saveUpstreamIds(job, up){ job.upstreamOrderId=up.orderId||null; if(up.providerOrderId) job.upstreamProviderOrderId=String(up.providerOrderId); }
+function saveUpstreamIds(job, up) { job.upstreamOrderId = up.orderId || null; if (up.providerOrderId) job.upstreamProviderOrderId = String(up.providerOrderId); }
 
-function normalizeStatus(json){
-  if(!json) return null;
-  const s=json.SUCCESS? (Array.isArray(json.SUCCESS)? json.SUCCESS[0]:json.SUCCESS) : json;
-  if(!s || typeof s!== 'object') return null;
-  const statusRaw=String(s.STATUS||s.status||s.ORDERSTATUS||s.OrderStatus||s.orderstatus||s.Status||'').trim();
-  const codeRaw=String(s.CODE||s.code||s.UNLOCKCODE||s.unlock_code||s.UNLOCK_CODE||'').trim();
-  const infoRaw=String(s.INFO||s.info||s.MESSAGE||s.message||s.RESPONSE||s.response||s.DETAILS||s.details||s.RESULT||s.result||'').trim();
-  const statusLower=statusRaw.toLowerCase();
-  const combinedLower=(codeRaw+' '+infoRaw).toLowerCase();
-  let mapped='processing'; let finalCode=codeRaw || infoRaw || null;
-  if(['3','rejected','failed','fail','cancel','cancelled','not eligible','noteligible'].includes(statusLower) || statusLower.includes('reject') || statusLower.includes('fail') || combinedLower.includes('not eligible') || combinedLower.includes('noteligible')){ mapped='failed'; finalCode=codeRaw || infoRaw || 'Not Eligible / Rejected'; }
-  else if(['4','completed','solved','success','finished','done','complete'].includes(statusLower) || statusLower.includes('complet') || statusLower.includes('success') || statusLower.includes('solved')){ mapped='solved'; finalCode=codeRaw || infoRaw || statusRaw; }
-  else if(infoRaw.length>15 &&!combinedLower.includes('not eligible')){ mapped='solved'; finalCode=infoRaw || codeRaw; }
-  else if(finalCode && finalCode.length>10 &&!combinedLower.includes('not eligible')){ mapped='solved'; }
-  if(combinedLower.includes('not eligible') || combinedLower.includes('noteligible')){ mapped='failed'; }
-  return { raw:s, status:mapped, code:finalCode? String(finalCode):null, statusRaw, codeRaw:codeRaw||infoRaw, infoRaw };
+function normalizeStatus(json) {
+  if (!json) return null;
+  const s = json.SUCCESS ? (Array.isArray(json.SUCCESS) ? json.SUCCESS[0] : json.SUCCESS) : json;
+  if (!s || typeof s !== 'object') return null;
+  const statusRaw = String(s.STATUS || s.status || s.ORDERSTATUS || s.OrderStatus || s.orderstatus || s.Status || '').trim();
+  const codeRaw = String(s.CODE || s.code || s.UNLOCKCODE || s.unlock_code || s.UNLOCK_CODE || '').trim();
+  const infoRaw = String(s.INFO || s.info || s.MESSAGE || s.message || s.RESPONSE || s.response || s.DETAILS || s.details || s.RESULT || s.result || '').trim();
+  const statusLower = statusRaw.toLowerCase();
+  const combinedLower = (codeRaw + ' ' + infoRaw).toLowerCase();
+  let mapped = 'processing'; let finalCode = codeRaw || infoRaw || null;
+  if (['3', 'rejected', 'failed', 'fail', 'cancel', 'cancelled', 'not eligible', 'noteligible'].includes(statusLower) || statusLower.includes('reject') || statusLower.includes('fail') || combinedLower.includes('not eligible') || combinedLower.includes('noteligible')) { mapped = 'failed'; finalCode = codeRaw || infoRaw || 'Not Eligible / Rejected'; }
+  else if (['4', 'completed', 'solved', 'success', 'finished', 'done', 'complete'].includes(statusLower) || statusLower.includes('complet') || statusLower.includes('success') || statusLower.includes('solved')) { mapped = 'solved'; finalCode = codeRaw || infoRaw || statusRaw; }
+  else if (infoRaw.length > 15 && !combinedLower.includes('not eligible')) { mapped = 'solved'; finalCode = infoRaw || codeRaw; }
+  else if (finalCode && finalCode.length > 10 && !combinedLower.includes('not eligible')) { mapped = 'solved'; }
+  if (combinedLower.includes('not eligible') || combinedLower.includes('noteligible')) { mapped = 'failed'; }
+  return { raw: s, status: mapped, code: finalCode ? String(finalCode) : null, statusRaw, codeRaw: codeRaw || infoRaw, infoRaw };
 }
 
-async function statusUpstream(job){
-  const reference=String(job.upstreamOrderId||'').trim();
-  const stored=job.upstream && Array.isArray(job.upstream.SUCCESS)? (job.upstream.SUCCESS[0]||{}) : {};
-  const providerId=String(job.upstreamProviderOrderId||job.providerOrderId||stored.ORDERID||stored.orderid||stored.order_id||'').trim();
+async function statusUpstream(job) {
+  const reference = String(job.upstreamOrderId || '').trim();
+  const stored = job.upstream && Array.isArray(job.upstream.SUCCESS) ? (job.upstream.SUCCESS[0] || {}) : {};
+  const providerId = String(job.upstreamProviderOrderId || job.providerOrderId || stored.ORDERID || stored.orderid || stored.order_id || '').trim();
   const tryId = providerId || reference;
-  if(!tryId) return null;
-  for(const action of ALL_STATUS_ACTIONS){
-    try{
+  if (!tryId) return null;
+  for (const action of ALL_STATUS_ACTIONS) {
+    try {
       const params = { ID: tryId, ORDERID: tryId, REFERENCEID: reference || tryId, REFERENCE: reference || tryId };
-      const r=await gsmCall(action, params, { debug:true });
-      if(r.http===200 && r.json){
-        const norm=normalizeStatus(r.json);
-        if(norm && (norm.status==='solved' || norm.status==='failed' || (norm.code && norm.code.length>10))){
-          return { json:r.json, normalized:norm };
+      const r = await gsmCall(action, params, { debug: true });
+      if (r.http === 200 && r.json) {
+        const norm = normalizeStatus(r.json);
+        if (norm && (norm.status === 'solved' || norm.status === 'failed' || (norm.code && norm.code.length > 10))) {
+          return { json: r.json, normalized: norm };
         }
       }
-    }catch(e){}
+    } catch (e) { }
   }
   return null;
 }
 
-let svcCache={ ts:0, data:null };
+let svcCache = { ts: 0, data: null };
 
-function normalizeServiceTypeFix(s){
+function normalizeServiceTypeFix(s) {
   const name = (s.name || '').toLowerCase();
   const group = (s.group || '').toLowerCase();
   if (s.type === 'server' || name.includes('server') || name.includes('chimera') || name.includes('octoplus') || name.includes('octopus') || name.includes('umt') || name.includes('unlocktool') || name.includes('cheetah') || name.includes('auth') || name.includes('credit') || name.includes('tool') || group.includes('server')) return 'server';
@@ -632,95 +685,125 @@ function normalizeServiceTypeFix(s){
   return 'imei';
 }
 
-async function fetchCatalog(){ if(svcCache.data && Date.now()-svcCache.ts<600000) return svcCache.data; const [imei,file,server]=await Promise.all([fetchList('imei'), fetchList('file'), fetchList('server')]); const services=[...imei,...file,...server]; if(!services.length) return svcCache.data||null; if(svcCache.data && svcCache.data.length>services.length+50) return svcCache.data; services.sort((a,b)=>a.type.localeCompare(b.type)||a.group.localeCompare(b.group)||Number(a.id)-Number(b.id)); svcCache={ ts:Date.now(), data:services }; return services; }
+async function fetchCatalog() { if (svcCache.data && Date.now() - svcCache.ts < 600000) return svcCache.data; const [imei, file, server] = await Promise.all([fetchList('imei'), fetchList('file'), fetchList('server')]); const services = [...imei, ...file, ...server]; if (!services.length) return svcCache.data || null; if (svcCache.data && svcCache.data.length > services.length + 50) return svcCache.data; services.sort((a, b) => a.type.localeCompare(b.type) || a.group.localeCompare(b.group) || Number(a.id) - Number(b.id)); svcCache = { ts: Date.now(), data: services }; return services; }
 
-app.get('/api/services', async (req,res)=>{
-  if(!fuReady()) return res.json({ ok:false, mode:'manual', services:[] });
-  const services=await fetchCatalog();
-  if(!services) return res.status(502).json({ ok:false, error:'Upstream services unreachable' });
-  const fixed = services.map(s=> ({...s, type: normalizeServiceTypeFix(s), category: normalizeServiceTypeFix(s) }));
-  const pub=fixed.map(s=>({ id:s.id, name:s.name, group:s.group, type:s.type, category:s.type, priceUsd:s.priceUsd, priceSle:s.priceSle, time:s.time, info:s.info }));
-  res.json({ ok:true, cached:(Date.now()-svcCache.ts)<600000, count:pub.length, services:pub, version:'3.44.6' });
+// =====================================================================
+// SERVICE CATALOG ENDPOINTS
+// =====================================================================
+app.get('/api/services', async (req, res) => {
+  if (!fuReady()) return res.json({ ok: false, mode: 'manual', services: [] });
+  const services = await fetchCatalog();
+  if (!services) return res.status(502).json({ ok: false, error: 'Upstream services unreachable' });
+  const fixed = services.map(s => ({ ...s, type: normalizeServiceTypeFix(s), category: normalizeServiceTypeFix(s) }));
+  const pub = fixed.map(s => ({ id: s.id, name: s.name, group: s.group, type: s.type, category: s.type, priceUsd: s.priceUsd, priceSle: s.priceSle, time: s.time, info: s.info }));
+  res.json({ ok: true, cached: (Date.now() - svcCache.ts) < 600000, count: pub.length, services: pub, version: '3.44.7' });
 });
 
-app.get('/api/live-services', async (req,res)=>{
-  if(!fuReady()) return res.json({ ok:false, mode:'manual', services:[] });
-  const services=await fetchCatalog();
-  if(!services) return res.status(502).json({ ok:false, error:'Upstream services unreachable' });
-  const fixed = services.map(s=> ({...s, type: normalizeServiceTypeFix(s), category: normalizeServiceTypeFix(s) }));
-  res.json({ ok:true, count:fixed.length, services:fixed, version:'3.44.6' });
+app.get('/api/live-services', async (req, res) => {
+  if (!fuReady()) return res.json({ ok: false, mode: 'manual', services: [] });
+  const services = await fetchCatalog();
+  if (!services) return res.status(502).json({ ok: false, error: 'Upstream services unreachable' });
+  const fixed = services.map(s => ({ ...s, type: normalizeServiceTypeFix(s), category: normalizeServiceTypeFix(s) }));
+  res.json({ ok: true, count: fixed.length, services: fixed, version: '3.44.7' });
 });
 
-app.get('/api/catalog', async (req,res)=>{
-  if(!fuReady()) return res.json({ ok:false, mode:'manual', services:[] });
-  const services=await fetchCatalog();
-  if(!services) return res.status(502).json({ ok:false, error:'Upstream services unreachable' });
-  const fixed = services.map(s=> ({...s, type: normalizeServiceTypeFix(s), category: normalizeServiceTypeFix(s) }));
-  const imei = fixed.filter(s=>s.type==='imei');
-  const file = fixed.filter(s=>s.type==='file');
-  const server = fixed.filter(s=>s.type==='server');
-  res.json({ ok:true, version:'3.44.6', total:fixed.length, catalogs:{ imei:{count:imei.length, services:imei}, file:{count:file.length, services:file}, server:{count:server.length, services:server} }, groups:[...new Set(fixed.map(s=>s.group))], all:fixed });
+app.get('/api/catalog', async (req, res) => {
+  if (!fuReady()) return res.json({ ok: false, mode: 'manual', services: [] });
+  const services = await fetchCatalog();
+  if (!services) return res.status(502).json({ ok: false, error: 'Upstream services unreachable' });
+  const fixed = services.map(s => ({ ...s, type: normalizeServiceTypeFix(s), category: normalizeServiceTypeFix(s) }));
+  const imei = fixed.filter(s => s.type === 'imei');
+  const file = fixed.filter(s => s.type === 'file');
+  const server = fixed.filter(s => s.type === 'server');
+  res.json({ ok: true, version: '3.44.7', total: fixed.length, catalogs: { imei: { count: imei.length, services: imei }, file: { count: file.length, services: file }, server: { count: server.length, services: server } }, groups: [...new Set(fixed.map(s => s.group))], all: fixed });
 });
 
-app.get('/api/v1/services', async (req,res)=>{
-  const services=await fetchCatalog();
-  if(!services) return res.status(502).json({ ok:false, error:'Upstream unreachable' });
-  const fixed = services.map(s=> ({...s, type: normalizeServiceTypeFix(s), category: normalizeServiceTypeFix(s) }));
+app.get('/api/v1/services', async (req, res) => {
+  const services = await fetchCatalog();
+  if (!services) return res.status(502).json({ ok: false, error: 'Upstream unreachable' });
+  const fixed = services.map(s => ({ ...s, type: normalizeServiceTypeFix(s), category: normalizeServiceTypeFix(s) }));
   res.json(fixed);
 });
 
-app.get('/api/admin/services', strict, async (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); if(!fuReady()) return res.json({ ok:false, mode:'manual', services:[] }); const services=await fetchCatalog(); if(!services) return res.status(502).json({ ok:false, error:'Upstream services unreachable' }); const splitStr=(process.env.UNLOCK_COMMISSION_SPLIT||'0.75,0.25').split(','); res.json({ ok:true, count:services.length, policy:{ flatFeeUsd:0, sierraunlockShare:parseFloat(splitStr[0])||0.75, alhassanShare:parseFloat(splitStr[1])||0.25, rateSlePerUsd:load().rate }, services }); });
+app.get('/api/admin/services', strict, async (req, res) => { if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' }); if (!fuReady()) return res.json({ ok: false, mode: 'manual', services: [] }); const services = await fetchCatalog(); if (!services) return res.status(502).json({ ok: false, error: 'Upstream services unreachable' }); const splitStr = (process.env.UNLOCK_COMMISSION_SPLIT || '0.75,0.25').split(','); res.json({ ok: true, count: services.length, policy: { flatFeeUsd: 0, sierraunlockShare: parseFloat(splitStr[0]) || 0.75, alhassanShare: parseFloat(splitStr[1]) || 0.25, rateSlePerUsd: load().rate }, services }); });
 
-app.post('/api/order', strict, async (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const { error, value }=orderSchema.validate(req.body||{}); if(error) return res.status(400).json({ ok:false, error:error.details[0].message }); if(!fuReady()) return res.status(503).json({ ok:false, error:'Upstream not configured.' }); const job={ id:'SU-'+Date.now(), type:value.type||'imei', imei:value.imei||'', details:value.details||'', service:String(value.service), brand:value.brand||'', model:value.model||'', customer:value.customer||'', status:'sent-to-server', payment_status:'paid', payment_method:'manual', paid_at:new Date().toISOString(), created:new Date().toISOString() }; const up=await placeUpstream(job); if(up.ok){ job.upstream=up.r.json; saveUpstreamIds(job, up); } else { job.status='failed'; job.upstream=up.r.json||up.r.text; } const db=load(); db.jobs.unshift(job); save(db); res.json({ ok:up.ok, job:job.id, upstreamOrderId:up.orderId, upstream:up.r.json||up.r.text }); });
+// =====================================================================
+// ADMIN ORDER ENDPOINTS
+// =====================================================================
+app.post('/api/order', strict, async (req, res) => { if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' }); const { error, value } = orderSchema.validate(req.body || {}); if (error) return res.status(400).json({ ok: false, error: error.details[0].message }); if (!fuReady()) return res.status(503).json({ ok: false, error: 'Upstream not configured.' }); const job = { id: 'SU-' + Date.now(), type: value.type || 'imei', imei: value.imei || '', details: value.details || '', service: String(value.service), brand: value.brand || '', model: value.model || '', customer: value.customer || '', status: 'sent-to-server', payment_status: 'paid', payment_method: 'manual', paid_at: new Date().toISOString(), created: new Date().toISOString() }; const up = await placeUpstream(job); if (up.ok) { job.upstream = up.r.json; saveUpstreamIds(job, up); } else { job.status = 'failed'; job.upstream = up.r.json || up.r.text; } const db = load(); db.jobs.unshift(job); save(db); res.json({ ok: up.ok, job: job.id, upstreamOrderId: up.orderId, upstream: up.r.json || up.r.text }); });
 
-app.post('/api/order-status', strict, async (req,res)=>{ const { error, value }=jobStatusSchema.validate(req.body||{}); if(error) return res.status(400).json({ ok:false, error:'Invalid job id.' }); const db=load(); const job=db.jobs.find(j=>j.id===value.id); if(!job) return res.status(404).json({ ok:false, error:'Job not found.' }); if(fuReady() && job.upstreamOrderId){ const live=await statusUpstream(job); if(live && live.json){ job.upstream=live.json; const norm=live.normalized; if(norm){ if(norm.status==='solved'){ job.status='solved'; if(norm.code) job.cdrCode=norm.code; job.solvedAt=new Date().toISOString(); } else if(norm.status==='failed'){ job.status='failed'; if(norm.code) job.cdrCode=norm.code; job.failedAt=new Date().toISOString(); } else if(norm.status==='processing') job.status='processing'; } save(db); } return res.json({ ok:true, job, live:live? live.json:null }); } res.json({ ok:true, job }); });
+app.post('/api/order-status', strict, async (req, res) => { const { error, value } = jobStatusSchema.validate(req.body || {}); if (error) return res.status(400).json({ ok: false, error: 'Invalid job id.' }); const db = load(); const job = db.jobs.find(j => j.id === value.id); if (!job) return res.status(404).json({ ok: false, error: 'Job not found.' }); if (fuReady() && job.upstreamOrderId) { const live = await statusUpstream(job); if (live && live.json) { job.upstream = live.json; const norm = live.normalized; if (norm) { if (norm.status === 'solved') { job.status = 'solved'; if (norm.code) job.cdrCode = norm.code; job.solvedAt = new Date().toISOString(); } else if (norm.status === 'failed') { job.status = 'failed'; if (norm.code) job.cdrCode = norm.code; job.failedAt = new Date().toISOString(); } else if (norm.status === 'processing') job.status = 'processing'; } save(db); } return res.json({ ok: true, job, live: live ? live.json : null }); } res.json({ ok: true, job }); });
 
-app.post('/api/admin/retry', strict, async (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const id=String((req.body||{}).id||''); const db=load(); const job=db.jobs.find(j=>j.id===id); if(!job) return res.status(404).json({ ok:false, error:'Job not found.' }); if(!fuReady()) return res.status(503).json({ ok:false, error:'Upstream not configured.' }); const up=await placeUpstream(job); if(up.ok){ job.status='sent-to-server'; job.upstream=up.r.json; saveUpstreamIds(job, up); } else { job.status='failed'; job.upstream=up.r.json||up.r.text; } save(db); res.json({ ok:up.ok, job:job.id, upstreamOrderId:up.orderId, upstream:up.r.json||up.r.text }); });
+app.post('/api/admin/retry', strict, async (req, res) => { if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' }); const id = String((req.body || {}).id || ''); const db = load(); const job = db.jobs.find(j => j.id === id); if (!job) return res.status(404).json({ ok: false, error: 'Job not found.' }); if (!fuReady()) return res.status(503).json({ ok: false, error: 'Upstream not configured.' }); const up = await placeUpstream(job); if (up.ok) { job.status = 'sent-to-server'; job.upstream = up.r.json; saveUpstreamIds(job, up); } else { job.status = 'failed'; job.upstream = up.r.json || up.r.text; } save(db); res.json({ ok: up.ok, job: job.id, upstreamOrderId: up.orderId, upstream: up.r.json || up.r.text }); });
 
-app.get('/api/track/:id', async (req,res)=>{
-  const id=String(req.params.id||'').trim(); if(!id||id.length<3||id.length>60) return res.status(400).json({ ok:false, error:'Invalid job ID.' });
-  const db=load(); let job=db.jobs.find(j=>j.id===id); if(!job) return res.status(404).json({ ok:false, error:'Job not found.' });
-  if(fuReady() && job.upstreamOrderId && ['queued','sent-to-server','processing'].includes(job.status)){
-    try{
-      const live=await statusUpstream(job);
-      if(live && live.normalized){
-        console.log('[TRACK LIVE v3.44.6]', job.id, 'upstream', job.upstreamOrderId, 'mapped:', live.normalized.status);
-        if(live.normalized.status==='solved'){ job.status='solved'; if(live.normalized.code) job.cdrCode=live.normalized.code; job.upstream=live.json; job.solvedAt=new Date().toISOString(); save(db); }
-        else if(live.normalized.status==='failed'){ job.status='failed'; job.cdrCode=live.normalized.code||'Rejected / Not Eligible'; job.upstream=live.json; job.failedAt=new Date().toISOString(); save(db); }
+// =====================================================================
+// TRACK ENDPOINT
+// =====================================================================
+app.get('/api/track/:id', async (req, res) => {
+  const id = String(req.params.id || '').trim(); if (!id || id.length < 3 || id.length > 60) return res.status(400).json({ ok: false, error: 'Invalid job ID.' });
+  const db = load(); let job = db.jobs.find(j => j.id === id); if (!job) return res.status(404).json({ ok: false, error: 'Job not found.' });
+  if (fuReady() && job.upstreamOrderId && ['queued', 'sent-to-server', 'processing'].includes(job.status)) {
+    try {
+      const live = await statusUpstream(job);
+      if (live && live.normalized) {
+        console.log('[TRACK LIVE v3.44.7]', job.id, 'upstream', job.upstreamOrderId, 'mapped:', live.normalized.status);
+        if (live.normalized.status === 'solved') { job.status = 'solved'; if (live.normalized.code) job.cdrCode = live.normalized.code; job.upstream = live.json; job.solvedAt = new Date().toISOString(); save(db); }
+        else if (live.normalized.status === 'failed') { job.status = 'failed'; job.cdrCode = live.normalized.code || 'Rejected / Not Eligible'; job.upstream = live.json; job.failedAt = new Date().toISOString(); save(db); }
       }
-    }catch(e){ console.log('[TRACK LIVE ERR]', e.message); }
+    } catch (e) { console.log('[TRACK LIVE ERR]', e.message); }
   }
-  let code=job.cdrCode||null, message=null; let failed=job.status==='failed';
-  if(!code && job.upstream && typeof job.upstream==='object'){ const s=job.upstream.SUCCESS||job.upstream.success||null; if(s){ const rec=Array.isArray(s)? s[0]:s; code=rec.CODE||rec.code||rec.UNLOCKCODE||rec.unlock_code||rec.INFO||rec.info||rec.MESSAGE||rec.message||rec.RESPONSE||rec.response||null; message=rec.MESSAGE||rec.message||null; if(code && String(code).toLowerCase().includes('not eligible')) failed=true; } }
-  if(code && String(code).toLowerCase().includes('not eligible')) failed=true;
-  const maskedImei=job.imei? job.imei.slice(0,6)+'******'+job.imei.slice(-3):'';
-  res.json({ ok:true, job:{ id:job.id, type:job.type||'imei', serviceName:job.serviceName||job.service||'—', imei:maskedImei, status:failed?'failed':job.status, payment_status:job.payment_status||'unpaid', failed, code:(job.status==='solved'||failed||code)? (code||message||job.cdrCode):null, message, created:job.created, upstreamOrderId:job.upstreamOrderId||null, eta:(job.status==='queued'||job.status==='sent-to-server'||job.status==='processing')?'In progress — auto-refreshing.':null } });
+  let code = job.cdrCode || null, message = null; let failed = job.status === 'failed';
+  if (!code && job.upstream && typeof job.upstream === 'object') { const s = job.upstream.SUCCESS || job.upstream.success || null; if (s) { const rec = Array.isArray(s) ? s[0] : s; code = rec.CODE || rec.code || rec.UNLOCKCODE || rec.unlock_code || rec.INFO || rec.info || rec.MESSAGE || rec.message || rec.RESPONSE || rec.response || null; message = rec.MESSAGE || rec.message || null; if (code && String(code).toLowerCase().includes('not eligible')) failed = true; } }
+  if (code && String(code).toLowerCase().includes('not eligible')) failed = true;
+  const maskedImei = job.imei ? job.imei.slice(0, 6) + '******' + job.imei.slice(-3) : '';
+  res.json({ ok: true, job: { id: job.id, type: job.type || 'imei', serviceName: job.serviceName || job.service || '—', imei: maskedImei, status: failed ? 'failed' : job.status, payment_status: job.payment_status || 'unpaid', failed, code: (job.status === 'solved' || failed || code) ? (code || message || job.cdrCode) : null, message, created: job.created, upstreamOrderId: job.upstreamOrderId || null, eta: (job.status === 'queued' || job.status === 'sent-to-server' || job.status === 'processing') ? 'In progress — auto-refreshing.' : null } });
 });
 
-setInterval(async ()=>{
-  if(!fuReady()) return;
-  try{
-    const db=load(); const pending=db.jobs.filter(j=>j.upstreamOrderId && ['sent-to-server','processing'].includes(j.status)).slice(0,15);
-    if(!pending.length) return;
-    for(const job of pending){
-      try{
-        const live=await statusUpstream(job);
-        if(!live||!live.normalized) continue;
-        if(live.normalized.status==='solved'){ job.status='solved'; if(live.normalized.code) job.cdrCode=live.normalized.code; job.upstream=live.json; job.solvedAt=new Date().toISOString(); }
-        else if(live.normalized.status==='failed'){ job.status='failed'; if(live.normalized.code) job.cdrCode=live.normalized.code; job.upstream=live.json; job.failedAt=new Date().toISOString(); if(job.payment_method==='wallet' && job.payment_status==='paid'){ const ph=String(job.phone||'').replace(/\D/g,''); const w=db.wallets[ph]; if(w &&!w.tx.some(t=>t.ref&&t.ref.includes(job.id)&&t.type==='credit'&&t.ref.includes('AUTO-REFUND'))){ const price=(svcCache.data||[]).find(s=>s.id===String(job.serviceId))?.priceUsd||0; if(price>0){ w.balance=Math.round((w.balance+price)*100)/100; w.tx.unshift({ type:'credit', amount:price, ref:'AUTO-REFUND-CRON '+job.id+' '+live.normalized.code, date: new Date().toISOString() }); } } } }
-        await new Promise(w=>setTimeout(w,800));
-      }catch(e){}
+// =====================================================================
+// CRON JOB — 30s status sync
+// =====================================================================
+setInterval(async () => {
+  if (!fuReady()) return;
+  try {
+    const db = load(); const pending = db.jobs.filter(j => j.upstreamOrderId && ['sent-to-server', 'processing'].includes(j.status)).slice(0, 15);
+    if (!pending.length) return;
+    for (const job of pending) {
+      try {
+        const live = await statusUpstream(job);
+        if (!live || !live.normalized) continue;
+        if (live.normalized.status === 'solved') { job.status = 'solved'; if (live.normalized.code) job.cdrCode = live.normalized.code; job.upstream = live.json; job.solvedAt = new Date().toISOString(); }
+        else if (live.normalized.status === 'failed') { job.status = 'failed'; if (live.normalized.code) job.cdrCode = live.normalized.code; job.upstream = live.json; job.failedAt = new Date().toISOString(); if (job.payment_method === 'wallet' && job.payment_status === 'paid') { const ph = String(job.phone || '').replace(/\D/g, ''); const w = db.wallets[ph]; if (w && !w.tx.some(t => t.ref && t.ref.includes(job.id) && t.type === 'credit' && t.ref.includes('AUTO-REFUND'))) { const price = (svcCache.data || []).find(s => s.id === String(job.serviceId))?.priceUsd || 0; if (price > 0) { w.balance = Math.round((w.balance + price) * 100) / 100; w.tx.unshift({ type: 'credit', amount: price, ref: 'AUTO-REFUND-CRON ' + job.id + ' ' + live.normalized.code, date: new Date().toISOString() }); } } } }
+        await new Promise(w => setTimeout(w, 800));
+      } catch (e) { }
     }
-    save(db); console.log(`[CRON 30s] synced ${pending.length} jobs — v3.44.6`);
-  }catch(e){}
+    save(db); console.log(`[CRON 30s] synced ${pending.length} jobs — v3.44.7`);
+  } catch (e) { }
 }, 30000);
 
-app.use((req,res)=>res.status(404).json({ ok:false, error:'Not found.' }));
-app.use((err,req,res,next)=>{ console.error('[ERR]', err.message); res.status(err.status||500).json({ ok:false, error:'Server error.' }); });
+// =====================================================================
+// UPSTREAM TEST
+// =====================================================================
+app.get('/api/upstream-test', strict, async (req, res) => { if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' }); const r = await gsmCall('accountinfo'); res.json({ ok: r.http === 200 && !!(r.json && r.json.SUCCESS), http: r.http, sample: r.json || r.text }); });
 
-app.listen(PORT, ()=>{
-  console.log(`SIERRAUNLOCK API v3.44.6 online on :${PORT} — mode: ${fuReady()?'CONNECTED':'MANUAL'}`);
-  console.log(` Vault: ${ghReady()? 'GitHub ('+GH.repo+')':'LOCAL ONLY'}`);
-  console.log(` CDR URL: https://sierraunlock-tech-1-4um3.onrender.com/api/webhook/cdr?key=${process.env.CDR_REPLY_KEY||'SU-CDR-7f3a9c2e8b1d'}`);
-  console.log(` Fix: v3.44.6 FINAL — Login accepts emailOrPhone — All existing accounts work — Production ready`);
+// =====================================================================
+// ERROR HANDLERS
+// =====================================================================
+app.use((req, res) => res.status(404).json({ ok: false, error: 'Not found.' }));
+app.use((err, req, res, next) => {
+  console.error('[ERR]', err.message, err.stack);
+  res.status(err.status || 500).json({ ok: false, error: 'Server error.' });
+});
+
+// =====================================================================
+// START SERVER
+// =====================================================================
+app.listen(PORT, () => {
+  console.log(`\n========================================`);
+  console.log(`SIERRAUNLOCK API v3.44.7`);
+  console.log(`Port: ${PORT}`);
+  console.log(`Mode: ${fuReady() ? 'CONNECTED' : 'MANUAL'}`);
+  console.log(`Vault: ${ghReady() ? 'GitHub (' + GH.repo + ')' : 'LOCAL ONLY'}`);
+  console.log(`CDR: ${process.env.CDR_REPLY_KEY ? 'configured' : 'not set'}`);
+  console.log(`CORS Origins: ${ALLOWED.length} configured`);
+  console.log(`========================================\n`);
 });
