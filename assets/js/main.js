@@ -1,22 +1,22 @@
 /* =====================================================================
-   SIERRAUNLOCK • CORE ENGINE — main.js (v10.0 CLEAN PROFESSIONAL • MEGA MENU)
+   SIERRAUNLOCK • CORE ENGINE — main.js (v10.1 CLEAN PROFESSIONAL • MEGA MENU)
    OWNER: SIERRAUNLOCK Engineering • Waterloo / Koidu, Sierra Leone
    Fixes: WA desk single source, mega-menu click+hover, mobile drawer,
-          null-safe, no heavy DOM walker, XSS hardened
+          null-safe, no heavy DOM walker, XSS hardened, NO DUPLICATE SIGN IN
    ===================================================================== */
 'use strict';
 
 /* 01 • WHATSAPP DESK SWITCH — single source +232 75 908 206 */
 (function () {
   const orig = window.open.bind(window);
-  window.open = function (url,...rest) {
+  window.open = function (url, ...rest) {
     if (typeof url === 'string' && url.includes('wa.me/')) {
       url = url
-       .replace(/wa\.me\/23231363736/g, 'wa.me/23275908206')
-       .replace(/wa\.me\/232754378475/g, 'wa.me/23275908206')
-       .replace(/wa\.me\/23233469056/g, 'wa.me/23275908206');
+        .replace(/wa\.me\/23231363736/g, 'wa.me/23275908206')
+        .replace(/wa\.me\/232754378475/g, 'wa.me/23275908206')
+        .replace(/wa\.me\/23233469056/g, 'wa.me/23275908206');
     }
-    return orig(url,...rest);
+    return orig(url, ...rest);
   };
 })();
 
@@ -30,14 +30,14 @@
   };
   document.addEventListener('click', (e) => {
     const a = e.target.closest?.('a.btn-wa');
-    if (a && (a.getAttribute('href') || '').includes('wa.me') &&!user()) {
+    if (a && (a.getAttribute('href') || '').includes('wa.me') && !user()) {
       e.preventDefault();
       e.stopImmediatePropagation();
       need();
     }
   }, true);
   document.addEventListener('submit', (e) => {
-    if (GATED.includes(e.target.id) &&!user()) {
+    if (GATED.includes(e.target.id) && !user()) {
       e.preventDefault();
       e.stopImmediatePropagation();
       need();
@@ -77,7 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
   normalizeNumbers();
   injectResellerLink();
   injectAccountLink();
-  initNavMega(); // NEW MEGA + MOBILE
+  initNavMega();
   injectPageRotator();
   initRotator();
   initYearVersion();
@@ -101,8 +101,8 @@ function normalizeNumbers() {
   document.querySelectorAll('footer,.footer-col').forEach((el) => {
     if (el.innerHTML.includes('75 437 8475') || el.innerHTML.includes('33 469 056')) {
       el.innerHTML = el.innerHTML
-       .replace(/\+232 75 437 8475/g, '+232 75 908 206')
-       .replace(/\+232 33 469 056/g, '+232 75 908 206');
+        .replace(/\+232 75 437 8475/g, '+232 75 908 206')
+        .replace(/\+232 33 469 056/g, '+232 75 908 206');
     }
   });
 }
@@ -133,9 +133,12 @@ function injectResellerLink() {
   if (faq) nav.insertBefore(a, faq);
   else nav.appendChild(a);
 }
+
 function injectAccountLink() {
   const nav = document.getElementById('mainNav');
-  if (!nav || nav.querySelector('#acctLink')) return;
+  // ✅ FIX: Prevent duplicate "Sign In" by checking if ANY auth.html link already exists
+  if (!nav || nav.querySelector('#acctLink') || nav.querySelector('[href="auth.html"]')) return;
+  
   const a = document.createElement('a');
   a.className = 'nav-link';
   a.id = 'acctLink';
@@ -144,7 +147,7 @@ function injectAccountLink() {
   try {
     name = JSON.parse(localStorage.getItem('su_profile') || '{}').name || '';
   } catch (e) {}
-  a.textContent = sessionStorage.getItem('su_user')? '👤 ' + (name || 'Account') : '👤 Sign In';
+  a.textContent = sessionStorage.getItem('su_user') ? '👤 ' + (name || 'Account') : '👤 Sign In';
   nav.appendChild(a);
 }
 
@@ -156,7 +159,6 @@ function initNavMega() {
   const servicesTrigger = document.getElementById('servicesTrigger');
   const servicesMega = document.getElementById('servicesMega');
 
-  // If new mega exists in index.html, use it — don't inject old suMega
   if (servicesItem && servicesMega) {
     const openMega = () => {
       servicesItem.classList.add('open');
@@ -174,7 +176,6 @@ function initNavMega() {
       else openMega();
     });
 
-    // Desktop hover
     let hoverTimer;
     servicesItem.addEventListener('mouseenter', () => {
       if (window.innerWidth > 1440) {
@@ -188,7 +189,6 @@ function initNavMega() {
       }
     });
 
-    // Close on outside click + ESC
     document.addEventListener('click', (e) => {
       if (!servicesItem.contains(e.target)) closeMega();
     });
@@ -196,7 +196,6 @@ function initNavMega() {
       if (e.key === 'Escape') closeMega();
     });
 
-    // Close mega when clicking a mega-card link on mobile
     servicesMega.querySelectorAll('a').forEach((a) => {
       a.addEventListener('click', () => {
         if (window.innerWidth <= 1440) {
@@ -210,16 +209,14 @@ function initNavMega() {
     });
   }
 
-  // Hamburger Professional
-  if (!navToggle ||!mainNav) return;
+  if (!navToggle || !mainNav) return;
   navToggle.addEventListener('click', () => {
     const open = mainNav.classList.toggle('open');
-    navToggle.setAttribute('aria-expanded', open? 'true' : 'false');
-    navToggle.textContent = open? '✕' : '☰';
-    document.body.style.overflow = open? 'hidden' : '';
+    navToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    navToggle.textContent = open ? '✕' : '☰';
+    document.body.style.overflow = open ? 'hidden' : '';
   });
 
-  // Close nav on normal links, keep mega open
   mainNav.querySelectorAll('a.nav-link:not(#servicesTrigger)').forEach((a) => {
     a.addEventListener('click', () => {
       mainNav.classList.remove('open');
@@ -229,9 +226,8 @@ function initNavMega() {
     });
   });
 
-  // Outside click close hamburger
   document.addEventListener('click', (e) => {
-    if (mainNav.classList.contains('open') &&!mainNav.contains(e.target) &&!navToggle.contains(e.target)) {
+    if (mainNav.classList.contains('open') && !mainNav.contains(e.target) && !navToggle.contains(e.target)) {
       mainNav.classList.remove('open');
       navToggle.textContent = '☰';
       navToggle.setAttribute('aria-expanded', 'false');
@@ -297,7 +293,7 @@ function initToolsMarquee() {
     card.appendChild(txt);
     return card;
   };
-  [...TOOLS,...TOOLS].forEach((t) => track.appendChild(buildCard(t)));
+  [...TOOLS, ...TOOLS].forEach((t) => track.appendChild(buildCard(t)));
 }
 
 /* 13 • SCROLL REVEAL */
@@ -344,7 +340,7 @@ function initSierraAssistant() {
     css.id = 'sierraAssistantCss';
     css.textContent = [
       '#sierraAssistant{position:fixed;bottom:24px;right:24px;z-index:9998;font-family:Segoe UI,Arial,sans-serif}',
-      '#saBtn{width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,#1EB53A,#0072C6);border:0;color:#fff;font-size:28px;cursor:pointer;box-shadow:0 8px 24px rgba(30,181,58,.4);transition:transform.2s;display:flex;align-items:center;justify-content:center;position:relative}',
+      '#saBtn{width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,#1EB53A,#0072C6);border:0;color:#fff;font-size:28px;cursor:pointer;box-shadow:0 8px 24px rgba(30,181,58,.4);transition:transform .2s;display:flex;align-items:center;justify-content:center;position:relative}',
       '#saBtn:hover{transform:scale(1.08)}',
       '#saBtn.pulse::after{content:"";position:absolute;width:64px;height:64px;border-radius:50%;background:rgba(30,181,58,.4);animation:saPulse 2s infinite}',
       '@keyframes saPulse{0%{transform:scale(1);opacity:.7}100%{transform:scale(1.6);opacity:0}}',
@@ -392,6 +388,7 @@ function initSierraAssistant() {
     txt = document.getElementById('saText'),
     badge = document.getElementById('saBadge'),
     close = document.getElementById('saClose');
+    
   function esc(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
@@ -428,7 +425,8 @@ function initPolishLayer() {
     const link = document.createElement('link');
     link.id = 'polishCss';
     link.rel = 'stylesheet';
-    link.href = 'assets/css/polish.css';
+    // ✅ This is the correct path. Ensure this file actually exists in your project folder!
+    link.href = 'assets/css/polish.css'; 
     document.head.appendChild(link);
   }
   const header = document.querySelector('.site-header');
