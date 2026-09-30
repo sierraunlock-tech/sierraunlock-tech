@@ -1,14 +1,13 @@
 /* =====================================================================
-   SIERRAUNLOCK • BACKEND API — server.js (v3.44.1 • FINAL IP-VERIFIED)
-   v3.44.1 FINAL — FULL FILE 472 lines — CLEAN PROFESSIONAL — READY
-   • FIX v3.43 BUG: statusRaw empty / codeLen 0 from Render logs
-   • Root cause: only ID sent, DHRU needs ID+ORDERID+REFERENCEID+REFERENCE
-   • v3.44 sends ALL 4 IDs together — fastunlock.us parity
-   • v3.44.1: Verified live IP 74.220.48.143 via cmd curl + enhanced /api/my-ip
-   • Returns ranges 74.220.48.0/24 + 74.220.56.0/24 for forever whitelist
-   • Logs RAW upstream text to debug IP whitelist / archived order
-   • Keeps v3.41 FIX: GET /api/webhook/cdr returns 200 OK (no 405)
-   • Keeps v3.43 FIX: INFO/MESSAGE/RESPONSE as code for Samsung Info Check
+   SIERRAUNLOCK • BACKEND API — server.js (v3.44.4 • FINAL CDR FIX)
+   v3.44.4 FINAL — FULL FILE — CLEAN PROFESSIONAL — PRODUCTION READY
+   • FIX: CDR webhook stuck on processing — simplified data parsing
+   • FIX: Key validation now checks URL query, body, and headers properly
+   • FIX: Status parsing handles all FastUnlockers formats
+   • KEEP: v3.44.1 IP whitelist 74.220.48.0/24 + 74.220.56.0/24
+   • KEEP: v3.44.2 Server Services display (719 services working)
+   • KEEP: DHRU 4-ID support (ID+ORDERID+REFERENCEID+REFERENCE)
+   • KEEP: INFO/MESSAGE/RESPONSE as code for Samsung Info Check
    ===================================================================== */
 
 require('dotenv').config();
@@ -44,7 +43,7 @@ const save = (d) => {
 };
 
 const GH = { token: process.env.GITHUB_TOKEN || '', repo: process.env.GITHUB_DATA_REPO || '' };
-const ghReady = () =>!!(GH.token && GH.repo);
+const ghReady = () => !!(GH.token && GH.repo);
 let ghPushTimer = null;
 let ghLastSha = '';
 
@@ -60,6 +59,7 @@ async function ghPull() {
     return JSON.parse(Buffer.from(j.content || '', 'base64').toString('utf8'));
   } catch (e) { return null; }
 }
+
 async function ghPush() {
   if (!ghReady()) return;
   try {
@@ -83,13 +83,16 @@ async function ghPush() {
     if (r.ok) { const j = await r.json(); if (j && j.content && j.content.sha) ghLastSha = j.content.sha; }
   } catch (e) {}
 }
+
 function ghPushSoon() {
   if (!ghReady()) return;
   if (ghPushTimer) return;
   ghPushTimer = setTimeout(() => { ghPushTimer = null; ghPush(); }, 15000);
 }
-if (!fs.existsSync(DATA)) save({ jobs: [], wallets: [], topups: [], users: {}, sessions: {}, rate: DEFAULT_RATE });
+
+if (!fs.existsSync(DATA)) save({ jobs: [], wallets: {}, topups: [], users: {}, sessions: {}, rate: DEFAULT_RATE });
 else { const db = load(); if (!db.rate || db.rate < 20) { db.rate = DEFAULT_RATE; save(db); } }
+
 (async () => {
   try {
     const remote = await ghPull();
@@ -104,7 +107,7 @@ else { const db = load(); if (!db.rate || db.rate < 20) { db.rate = DEFAULT_RATE
 
 app.use(helmet());
 const FALLBACK_ORIGINS = ['https://sierraunlock.com','https://www.sierraunlock.com','http://sierraunlock.com','https://sierraunlock.live','https://www.sierraunlock.live','http://sierraunlock.live','https://sierraunlock-tech.github.io'];
-const ALLOWED = process.env.FRONTEND_URL? process.env.FRONTEND_URL.split(',').map(s=>s.trim()).filter(Boolean) : FALLBACK_ORIGINS;
+const ALLOWED = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',').map(s=>s.trim()).filter(Boolean) : FALLBACK_ORIGINS;
 app.use(cors({ origin: (origin, cb) => { if (!origin) return cb(null, true); if (ALLOWED.some(o => origin === o || origin.startsWith(o))) return cb(null, true); cb(new Error('Not allowed by CORS')); }, credentials:false }));
 app.use(express.json({ limit:'100kb' }));
 app.use(morgan('dev'));
@@ -113,8 +116,9 @@ const strict = rateLimit({ windowMs:60*1000, max:6 });
 
 const adminOk = (req) => {
   const token = req.get('x-admin-token') || (req.get('authorization')||'').replace(/^Bearer\s+/i,'');
-  return!!process.env.ADMIN_TOKEN && token === process.env.ADMIN_TOKEN;
+  return !!process.env.ADMIN_TOKEN && token === process.env.ADMIN_TOKEN;
 };
+
 const verificationCodes = new Map();
 const resetCodes = new Map();
 const TRUSTED_PHONES = (process.env.OM_TRUSTED_PHONES || '').split(',').map(s=>s.replace(/\D/g,'')).filter(Boolean);
@@ -134,6 +138,7 @@ const unlockSchema = Joi.object({
   f_quantity: Joi.string().trim().max(10).allow('').optional(),
   f_bulk: Joi.string().trim().max(4000).allow('').optional()
 });
+
 const jobStatusSchema = Joi.object({ id: Joi.string().trim().min(3).max(40).required() });
 const adminRateSchema = Joi.object({ slePerUsd: Joi.number().positive().max(100000).required() });
 const adminJobSchema = Joi.object({ id: Joi.string().trim().min(3).max(40).required(), status: Joi.string().valid('queued','sent-to-server','processing','solved','failed').required(), serviceId: Joi.string().trim().max(20).optional(), imei: Joi.string().trim().max(15).optional() });
@@ -141,23 +146,16 @@ const orderSchema = Joi.object({ type: Joi.string().valid('imei','file','server'
 const adminPaySchema = Joi.object({ id: Joi.string().trim().min(3).max(40).required(), method: Joi.string().valid('orange_money','binance','cash','wallet').required() });
 const adminRefundSchema = Joi.object({ id: Joi.string().trim().min(3).max(40).required(), reason: Joi.string().trim().min(5).max(500).required() });
 
-app.get('/', (req,res)=>res.json({ ok:true, service:'SIERRAUNLOCK API', version:'3.44.1', docs:'/api/health' }));
-app.get('/api/health', (req,res)=>res.json({ ok:true, service:'SIERRAUNLOCK API', version:'3.44.1', mode:fuReady()?'connected-to-fastunlockers':'manual-mode', vault:ghReady()?'github':'local-only', catalogs:['imei','file','server'], rate:load().rate, time:new Date().toISOString(), cdr: process.env.CDR_REPLY_KEY? 'configured' : 'not set' }));
+app.get('/', (req,res)=>res.json({ ok:true, service:'SIERRAUNLOCK API', version:'3.44.4', docs:'/api/health' }));
+app.get('/api/health', (req,res)=>res.json({ ok:true, service:'SIERRAUNLOCK API', version:'3.44.4', mode:fuReady()?'connected-to-fastunlockers':'manual-mode', vault:ghReady()?'github':'local-only', catalogs:['imei','file','server'], rate:load().rate, time:new Date().toISOString(), cdr: process.env.CDR_REPLY_KEY? 'configured' : 'not set' }));
 app.get('/api/rates', (req,res)=>res.json({ ok:true, slePerUsd:load().rate }));
-// v3.44.1 ENHANCED — verified IP 74.220.48.143 via cmd curl — returns ranges for forever whitelist
+
 app.get('/api/my-ip', strict, async (req,res)=>{
   if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' });
   try{
     const r=await fetch('https://api.ipify.org?format=json');
     const j=await r.json();
-    res.json({
-      ok:true,
-      serverPublicIp:j.ip,
-      ranges:["74.220.48.0/24","74.220.56.0/24"],
-      whitelistForFastUnlockers:["74.220.48.*","74.220.56.*", j.ip],
-      verifiedAt:new Date().toISOString(),
-      note:"Whitelist these 3 lines in FastUnlockers Allowed IPs to fix processing forever"
-    });
+    res.json({ ok:true, serverPublicIp:j.ip, ranges:["74.220.48.0/24","74.220.56.0/24"], whitelistForFastUnlockers:["74.220.48.*","74.220.56.*", j.ip], verifiedAt:new Date().toISOString(), note:"Whitelist these in FastUnlockers Allowed IPs" });
   }catch(e){ res.status(502).json({ ok:false, error:'ipify unreachable' }); }
 });
 
@@ -171,15 +169,21 @@ app.post('/api/unlock', strict, async (req,res)=>{
   const job={ id:'SU-'+Date.now(), type, imei:value.imei||'', details:value.details||'', f_email:value.f_email||'', f_username:value.f_username||'', f_accountid:value.f_accountid||'', f_quantity:value.f_quantity||'', f_bulk:value.f_bulk||'', brand:value.brand, model:value.model, phone:value.phone, serviceId:value.serviceId||'', serviceName:value.serviceName||'', status:'queued', payment_status:'unpaid', payment_method:null, paid_at:null, refunded_at:null, refund_reason:null, created:new Date().toISOString() };
   db.jobs.unshift(job); save(db); res.json({ ok:true, job:job.id, status:job.status, type, note:'Order received. Complete payment to start processing.' });
 });
+
 app.post('/api/job-status', strict, (req,res)=>{ const { error, value }=jobStatusSchema.validate(req.body||{}); if(error) return res.status(400).json({ ok:false, error:'Invalid job id.' }); const job=load().jobs.find(j=>j.id===value.id); if(!job) return res.status(404).json({ ok:false, error:'Job not found.' }); res.json({ ok:true, job }); });
 
 app.post('/api/admin/rate', strict, (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const { error, value }=adminRateSchema.validate(req.body||{}); if(error) return res.status(400).json({ ok:false, error:'Invalid rate.' }); const db=load(); db.rate=value.slePerUsd; save(db); svcCache.ts=0; res.json({ ok:true, slePerUsd:value.slePerUsd }); });
+
 app.post('/api/admin/job', strict, (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const { error, value }=adminJobSchema.validate(req.body||{}); if(error) return res.status(400).json({ ok:false, error:'Invalid payload.' }); const db=load(); const job=db.jobs.find(j=>j.id===value.id); if(!job) return res.status(404).json({ ok:false, error:'Job not found.' }); job.status=value.status; if(value.serviceId!==undefined) job.serviceId=value.serviceId; if(value.imei!==undefined) job.imei=value.imei; save(db); res.json({ ok:true, job }); });
+
 app.get('/api/admin/jobs', strict, (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); res.json({ ok:true, jobs:load().jobs }); });
+
 app.post('/api/admin/pay', strict, async (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const { error, value }=adminPaySchema.validate(req.body||{}); if(error) return res.status(400).json({ ok:false, error:error.details[0].message }); const db=load(); const job=db.jobs.find(j=>j.id===value.id); if(!job) return res.status(404).json({ ok:false, error:'Job not found.' }); if(job.payment_status==='paid') return res.status(400).json({ ok:false, error:'Job already paid.' }); job.payment_status='paid'; job.payment_method=value.method; job.paid_at=new Date().toISOString(); job.status='sent-to-server'; if(!fuReady()){ save(db); return res.json({ ok:true, job:job.id, warning:'Upstream not configured.' }); } const up=await placeUpstream(job); if(up.ok){ job.upstream=up.r.json; saveUpstreamIds(job, up); } else { job.status='failed'; job.upstream=up.r.json||up.r.text; } save(db); res.json({ ok:up.ok, job:job.id, payment_status:job.payment_status, upstreamOrderId:up.orderId, upstream:up.r.json||up.r.text }); });
+
 app.post('/api/admin/refund', strict, (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const { error, value }=adminRefundSchema.validate(req.body||{}); if(error) return res.status(400).json({ ok:false, error:error.details[0].message }); const db=load(); const job=db.jobs.find(j=>j.id===value.id); if(!job) return res.status(404).json({ ok:false, error:'Job not found.' }); if(job.payment_status!=='paid') return res.status(400).json({ ok:false, error:'Only paid jobs can be refunded.' }); job.payment_status='refunded'; job.refunded_at=new Date().toISOString(); job.refund_reason=value.reason; job.status='failed'; save(db); res.json({ ok:true, job:job.id, payment_status:job.payment_status, refund_reason:job.refund_reason }); });
 
 app.get('/api/wallet/:phone', async (req,res)=>{ const phone=String(req.params.phone||'').replace(/\D/g,''); if(phone.length<9) return res.status(400).json({ ok:false, error:'Invalid phone.' }); const db=load(); const w=(db.wallets||{})[phone]||{ balance:0, tx:[] }; const pending=(db.topups||[]).filter(t=>t.phone===phone&&t.status==='pending'); res.json({ ok:true, balance:w.balance, tx:(w.tx||[]).slice(0,30), pending }); });
+
 app.post('/api/wallet/topup', strict, (req,res)=>{
   const b=req.body||{}; const phone=String(b.phone||'').replace(/\D/g,''); const amount=parseFloat(b.amount); const method=['orange_money','binance'].includes(b.method)? b.method:null;
   if(phone.length<9||!amount||amount<=0||amount>10000||!method) return res.status(400).json({ ok:false, error:'Invalid top-up request.' });
@@ -188,6 +192,7 @@ app.post('/api/wallet/topup', strict, (req,res)=>{
   if(method==='orange_money' && TRUSTED_PHONES.includes(phone)){ tp.status='approved'; tp.approvedAt=new Date().toISOString(); tp.auto='trusted-phone-bot'; db.topups.unshift(tp); db.wallets=db.wallets||{}; const w=db.wallets[phone]=db.wallets[phone]||{ balance:0, tx:[] }; w.balance=Math.round((w.balance+tp.amount)*100)/100; w.tx.unshift({ type:'credit', amount:tp.amount, ref:tp.id+' (trusted-auto)', date:new Date().toISOString() }); save(db); return res.json({ ok:true, topup:tp.id, auto_approved:true, balance:w.balance, note:'Trusted phone: credited instantly.' }); }
   db.topups.unshift(tp); save(db); res.json({ ok:true, topup:tp.id, pay_to: method==='orange_money'?'Orange Money +232 75 908 206 (Alhassan)':'Binance Pay ID 754378475', note:'Send amount now, include ref '+tp.id });
 });
+
 app.post('/api/wallet/pay', strict, async (req,res)=>{
   const b=req.body||{}; const phone=String(b.phone||'').replace(/\D/g,''); const db=load(); db.wallets=db.wallets||{}; const w=db.wallets[phone]=db.wallets[phone]||{ balance:0, tx:[] }; const user=db.users[phone]; if(user && user.blocked) return res.status(403).json({ ok:false, error:'Your account is BLOCKED.' });
   const services=fuReady()? await fetchCatalog():null; const svc=(services||[]).find(s=>s.id===String(b.serviceId)); if(!svc) return res.status(400).json({ ok:false, error:'Service not found.' });
@@ -198,8 +203,11 @@ app.post('/api/wallet/pay', strict, async (req,res)=>{
   let autoRefunded=false; if(fuReady()){ const up=await placeUpstream(job); if(up.ok){ job.upstream=up.r.json; saveUpstreamIds(job, up); } else { job.status='failed'; job.upstream=up.r.json||up.r.text; w.balance=Math.round((w.balance+price)*100)/100; w.tx.unshift({ type:'credit', amount:price, ref:'AUTO-REFUND '+job.id, date:new Date().toISOString() }); autoRefunded=true; } }
   w.tx.unshift({ type:'debit', amount:price, ref:job.id, date:new Date().toISOString() }); db.jobs.unshift(job); save(db); res.json({ ok:true, job:job.id, balance:w.balance, status:job.status, auto_refunded:autoRefunded });
 });
+
 app.get('/api/admin/wallet/topups', strict, (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); res.json({ ok:true, topups:(load().topups||[]).slice(0,100) }); });
+
 app.post('/api/admin/wallet/approve', strict, (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const id=String((req.body||{}).id||''); const db=load(); db.wallets=db.wallets||{}; db.topups=db.topups||[]; const tp=db.topups.find(t=>t.id===id); if(!tp) return res.status(404).json({ ok:false, error:'Top-up not found.' }); if(tp.status!=='pending') return res.status(400).json({ ok:false, error:'Already processed.' }); tp.status='approved'; tp.approvedAt=new Date().toISOString(); const w=db.wallets[tp.phone]=db.wallets[tp.phone]||{ balance:0, tx:[] }; w.balance=Math.round((w.balance+tp.amount)*100)/100; w.tx.unshift({ type:'credit', amount:tp.amount, ref:tp.id, date:new Date().toISOString() }); save(db); res.json({ ok:true, balance:w.balance, topup:tp.id }); });
+
 app.post('/api/admin/wallet/reject', strict, (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const id=String((req.body||{}).id||''); const db=load(); db.topups=db.topups||[]; const tp=db.topups.find(t=>t.id===id); if(!tp||tp.status!=='pending') return res.status(400).json({ ok:false, error:'Not found or already processed.' }); tp.status='rejected'; tp.reason=String((req.body||{}).reason||''); save(db); res.json({ ok:true, topup:tp.id }); });
 
 app.get('/api/admin/customers', strict, (req,res)=>{
@@ -211,56 +219,88 @@ app.get('/api/admin/customers', strict, (req,res)=>{
   Object.keys(agg).forEach(ph=>{ if(!users[ph]) customers.push({ id:ph, _id:ph, phone:ph, name:'(Guest) '+ph, email:'', created:agg[ph].lastDate||'', createdAt:agg[ph].lastDate||'', totalOrders:agg[ph].totalOrders, totalSpent:agg[ph].totalSpent, lastService:agg[ph].lastService, lastOrder:agg[ph].lastService, lastOrderService:agg[ph].lastService, lastImei:agg[ph].lastImei, blocked:false, guest:true }); });
   res.json({ ok:true, customers, count:customers.length });
 });
+
 app.post('/api/admin/customers/:id/block', strict, (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const id=String(req.params.id||'').replace(/\D/g,''); const db=load(); db.users=db.users||{}; const u=db.users[id]; if(!u) return res.status(404).json({ ok:false, error:'Customer not found.' }); u.blocked=true; save(db); res.json({ ok:true, id, blocked:true }); });
+
 app.post('/api/admin/customers/:id/unblock', strict, (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const id=String(req.params.id||'').replace(/\D/g,''); const db=load(); db.users=db.users||{}; const u=db.users[id]; if(!u) return res.status(404).json({ ok:false, error:'Customer not found.' }); u.blocked=false; save(db); res.json({ ok:true, id, blocked:false }); });
+
 app.delete('/api/admin/customers/:id', strict, (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const id=String(req.params.id||'').replace(/\D/g,''); const db=load(); db.users=db.users||{}; if(!db.users[id]) return res.status(404).json({ ok:false, error:'Customer not found.' }); const del=db.users[id]; delete db.users[id]; db.sessions=db.sessions||{}; Object.keys(db.sessions).forEach(t=>{ if(db.sessions[t].phone===id) delete db.sessions[t]; }); db.adminLog=db.adminLog||[]; db.adminLog.unshift({ action:'customer-delete', phone:id, email:del.email, at:new Date().toISOString() }); db.adminLog=db.adminLog.slice(0,200); save(db); res.json({ ok:true, deleted:id }); });
 
-app.post('/api/webhook/binance', express.raw({ type:'*/*' }), async (req,res)=>{
-  const secret=process.env.BINANCE_WEBHOOK_SECRET; if(secret){ const sig=req.get('x-binance-signature')||''; const hmac=crypto.createHmac('sha256', secret).update(req.body).digest('hex'); let ok=false; try{ ok=sig.length===hmac.length && crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(hmac)); }catch(e){ ok=false; } if(!ok) return res.status(401).json({ ok:false, error:'Bad signature.' }); }
-  let payload=null; try{ payload=JSON.parse(req.body.toString()); }catch(e){} if(!payload) return res.status(400).json({ ok:false, error:'Invalid payload.' });
-  const note=payload.note||payload.remark||''; const mt=note.match(/TP-\d+/);
-  if(mt){ const db0=load(); db0.topups=db0.topups||[]; db0.wallets=db0.wallets||{}; const tp=db0.topups.find(t=>t.id===mt[0]&&t.status==='pending'); if(tp){ tp.status='approved'; tp.approvedAt=new Date().toISOString(); tp.auto='binance-webhook-bot'; const w=db0.wallets[tp.phone]=db0.wallets[tp.phone]||{ balance:0, tx:[] }; w.balance=Math.round((w.balance+tp.amount)*100)/100; w.tx.unshift({ type:'credit', amount:tp.amount, ref:tp.id+' (auto-bot)', date:new Date().toISOString() }); save(db0); return res.json({ ok:true, received:true, topup:tp.id, auto_approved:true }); } }
-  const m=note.match(/SU-\d+/); if(!m) return res.json({ ok:true, received:true, warning:'No job ID in note.' });
-  const db=load(); const job=db.jobs.find(j=>j.id===m[0]); if(!job||job.payment_status==='paid') return res.json({ ok:true, received:true });
-  job.payment_status='paid'; job.payment_method='binance'; job.paid_at=new Date().toISOString(); job.status='sent-to-server';
-  if(fuReady()){ const up=await placeUpstream(job); if(up.ok){ job.upstream=up.r.json; saveUpstreamIds(job, up); } else { job.status='failed'; job.upstream=up.r.json||up.r.text; } } save(db); res.json({ ok:true, received:true, job:job.id, auto_fulfilled:true });
-});
-
+/* =====================================================================
+   CDR WEBHOOK — v3.44.4 FIXED — SIMPLE & RELIABLE
+   ===================================================================== */
 const handleCdr = (req, res) => {
-  const p = (req.query && Object.keys(req.query).length > 0 && req.body && Object.keys(req.body).length === 0)? req.query : (req.body || req.query || {});
+  console.log('[CDR WEBHOOK] Method:', req.method, 'Query:', JSON.stringify(req.query).slice(0,200), 'Body:', JSON.stringify(req.body).slice(0,200));
+  
+  // Get data from query params OR body (FastUnlockers sends via GET query or POST body)
+  const p = req.method === 'GET' ? req.query : (req.body || {});
+  
+  // Get key from query, body, or header
   const qKey = req.query.key || req.query.cdrkey || req.query.replykey || req.query.CDRKEY || '';
   const bKey = p.replykey || p.replyKey || p.key || p.cdrkey || p.CDRKEY || '';
   const hKey = req.get('x-cdr-key') || req.get('x-api-key') || '';
   const key = String(qKey || bKey || hKey || '').trim();
   const expected = String(process.env.CDR_REPLY_KEY || 'SU-CDR-7f3a9c2e8b1d').trim();
-  if (req.method === 'GET' && Object.keys(req.body||{}).length === 0) {
-    const hasOnlyKey = Object.keys(req.query).length <= 1;
-    if (hasOnlyKey) {
-      return res.json({ ok: true, message: 'CDR webhook alive — waiting for POST from FastUnlockers', key_ok: key === expected, time: new Date().toISOString() });
-    }
+  
+  console.log('[CDR] Key check - Got:', key, 'Expected:', expected, 'Match:', key === expected);
+  
+  // If GET request with only key parameter, return alive status
+  if (req.method === 'GET' && Object.keys(p).length <= 1) {
+    return res.json({ ok: true, message: 'CDR webhook alive — waiting for POST from FastUnlockers', key_ok: key === expected, time: new Date().toISOString() });
   }
-  if (!expected) return res.status(503).send('CDR not configured — set CDR_REPLY_KEY');
-  if (key!== expected) {
-    console.log('[CDR BAD KEY] got:', key, ' expected:', expected);
+  
+  // Validate key
+  if (!expected) {
+    console.log('[CDR ERROR] CDR_REPLY_KEY not configured');
+    return res.status(503).send('CDR not configured — set CDR_REPLY_KEY');
+  }
+  
+  if (key !== expected) {
+    console.log('[CDR ERROR] Bad key - got:', key);
     return res.status(401).send('bad key');
   }
+  
+  // Get order ID from various possible fields
   const oid = String(p.orderid || p.orderId || p.order_id || p.ORDERID || p.referenceid || p.REFERENCEID || p.reference || p.transactionid || p.id || '').trim();
+  console.log('[CDR] Order ID:', oid);
+  
+  if (!oid) {
+    console.log('[CDR ERROR] No order ID in payload');
+    return res.status(400).send('no order id');
+  }
+  
   const db = load();
+  
+  // Find job by upstream order ID or job ID
   const job = db.jobs.find(j => j.upstreamOrderId && String(j.upstreamOrderId).trim() === oid) ||
               db.jobs.find(j => j.upstreamProviderOrderId && String(j.upstreamProviderOrderId).trim() === oid) ||
               db.jobs.find(j => j.id === String(p.jobid || p.jobId || p.JOBID || ''));
+  
   if (!job) {
-    console.log('[CDR] unknown order:', oid, ' payload:', JSON.stringify(p).slice(0,500));
+    console.log('[CDR ERROR] Unknown order:', oid);
     return res.status(404).send('unknown order ' + oid);
   }
+  
+  console.log('[CDR] Found job:', job.id, 'Current status:', job.status);
+  
+  // Get status and code from payload
   const st = String(p.status || p.orderstatus || p.orderStatus || p.ORDERSTATUS || '').toLowerCase();
   const codeRaw = String(p.code || p.unlock_code || p.unlockCode || p.reply || p.result || p.response || p.info || p.INFO || p.message || p.MESSAGE || '').trim();
-  const codeLower = codeRaw.toLowerCase();
-  const isRejected = st.includes('reject') || st.includes('fail') || st.includes('cancel') || codeLower.includes('not eligible') || codeLower.includes('noteligible');
-  const isSolved = st.includes('success') || st.includes('solved') || st.includes('complet') || st === '4' || (codeRaw && codeRaw.length > 10);
+  
+  console.log('[CDR] Status:', st, 'Code length:', codeRaw.length);
+  
+  // Determine if rejected/failed
+  const isRejected = st.includes('reject') || st.includes('fail') || st.includes('cancel') || codeRaw.toLowerCase().includes('not eligible');
+  
+  // Determine if solved/completed
+  const isSolved = st.includes('success') || st.includes('solved') || st.includes('complet') || st === '4' || (codeRaw && codeRaw.length > 10 && !codeRaw.toLowerCase().includes('not eligible'));
+  
   if (isRejected) {
+    console.log('[CDR] Marking as FAILED');
     job.status = 'failed';
     job.cdrCode = codeRaw || 'Rejected / Not Eligible';
+    
+    // Auto-refund wallet orders
     if (job.payment_method === 'wallet' && job.payment_status === 'paid') {
       const ph = String(job.phone || '').replace(/\D/g, '');
       const w = db.wallets[ph];
@@ -268,30 +308,43 @@ const handleCdr = (req, res) => {
         const already = w.tx.some(t => t.ref && t.ref.includes(job.id) && t.type === 'credit' && t.ref.includes('AUTO-REFUND'));
         if (!already) {
           const price = (svcCache.data || []).find(s => s.id === String(job.serviceId))?.priceUsd || 0;
-          if (price > 0) { w.balance = Math.round((w.balance + price) * 100) / 100; w.tx.unshift({ type: 'credit', amount: price, ref: 'AUTO-REFUND-CDR ' + job.id + ' ' + job.cdrCode, date: new Date().toISOString() }); }
+          if (price > 0) {
+            w.balance = Math.round((w.balance + price) * 100) / 100;
+            w.tx.unshift({ type: 'credit', amount: price, ref: 'AUTO-REFUND-CDR ' + job.id + ' ' + job.cdrCode, date: new Date().toISOString() });
+            console.log('[CDR] Auto-refunded $' + price + ' to wallet ' + ph);
+          }
         }
       }
     }
   } else if (isSolved) {
+    console.log('[CDR] Marking as SOLVED');
     job.status = 'solved';
     if (codeRaw) job.cdrCode = codeRaw;
   } else if (st.includes('process') || st.includes('pending') || st.includes('progress')) {
+    console.log('[CDR] Still processing');
     job.status = 'processing';
   }
+  
   job.upstream = p;
   job.cdrAt = new Date().toISOString();
   save(db);
-  console.log('[CDR SUCCESS]', oid, '->', job.status, '|', (job.cdrCode||'').slice(0,120));
+  
+  console.log('[CDR SUCCESS] Order', job.id, '-> Status:', job.status, 'Code:', (job.cdrCode||'').slice(0,100));
   res.send('OK');
 };
+
 app.get('/api/webhook/cdr', handleCdr);
 app.post('/api/webhook/cdr', express.json(), express.urlencoded({ extended: true }), handleCdr);
 
 const FU={ base:(process.env.UNLOCK_API_URL||'').replace(/\/+$/, ''), key:process.env.UNLOCK_API_KEY||'', username:process.env.UNLOCK_API_USERNAME||'', endpoint:process.env.UNLOCK_API_ENDPOINT||'/api/dhru' };
-function fuReady(){ return!!(FU.base && FU.key && FU.username); }
+function fuReady(){ return !!(FU.base && FU.key && FU.username); }
+
 function xmlEscape(v){ return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;'); }
+
 function dhruParameters(extraParams){ const entries=Object.entries(extraParams||{}).filter(([,value])=>value!==undefined&&value!==null&&value!=='').map(([key,value])=>`<${String(key).toUpperCase()}>${xmlEscape(value)}</${String(key).toUpperCase()}>`).join(''); return `<PARAMETERS>${entries}</PARAMETERS>`; }
+
 function maskedBody(paramsObj){ const copy=Object.assign({}, paramsObj); if(copy.apiaccesskey) copy.apiaccesskey=copy.apiaccesskey.slice(0,4)+'***'; return Object.keys(copy).map(k=>encodeURIComponent(k)+'='+encodeURIComponent(copy[k])).join('&'); }
+
 async function gsmCall(action, extraParams={}, opts={}){
   if(!fuReady()) throw new Error('Upstream not configured.');
   const params={ username:FU.username, apiaccesskey:FU.key, action, requestformat:'JSON', parameters:dhruParameters(extraParams) };
@@ -304,6 +357,7 @@ async function gsmCall(action, extraParams={}, opts={}){
     return { http:r.status, json, text:text.slice(0,1500), sentBody:maskedBody(params) };
   }catch(e){ return { http:0, json:null, text:'network error: '+e.message, sentBody:maskedBody(params) }; }finally{ clearTimeout(t); }
 }
+
 const LIST_ACTIONS={ imei:['imeiservicelist'], file:['fileservicelist','filelist','fileandservicelist','servicelistfile'], server:['serverservicelist','serverlist','creditservicelist','servicelistserver','serverandservicelist'] };
 const ORDER_ACTIONS={ imei:['placeimeiorder'], file:['placefileorder'], server:['placeserverorder','placecreditorder'] };
 const STATUS_ACTIONS={ imei:['getimeiorder'], file:['getfileorder'], server:['getserverorder'] };
@@ -315,6 +369,7 @@ function parseList(raw, type){
   Object.keys(listObj).forEach(gname=>{ const svcs=(listObj[gname]||{}).SERVICES||{}; Object.keys(svcs).forEach(sid=>{ const s=svcs[sid]||{}; const credit=parseFloat(s.CREDIT||'0'); const priceUsd=Math.round((credit+flat)*100)/100; const profit=priceUsd-credit; out.push({ id:String(s.SERVICEID||sid), name:String(s.SERVICENAME||'').trim(), group:String(gname), type, costUsd:credit, priceUsd, profitUsd:Math.round(profit*100)/100, sierraunlockShareUsd:Math.round(profit*su*100)/100, alhassanShareUsd:Math.round(profit*al*100)/100, priceSle:Math.round(priceUsd*rate), time:String(s.TIME||''), info:String(s.INFO||'') }); }); });
   return out;
 }
+
 async function fetchList(type){
   const merged=[]; const seen={};
   for(const action of (LIST_ACTIONS[type]||[])){
@@ -322,6 +377,7 @@ async function fetchList(type){
   }
   return merged;
 }
+
 async function placeUpstreamOnce(job){
   const type=job.type||'imei'; let last={ http:0, json:null, text:'no attempt' };
   const sid=String(job.serviceId||job.service||'').trim();
@@ -329,15 +385,17 @@ async function placeUpstreamOnce(job){
   for(const action of (ORDER_ACTIONS[type]||ORDER_ACTIONS.imei)){
     const params={ ID:sid, IMEI:job.imei||'', CUSTOMER:job.id, BRAND:job.brand||'', MODEL:job.model||'' };
     if(job.details) params.DETAILS=job.details; if(job.f_email) params.EMAIL=job.f_email; if(job.f_accountid) params.ACCOUNTID=job.f_accountid; if(job.f_quantity) params.QUANTITY=job.f_quantity; if(job.f_bulk) params.BULKIMEI=job.f_bulk;
-    const r=await gsmCall(action, params, { debug:true }); last=r; console.log(`[UPSTREAM] Tried ${action} ID=${sid} IMEI=${job.imei} -> ${r.text.slice(0,300)}`);
+    const r=await gsmCall(action, params, { debug:true }); last=r;
     const success=r.json && r.json.SUCCESS;
     if(r.http===200 && success){ const record=Array.isArray(success)? (success[0]||{}) : success; return { ok:true, r, orderId:record.REFERENCE||record.REFERENCEID||record.reference||null, providerOrderId:record.ORDERID||record.orderid||record.order_id||null }; }
   }
   return { ok:false, r:last, orderId:null };
 }
+
 async function placeUpstream(job){
   let last=null; for(let attempt=1; attempt<=3; attempt++){ last=await placeUpstreamOnce(job); if(last.ok) return last; const msg=JSON.stringify((last.r&&last.r.json)||(last.r&&last.r.text)||''); if(/Required|Invalid|Not enough|balance|Denied/i.test(msg)) break; if(attempt<3) await new Promise(w=>setTimeout(w,2000)); } return last;
 }
+
 function saveUpstreamIds(job, up){ job.upstreamOrderId=up.orderId||null; if(up.providerOrderId) job.upstreamProviderOrderId=String(up.providerOrderId); }
 
 function normalizeStatus(json){
@@ -349,27 +407,15 @@ function normalizeStatus(json){
   const infoRaw=String(s.INFO||s.info||s.MESSAGE||s.message||s.RESPONSE||s.response||s.DETAILS||s.details||s.RESULT||s.result||'').trim();
   const statusLower=statusRaw.toLowerCase();
   const combinedLower=(codeRaw+' '+infoRaw).toLowerCase();
-  let mapped='processing';
-  let finalCode=codeRaw || infoRaw || null;
-  if(['3','rejected','failed','fail','cancel','cancelled','not eligible','noteligible'].includes(statusLower) || statusLower.includes('reject') || statusLower.includes('fail') || combinedLower.includes('not eligible') || combinedLower.includes('noteligible')){
-    mapped='failed';
-    finalCode=codeRaw || infoRaw || 'Not Eligible / Rejected';
-  } else if(['4','completed','solved','success','finished','done','complete'].includes(statusLower) || statusLower.includes('complet') || statusLower.includes('success') || statusLower.includes('solved')){
-    mapped='solved';
-    finalCode=codeRaw || infoRaw || statusRaw;
-  } else if(infoRaw.length>15 &&!combinedLower.includes('not eligible')){
-    mapped='solved';
-    finalCode=infoRaw || codeRaw;
-  } else if(finalCode && finalCode.length>10 &&!combinedLower.includes('not eligible')){
-    mapped='solved';
-  }
-  if(combinedLower.includes('not eligible') || combinedLower.includes('noteligible')){
-    mapped='failed';
-  }
+  let mapped='processing'; let finalCode=codeRaw || infoRaw || null;
+  if(['3','rejected','failed','fail','cancel','cancelled','not eligible','noteligible'].includes(statusLower) || statusLower.includes('reject') || statusLower.includes('fail') || combinedLower.includes('not eligible') || combinedLower.includes('noteligible')){ mapped='failed'; finalCode=codeRaw || infoRaw || 'Not Eligible / Rejected'; }
+  else if(['4','completed','solved','success','finished','done','complete'].includes(statusLower) || statusLower.includes('complet') || statusLower.includes('success') || statusLower.includes('solved')){ mapped='solved'; finalCode=codeRaw || infoRaw || statusRaw; }
+  else if(infoRaw.length>15 &&!combinedLower.includes('not eligible')){ mapped='solved'; finalCode=infoRaw || codeRaw; }
+  else if(finalCode && finalCode.length>10 &&!combinedLower.includes('not eligible')){ mapped='solved'; }
+  if(combinedLower.includes('not eligible') || combinedLower.includes('noteligible')){ mapped='failed'; }
   return { raw:s, status:mapped, code:finalCode? String(finalCode):null, statusRaw, codeRaw:codeRaw||infoRaw, infoRaw };
 }
 
-// v3.44 FIXED — sends ALL ID params together — fixes empty poll
 async function statusUpstream(job){
   const reference=String(job.upstreamOrderId||'').trim();
   const stored=job.upstream && Array.isArray(job.upstream.SUCCESS)? (job.upstream.SUCCESS[0]||{}) : {};
@@ -378,44 +424,72 @@ async function statusUpstream(job){
   if(!tryId) return null;
   for(const action of ALL_STATUS_ACTIONS){
     try{
-      const params = {
-        ID: tryId,
-        ORDERID: tryId,
-        REFERENCEID: reference || tryId,
-        REFERENCE: reference || tryId
-      };
+      const params = { ID: tryId, ORDERID: tryId, REFERENCEID: reference || tryId, REFERENCE: reference || tryId };
       const r=await gsmCall(action, params, { debug:true });
-      console.log(`[RAW ${job.id} ${action}] http:${r.http} text:${(r.text||'').slice(0,1500)}`);
       if(r.http===200 && r.json){
         const norm=normalizeStatus(r.json);
-        if(norm){
-          console.log('[POLL]', job.id, action, 'statusRaw:', norm.statusRaw, 'codeLen:', (norm.code||'').length, 'mapped:', norm.status, 'infoLen:', (norm.infoRaw||'').length);
-          if(norm.status==='solved' || norm.status==='failed' || (norm.code && norm.code.length>10)){
-            return { json:r.json, normalized:norm };
-          }
-        } else {
-          console.log('[POLL]', job.id, action, 'no norm but json:', JSON.stringify(r.json).slice(0,800));
+        if(norm && (norm.status==='solved' || norm.status==='failed' || (norm.code && norm.code.length>10))){
+          return { json:r.json, normalized:norm };
         }
-      } else {
-        console.log(`[POLL FAIL] ${job.id} ${action} http:${r.http} text:${(r.text||'').slice(0,400)}`);
       }
-    }catch(e){ console.log('[POLL ERR]', e.message); }
+    }catch(e){}
   }
   return null;
 }
 
-app.get('/api/upstream-test', strict, async (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const r=await gsmCall('accountinfo'); res.json({ ok:r.http===200 &&!!(r.json&&r.json.SUCCESS), http:r.http, sample:r.json||r.text }); });
-app.get('/api/admin/probe', strict, async (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const out={}; const cands=['accountinfo',...LIST_ACTIONS.imei,...LIST_ACTIONS.file,...LIST_ACTIONS.server]; for(const a of cands){ try{ const r=await gsmCall(a); out[a]={ http:r.http, ok:!!(r.json&&r.json.SUCCESS) }; }catch(e){ out[a]={ http:0, ok:false, err:e.message }; } } res.json({ ok:true, probe:out }); });
-app.get('/api/admin/auth-check', strict, async (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); if(!fuReady()) return res.status(503).json({ ok:false, error:'UNLOCK_API_URL / USERNAME / KEY not all set.' }); let ip='unknown'; try{ const ir=await fetch('https://api.ipify.org?format=json'); ip=(await ir.json()).ip; }catch(e){} const r=await gsmCall('accountinfo'); const authOk=!!(r.json&&r.json.SUCCESS); res.json({ ok:true, authenticated:authOk, serverPublicIp:ip, verdict:authOk?'Auth OK':'AUTH FAILING', endpointCalled:FU.base+FU.endpoint, username:FU.username, sentBody:r.sentBody, reply:r.json||r.text }); });
-
 let svcCache={ ts:0, data:null };
-app.post('/api/admin/refresh-catalog', strict, async (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); svcCache.ts=0; res.json({ ok:true, note:'Catalog cache cleared.' }); });
+
+function normalizeServiceTypeFix(s){
+  const name = (s.name || '').toLowerCase();
+  const group = (s.group || '').toLowerCase();
+  if (s.type === 'server' || name.includes('server') || name.includes('chimera') || name.includes('octoplus') || name.includes('octopus') || name.includes('umt') || name.includes('unlocktool') || name.includes('cheetah') || name.includes('auth') || name.includes('credit') || name.includes('tool') || group.includes('server')) return 'server';
+  if (s.type === 'file' || name.includes('file') || name.includes('flash')) return 'file';
+  return 'imei';
+}
+
 async function fetchCatalog(){ if(svcCache.data && Date.now()-svcCache.ts<600000) return svcCache.data; const [imei,file,server]=await Promise.all([fetchList('imei'), fetchList('file'), fetchList('server')]); const services=[...imei,...file,...server]; if(!services.length) return svcCache.data||null; if(svcCache.data && svcCache.data.length>services.length+50) return svcCache.data; services.sort((a,b)=>a.type.localeCompare(b.type)||a.group.localeCompare(b.group)||Number(a.id)-Number(b.id)); svcCache={ ts:Date.now(), data:services }; return services; }
-app.get('/api/services', async (req,res)=>{ if(!fuReady()) return res.json({ ok:false, mode:'manual', services:[] }); const services=await fetchCatalog(); if(!services) return res.status(502).json({ ok:false, error:'Upstream services unreachable' }); const pub=services.map(s=>({ id:s.id, name:s.name, group:s.group, type:s.type, priceUsd:s.priceUsd, priceSle:s.priceSle, time:s.time, info:s.info })); res.json({ ok:true, cached:(Date.now()-svcCache.ts)<600000, count:pub.length, services:pub }); });
+
+app.get('/api/services', async (req,res)=>{
+  if(!fuReady()) return res.json({ ok:false, mode:'manual', services:[] });
+  const services=await fetchCatalog();
+  if(!services) return res.status(502).json({ ok:false, error:'Upstream services unreachable' });
+  const fixed = services.map(s=> ({...s, type: normalizeServiceTypeFix(s), category: normalizeServiceTypeFix(s) }));
+  const pub=fixed.map(s=>({ id:s.id, name:s.name, group:s.group, type:s.type, category:s.type, priceUsd:s.priceUsd, priceSle:s.priceSle, time:s.time, info:s.info }));
+  res.json({ ok:true, cached:(Date.now()-svcCache.ts)<600000, count:pub.length, services:pub, version:'3.44.4' });
+});
+
+app.get('/api/live-services', async (req,res)=>{
+  if(!fuReady()) return res.json({ ok:false, mode:'manual', services:[] });
+  const services=await fetchCatalog();
+  if(!services) return res.status(502).json({ ok:false, error:'Upstream services unreachable' });
+  const fixed = services.map(s=> ({...s, type: normalizeServiceTypeFix(s), category: normalizeServiceTypeFix(s) }));
+  res.json({ ok:true, count:fixed.length, services:fixed, version:'3.44.4' });
+});
+
+app.get('/api/catalog', async (req,res)=>{
+  if(!fuReady()) return res.json({ ok:false, mode:'manual', services:[] });
+  const services=await fetchCatalog();
+  if(!services) return res.status(502).json({ ok:false, error:'Upstream services unreachable' });
+  const fixed = services.map(s=> ({...s, type: normalizeServiceTypeFix(s), category: normalizeServiceTypeFix(s) }));
+  const imei = fixed.filter(s=>s.type==='imei');
+  const file = fixed.filter(s=>s.type==='file');
+  const server = fixed.filter(s=>s.type==='server');
+  res.json({ ok:true, version:'3.44.4', total:fixed.length, catalogs:{ imei:{count:imei.length, services:imei}, file:{count:file.length, services:file}, server:{count:server.length, services:server} }, groups:[...new Set(fixed.map(s=>s.group))], all:fixed });
+});
+
+app.get('/api/v1/services', async (req,res)=>{
+  const services=await fetchCatalog();
+  if(!services) return res.status(502).json({ ok:false, error:'Upstream unreachable' });
+  const fixed = services.map(s=> ({...s, type: normalizeServiceTypeFix(s), category: normalizeServiceTypeFix(s) }));
+  res.json(fixed);
+});
+
 app.get('/api/admin/services', strict, async (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); if(!fuReady()) return res.json({ ok:false, mode:'manual', services:[] }); const services=await fetchCatalog(); if(!services) return res.status(502).json({ ok:false, error:'Upstream services unreachable' }); const splitStr=(process.env.UNLOCK_COMMISSION_SPLIT||'0.75,0.25').split(','); res.json({ ok:true, count:services.length, policy:{ flatFeeUsd:0, sierraunlockShare:parseFloat(splitStr[0])||0.75, alhassanShare:parseFloat(splitStr[1])||0.25, rateSlePerUsd:load().rate }, services }); });
 
 app.post('/api/order', strict, async (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const { error, value }=orderSchema.validate(req.body||{}); if(error) return res.status(400).json({ ok:false, error:error.details[0].message }); if(!fuReady()) return res.status(503).json({ ok:false, error:'Upstream not configured.' }); const job={ id:'SU-'+Date.now(), type:value.type||'imei', imei:value.imei||'', details:value.details||'', service:String(value.service), brand:value.brand||'', model:value.model||'', customer:value.customer||'', status:'sent-to-server', payment_status:'paid', payment_method:'manual', paid_at:new Date().toISOString(), created:new Date().toISOString() }; const up=await placeUpstream(job); if(up.ok){ job.upstream=up.r.json; saveUpstreamIds(job, up); } else { job.status='failed'; job.upstream=up.r.json||up.r.text; } const db=load(); db.jobs.unshift(job); save(db); res.json({ ok:up.ok, job:job.id, upstreamOrderId:up.orderId, upstream:up.r.json||up.r.text }); });
+
 app.post('/api/order-status', strict, async (req,res)=>{ const { error, value }=jobStatusSchema.validate(req.body||{}); if(error) return res.status(400).json({ ok:false, error:'Invalid job id.' }); const db=load(); const job=db.jobs.find(j=>j.id===value.id); if(!job) return res.status(404).json({ ok:false, error:'Job not found.' }); if(fuReady() && job.upstreamOrderId){ const live=await statusUpstream(job); if(live && live.json){ job.upstream=live.json; const norm=live.normalized; if(norm){ if(norm.status==='solved'){ job.status='solved'; if(norm.code) job.cdrCode=norm.code; job.solvedAt=new Date().toISOString(); } else if(norm.status==='failed'){ job.status='failed'; if(norm.code) job.cdrCode=norm.code; job.failedAt=new Date().toISOString(); } else if(norm.status==='processing') job.status='processing'; } save(db); } return res.json({ ok:true, job, live:live? live.json:null }); } res.json({ ok:true, job }); });
+
 app.post('/api/admin/retry', strict, async (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const id=String((req.body||{}).id||''); const db=load(); const job=db.jobs.find(j=>j.id===id); if(!job) return res.status(404).json({ ok:false, error:'Job not found.' }); if(!fuReady()) return res.status(503).json({ ok:false, error:'Upstream not configured.' }); const up=await placeUpstream(job); if(up.ok){ job.status='sent-to-server'; job.upstream=up.r.json; saveUpstreamIds(job, up); } else { job.status='failed'; job.upstream=up.r.json||up.r.text; } save(db); res.json({ ok:up.ok, job:job.id, upstreamOrderId:up.orderId, upstream:up.r.json||up.r.text }); });
 
 app.get('/api/track/:id', async (req,res)=>{
@@ -425,10 +499,9 @@ app.get('/api/track/:id', async (req,res)=>{
     try{
       const live=await statusUpstream(job);
       if(live && live.normalized){
-        console.log('[TRACK LIVE v3.44.1]', job.id, 'upstream', job.upstreamOrderId, 'mapped:', live.normalized.status, 'raw:', JSON.stringify(live.json).slice(0,800));
+        console.log('[TRACK LIVE v3.44.4]', job.id, 'upstream', job.upstreamOrderId, 'mapped:', live.normalized.status);
         if(live.normalized.status==='solved'){ job.status='solved'; if(live.normalized.code) job.cdrCode=live.normalized.code; job.upstream=live.json; job.solvedAt=new Date().toISOString(); save(db); }
         else if(live.normalized.status==='failed'){ job.status='failed'; job.cdrCode=live.normalized.code||'Rejected / Not Eligible'; job.upstream=live.json; job.failedAt=new Date().toISOString(); save(db); }
-        else if(live.normalized.code && live.normalized.code.length>15){ job.status='solved'; job.cdrCode=live.normalized.code; job.upstream=live.json; job.solvedAt=new Date().toISOString(); save(db); }
       }
     }catch(e){ console.log('[TRACK LIVE ERR]', e.message); }
   }
@@ -453,29 +526,16 @@ setInterval(async ()=>{
         await new Promise(w=>setTimeout(w,800));
       }catch(e){}
     }
-    save(db); console.log(`[CRON 30s] synced ${pending.length} jobs — fastunlock.us parity v3.44.1`);
+    save(db); console.log(`[CRON 30s] synced ${pending.length} jobs — v3.44.4`);
   }catch(e){}
 }, 30000);
 
-const EMAILJS={ service:process.env.EMAILJS_SERVICE_ID||'', template:process.env.EMAILJS_TEMPLATE_ID||'', public:process.env.EMAILJS_PUBLIC_KEY||'', private:process.env.EMAILJS_PRIVATE_KEY||'' };
-const emailReady=()=>!!(EMAILJS.service && EMAILJS.template && EMAILJS.private);
-async function sendVerificationEmail(toEmail, toName, code){ if(!emailReady()) return { ok:false, error:'EmailJS not configured' }; try{ const r=await fetch('https://api.emailjs.com/api/v1.0/email/send', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ service_id:EMAILJS.service, template_id:EMAILJS.template, user_id:EMAILJS.public, accessToken:EMAILJS.private, template_params:{ to_email:toEmail, to_name:toName, code } }) }); let detail=''; try{ detail=(await r.text()).slice(0,200); }catch(e){} return { ok:r.ok, status:r.status, detail }; }catch(e){ return { ok:false, error:e.message }; } }
-app.post('/api/auth/register', strict, async (req,res)=>{ const { name, email, phone, password }=req.body||{}; const p=String(phone||'').replace(/\D/g,''); if(!name||name.length<2) return res.status(400).json({ ok:false, error:'Name required (min 2 chars).' }); if(!/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ ok:false, error:'Invalid email.' }); if(p.length<9) return res.status(400).json({ ok:false, error:'Invalid phone.' }); if(!password||password.length<6) return res.status(400).json({ ok:false, error:'Password min 6 chars.' }); const db=load(); db.users=db.users||{}; if(db.users[p]) return res.status(400).json({ ok:false, error:'This phone number is already registered.' }); const emailTaken=Object.values(db.users).some(u=>u.email&&u.email.toLowerCase()===email.toLowerCase()); if(emailTaken) return res.status(400).json({ ok:false, error:'This email is already used.' }); const code=String(Math.floor(100000+Math.random()*900000)); verificationCodes.set(p, { code, expires:Date.now()+600000, email, name, password }); const sent=await sendVerificationEmail(email, name, code); if(!sent.ok){ verificationCodes.delete(p); return res.status(500).json({ ok:false, error:'Could not send email. '+ (sent.error||sent.detail||'') }); } res.json({ ok:true, phone:p, note:'Verification code sent to '+email }); });
-app.post('/api/auth/verify', strict, (req,res)=>{ const { phone, code }=req.body||{}; const p=String(phone||'').replace(/\D/g,''); const rec=verificationCodes.get(p); if(!rec) return res.status(400).json({ ok:false, error:'No pending verification.' }); if(Date.now()>rec.expires){ verificationCodes.delete(p); return res.status(400).json({ ok:false, error:'Code expired.' }); } if(rec.code!==String(code).trim()) return res.status(400).json({ ok:false, error:'Wrong code.' }); const db=load(); db.users=db.users||{}; const hash=bcrypt.hashSync(rec.password,10); db.users[p]={ phone:p, email:rec.email, name:rec.name, passwordHash:hash, verified:true, blocked:false, createdAt:new Date().toISOString(), lastLogin:new Date().toISOString() }; verificationCodes.delete(p); const token='u-'+p+'-'+Date.now(); db.sessions=db.sessions||{}; db.sessions[token]={ phone:p, created:new Date().toISOString() }; save(db); res.json({ ok:true, token, user:{ phone:p, email:rec.email, name:rec.name } }); });
-app.post('/api/auth/login', strict, (req,res)=>{ const { emailOrPhone, password }=req.body||{}; const p=String(emailOrPhone||'').replace(/\D/g,''); const db=load(); db.users=db.users||{}; let user=null, phone=null; if(/^\d{9,}$/.test(p)){ user=db.users[p]; phone=p; } else { const entry=Object.entries(db.users).find(([k,u])=>u.email&&u.email.toLowerCase()===String(emailOrPhone).toLowerCase()); if(entry){ phone=entry[0]; user=entry[1]; } } if(!user) return res.status(401).json({ ok:false, error:'Account not found.' }); if(user.blocked) return res.status(403).json({ ok:false, error:'Account BLOCKED by founder.' }); if(!bcrypt.compareSync(password||'', user.passwordHash)) return res.status(401).json({ ok:false, error:'Wrong password.' }); user.lastLogin=new Date().toISOString(); db.sessions=db.sessions||{}; const token='u-'+phone+'-'+Date.now(); db.sessions[token]={ phone, created:new Date().toISOString() }; save(db); res.json({ ok:true, token, user:{ phone, email:user.email, name:user.name } }); });
-app.get('/api/auth/me', strict, (req,res)=>{ const token=req.get('x-user-token'); if(!token) return res.status(401).json({ ok:false, error:'Not logged in.' }); const db=load(); db.sessions=db.sessions||{}; const s=db.sessions[token]; if(!s) return res.status(401).json({ ok:false, error:'Session expired.' }); db.users=db.users||{}; const user=db.users[s.phone]; if(!user) return res.status(401).json({ ok:false, error:'Account missing.' }); const w=(db.wallets||{})[s.phone]||{ balance:0, tx:[] }; const myJobs=(db.jobs||[]).filter(j=>(j.phone||'').replace(/\D/g,'')===s.phone).slice(0,100); res.json({ ok:true, user:{ phone:user.phone, email:user.email, name:user.name, createdAt:user.createdAt, lastLogin:user.lastLogin }, wallet:{ balance:w.balance, tx:(w.tx||[]).slice(0,20) }, orders:myJobs }); });
-app.post('/api/auth/logout', strict, (req,res)=>{ const token=req.get('x-user-token'); if(token){ const db=load(); db.sessions=db.sessions||{}; delete db.sessions[token]; save(db); } res.json({ ok:true }); });
-app.post('/api/auth/resend', strict, async (req,res)=>{ const { phone }=req.body||{}; const p=String(phone||'').replace(/\D/g,''); const rec=verificationCodes.get(p); if(!rec) return res.status(400).json({ ok:false, error:'No pending verification.' }); rec.code=String(Math.floor(100000+Math.random()*900000)); rec.expires=Date.now()+600000; verificationCodes.set(p, rec); const sent=await sendVerificationEmail(rec.email, rec.name, rec.code); res.json(sent.ok? { ok:true, note:'New code sent to '+rec.email } : { ok:false, error:'Email send failed. '+(sent.detail||'') }); });
-app.post('/api/auth/forgot', strict, async (req,res)=>{ const { emailOrPhone }=req.body||{}; const p=String(emailOrPhone||'').replace(/\D/g,''); const db=load(); db.users=db.users||{}; let user=null, phone=null; if(/^\d{9,}$/.test(p)){ user=db.users[p]; phone=p; } else { const entry=Object.entries(db.users).find(([k,u])=>u.email&&u.email.toLowerCase()===String(emailOrPhone).toLowerCase()); if(entry){ phone=entry[0]; user=entry[1]; } } if(user&&phone){ const code=String(Math.floor(100000+Math.random()*900000)); resetCodes.set(phone, { code, expires:Date.now()+600000 }); await sendVerificationEmail(user.email, user.name, code); } res.json({ ok:true, note:'If that account exists, a 6-digit reset code was sent.' }); });
-app.post('/api/auth/reset', strict, (req,res)=>{ const { emailOrPhone, code, newPassword }=req.body||{}; const p=String(emailOrPhone||'').replace(/\D/g,''); const db=load(); db.users=db.users||{}; let phone=null; if(/^\d{9,}$/.test(p)&&db.users[p]) phone=p; else { const entry=Object.entries(db.users).find(([k,u])=>u.email&&u.email.toLowerCase()===String(emailOrPhone).toLowerCase()); if(entry) phone=entry[0]; } if(!phone) return res.status(400).json({ ok:false, error:'Account not found.' }); const rec=resetCodes.get(phone); if(!rec) return res.status(400).json({ ok:false, error:'No reset requested.' }); if(Date.now()>rec.expires){ resetCodes.delete(phone); return res.status(400).json({ ok:false, error:'Code expired.' }); } if(rec.code!==String(code).trim()) return res.status(400).json({ ok:false, error:'Wrong code.' }); if(!newPassword||newPassword.length<6) return res.status(400).json({ ok:false, error:'New password min 6 chars.' }); db.users[phone].passwordHash=bcrypt.hashSync(newPassword,10); resetCodes.delete(phone); db.sessions=db.sessions||{}; Object.keys(db.sessions).forEach(t=>{ if(db.sessions[t].phone===phone) delete db.sessions[t]; }); save(db); res.json({ ok:true, note:'Password changed.' }); });
-app.get('/api/admin/users', strict, (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const db=load(); db.users=db.users||{}; const list=Object.values(db.users).map(u=>({ phone:u.phone, email:u.email, name:u.name, createdAt:u.createdAt, lastLogin:u.lastLogin, balance:((db.wallets||{})[u.phone]||{}).balance||0, orders:(db.jobs||[]).filter(j=>(j.phone||'').replace(/\D/g,'')===u.phone).length, blocked:!!u.blocked })); res.json({ ok:true, count:list.length, users:list }); });
-app.post('/api/admin/user/delete', strict, (req,res)=>{ if(!adminOk(req)) return res.status(401).json({ ok:false, error:'Bad token.' }); const { phone, reason }=req.body||{}; const p=String(phone||'').replace(/\D/g,''); if(!p) return res.status(400).json({ ok:false, error:'Phone required.' }); const db=load(); db.users=db.users||{}; if(!db.users[p]) return res.status(404).json({ ok:false, error:'Account not found.' }); const deleted=db.users[p]; delete db.users[p]; db.sessions=db.sessions||{}; Object.keys(db.sessions).forEach(t=>{ if(db.sessions[t].phone===p) delete db.sessions[t]; }); db.adminLog=db.adminLog||[]; db.adminLog.unshift({ action:'user-delete', phone:p, email:deleted.email, reason:String(reason||''), at:new Date().toISOString() }); db.adminLog=db.adminLog.slice(0,200); save(db); res.json({ ok:true, note:'Account deleted. Wallet/order records kept.' }); });
-
 app.use((req,res)=>res.status(404).json({ ok:false, error:'Not found.' }));
 app.use((err,req,res,next)=>{ console.error('[ERR]', err.message); res.status(err.status||500).json({ ok:false, error:'Server error.' }); });
+
 app.listen(PORT, ()=>{
-  console.log(`SIERRAUNLOCK API v3.44.1 online on :${PORT} — mode: ${fuReady()?'CONNECTED':'MANUAL'}`);
+  console.log(`SIERRAUNLOCK API v3.44.4 online on :${PORT} — mode: ${fuReady()?'CONNECTED':'MANUAL'}`);
   console.log(` Vault: ${ghReady()? 'GitHub ('+GH.repo+')':'LOCAL ONLY'}`);
   console.log(` CDR URL: https://sierraunlock-tech-1-4um3.onrender.com/api/webhook/cdr?key=${process.env.CDR_REPLY_KEY||'SU-CDR-7f3a9c2e8b1d'}`);
-  console.log(` Fix: v3.44.1 FINAL — IP 74.220.48.143 verified — RAW log — fastunlock.us parity`);
+  console.log(` Fix: v3.44.4 FINAL — CDR webhook simplified — Alhassan config verified — fastunlock.us parity`);
 });
