@@ -4,31 +4,37 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sign In / Register — SIERRAUNLOCK</title>
+<meta name="description" content="Sign in or create your SIERRAUNLOCK account — Sierra Leone's first phone unlocking platform.">
+<link rel="icon" type="image/png" href="assets/images/brand/favicon.png">
 <style>
-  :root{--green:#1EB53A;--blue:#0072C6;--navy:#0b1f33;--ink:#12263a;--bg:#f4f8fb;--err:#e74c3c}
+  :root{--green:#1EB53A;--blue:#0072C6;--navy:#0b1f33;--ink:#12263a;--bg:#f4f8fb;--err:#e74c3c;--ok:#1EB53A}
   *{box-sizing:border-box;margin:0;padding:0;font-family:Segoe UI,Arial,sans-serif}
   body{background:var(--bg);color:var(--ink);min-height:100vh;display:flex;flex-direction:column}
   header{background:linear-gradient(120deg,var(--blue),var(--green));color:#fff;padding:16px 22px;display:flex;justify-content:space-between;align-items:center}
-  header h1{font-size:20px}
+  header h1{font-size:20px;letter-spacing:.5px}
   header a{color:#fff;text-decoration:none;font-weight:600;margin-left:14px}
+  header a:hover{text-decoration:underline}
   main{flex:1;max-width:480px;width:100%;margin:30px auto;padding:0 16px}
   .box{background:#fff;border-radius:16px;padding:28px;box-shadow:0 4px 24px rgba(18,38,58,.1)}
   .tabs{display:flex;gap:6px;margin-bottom:22px;background:#f4f8fb;padding:4px;border-radius:10px}
-  .tabs button{flex:1;background:transparent;border:0;padding:10px;border-radius:8px;font-weight:700;cursor:pointer;color:#5b7186}
+  .tabs button{flex:1;background:transparent;border:0;padding:10px;border-radius:8px;font-weight:700;cursor:pointer;color:#5b7186;transition:.2s}
   .tabs button.on{background:#fff;color:var(--blue);box-shadow:0 2px 6px rgba(0,0,0,.06)}
   h2{font-size:20px;color:var(--navy);margin-bottom:4px}
-  p.sub{font-size:13px;color:#5b7186;margin-bottom:18px}
-  label{font-size:12.5px;font-weight:700;display:block;margin:10px 0 4px}
-  input{width:100%;padding:12px;border:2px solid #d5e3ee;border-radius:10px;font-size:15px}
-  input:focus{border-color:var(--blue);outline:none}
-  .go{background:var(--green);color:#fff;border:0;padding:13px;border-radius:10px;font-weight:700;cursor:pointer;width:100%;margin-top:14px;font-size:15px}
-  .ghost{background:transparent;border:0;color:var(--blue);cursor:pointer;font-weight:600;font-size:13px;margin-top:10px}
-  .msg{padding:12px;border-radius:10px;font-size:13.5px;margin-top:14px;display:none;line-height:1.5}
-  .msg.ok{background:#e9f9ee;border:1px solid var(--green);color:#0e5c23}
-  .msg.err{background:#fdecec;border:1px solid var(--err);color:#8b1e1e}
+  p.sub{font-size:13px;color:#5b7186;margin-bottom:18px;line-height:1.5}
+  label{font-size:12.5px;font-weight:700;display:block;margin:12px 0 5px}
+  input{width:100%;padding:12px 14px;border:2px solid #d5e3ee;border-radius:10px;font-size:15px;transition:.2s}
+  input:focus{border-color:var(--blue);outline:none;box-shadow:0 0 0 3px rgba(0,114,198,.12)}
+  .go{background:var(--green);color:#fff;border:0;padding:13px;border-radius:10px;font-weight:700;cursor:pointer;width:100%;margin-top:14px;font-size:15px;transition:.2s}
+  .go:hover{background:#18932f}
+  .go:disabled{opacity:.6;cursor:not-allowed}
+  .ghost{background:transparent;border:0;color:var(--blue);cursor:pointer;font-weight:600;font-size:13px;margin-top:12px}
+  .ghost:hover{text-decoration:underline}
+  .msg{padding:12px;border-radius:10px;font-size:13.5px;margin-top:14px;display:none;line-height:1.5;word-break:break-word}
+  .msg.ok{background:#e9f9ee;border:1px solid var(--ok);color:#0e5c23;display:block}
+  .msg.err{background:#fdecec;border:1px solid var(--err);color:#8b1e1e;display:block}
   .code-box{display:flex;gap:8px;justify-content:center;margin:16px 0}
-  .code-box input{width:48px;height:58px;text-align:center;font-size:24px;font-weight:800}
-  footer{background:var(--navy);color:#cfe3f5;text-align:center;padding:18px;font-size:13px}
+  .code-box input{width:48px;height:58px;text-align:center;font-size:24px;font-weight:800;padding:0}
+  footer{background:var(--navy);color:#cfe3f5;text-align:center;padding:18px;font-size:13px;margin-top:30px}
 </style>
 </head>
 <body>
@@ -44,7 +50,6 @@
       <button id="tabRegister" onclick="switchTab('register')">Register</button>
     </div>
 
-    <!-- LOGIN -->
     <div id="sec-login">
       <h2>Welcome back 👋</h2>
       <p class="sub">Sign in to view your orders, wallet, and place new ones.</p>
@@ -52,12 +57,11 @@
       <input id="li_emailOrPhone" autocomplete="username" placeholder="you@email.com or +232...">
       <label>Password</label>
       <input id="li_password" type="password" autocomplete="current-password" placeholder="••••••••">
-      <button class="go" onclick="doLogin()">Sign In</button>
+      <button class="go" id="btnLogin" onclick="doLogin()">Sign In</button>
       <button class="ghost" onclick="switchTab('reset')">Forgot password?</button>
-      <div class="msg" id="li_msg"></div>
+      <div class="msg" id="li_msg" style="display:none"></div>
     </div>
 
-    <!-- REGISTER -->
     <div id="sec-register" style="display:none">
       <h2>Create your account ✨</h2>
       <p class="sub">Free, takes 30 seconds. Required to place orders.</p>
@@ -69,41 +73,39 @@
       <input id="rg_phone" inputmode="tel" placeholder="+232 75 ...">
       <label>Password (min 6 chars)</label>
       <input id="rg_password" type="password" placeholder="••••••••">
-      <button class="go" onclick="doRegister()">Send Verification Code</button>
-      <div class="msg" id="rg_msg"></div>
+      <button class="go" id="btnRegister" onclick="doRegister()">Send Verification Code</button>
+      <div class="msg" id="rg_msg" style="display:none"></div>
     </div>
 
-    <!-- VERIFY (registration code) -->
     <div id="sec-verify" style="display:none">
       <h2>Check your email 📧</h2>
       <p class="sub">We sent a 6-digit code to <b id="vr_email"></b>. Enter it below.</p>
       <div class="code-box">
-        <input maxlength="1" inputmode="numeric" data-i="0">
+        <input maxlength="1" inputmode="numeric" data-i="0" autocomplete="one-time-code">
         <input maxlength="1" inputmode="numeric" data-i="1">
         <input maxlength="1" inputmode="numeric" data-i="2">
         <input maxlength="1" inputmode="numeric" data-i="3">
         <input maxlength="1" inputmode="numeric" data-i="4">
         <input maxlength="1" inputmode="numeric" data-i="5">
       </div>
-      <button class="go" onclick="doVerify()">Verify & Sign In</button>
+      <button class="go" id="btnVerify" onclick="doVerify()">Verify & Sign In</button>
       <button class="ghost" onclick="doResend()">Didn't receive it? Resend code</button>
-      <div class="msg" id="vr_msg"></div>
+      <div class="msg" id="vr_msg" style="display:none"></div>
     </div>
 
-    <!-- RESET PASSWORD -->
     <div id="sec-reset" style="display:none">
       <h2>Reset password 🔑</h2>
       <p class="sub">We'll email you a 6-digit reset code.</p>
       <label>Email or phone number</label>
       <input id="rs_emailOrPhone" placeholder="you@email.com or +232...">
-      <button class="go" onclick="doForgot()">Send Reset Code</button>
+      <button class="go" id="btnForgot" onclick="doForgot()">Send Reset Code</button>
       <label style="margin-top:16px">6-digit code from email</label>
       <input id="rs_code" inputmode="numeric" maxlength="6" placeholder="______">
       <label>New password (min 6 chars)</label>
       <input id="rs_newpass" type="password" placeholder="••••••••">
-      <button class="go" onclick="doReset()">Set New Password</button>
+      <button class="go" id="btnReset" onclick="doReset()">Set New Password</button>
       <button class="ghost" onclick="switchTab('login')">Back to Sign In</button>
-      <div class="msg" id="rs_msg"></div>
+      <div class="msg" id="rs_msg" style="display:none"></div>
     </div>
   </div>
 </main>
@@ -112,10 +114,12 @@
 
 <script>
 const API='https://sierraunlock-tech-1-4um3.onrender.com';
-let pendingPhone=null;
+let pendingPhone=null; let lastSendAt=0; const SEND_COOLDOWN=60000;
 const $=id=>document.getElementById(id);
-const msg=(el,text,ok)=>{ el.className='msg '+(ok?'ok':'err'); el.style.display='block'; el.textContent=text; };
-
+const normalizePhone = (p) => String(p||'').replace(/\D/g,'').replace(/^0/,'232');
+const isEmail = (e) => /^\S+@\S+\.\S+$/.test(e);
+function msgBox(el,text,ok){ if(!el) return; el.className='msg '+(ok?'ok':'err'); el.style.display='block'; el.textContent=text; }
+function clearMsg(el){ if(el){ el.style.display='none'; el.textContent=''; } }
 function switchTab(t){
   $('tabLogin').classList.toggle('on',t==='login');
   $('tabRegister').classList.toggle('on',t==='register');
@@ -123,108 +127,127 @@ function switchTab(t){
   $('sec-register').style.display=t==='register'?'block':'none';
   $('sec-verify').style.display=t==='verify'?'block':'none';
   $('sec-reset').style.display=t==='reset'?'block':'none';
+  clearMsg($('li_msg')); clearMsg($('rg_msg')); clearMsg($('vr_msg')); clearMsg($('rs_msg'));
 }
-
 document.querySelectorAll('.code-box input').forEach(inp=>{
   inp.addEventListener('input',()=>{
     inp.value=inp.value.replace(/\D/g,'');
-    if(inp.value && inp.dataset.i<5) document.querySelector(`.code-box input[data-i="${Number(inp.dataset.i)+1}"]`).focus();
+    if(inp.value && Number(inp.dataset.i)<5){
+      const next=document.querySelector(`.code-box input[data-i="${Number(inp.dataset.i)+1}"]`);
+      if(next) next.focus();
+    }
   });
   inp.addEventListener('keydown',(e)=>{
-    if(e.key==='Backspace' && !inp.value && inp.dataset.i>0){
-      document.querySelector(`.code-box input[data-i="${Number(inp.dataset.i)-1}"]`).focus();
+    if(e.key==='Backspace' && !inp.value && Number(inp.dataset.i)>0){
+      const prev=document.querySelector(`.code-box input[data-i="${Number(inp.dataset.i)-1}"]`);
+      if(prev) prev.focus();
     }
   });
 });
 function getCode(){ return [...document.querySelectorAll('.code-box input')].map(i=>i.value).join(''); }
-function clearCode(){ document.querySelectorAll('.code-box input').forEach(i=>i.value=''); document.querySelector('.code-box input[data-i="0"]').focus(); }
-
+function clearCode(){ document.querySelectorAll('.code-box input').forEach(i=>i.value=''); const f=document.querySelector('.code-box input[data-i="0"]'); if(f) f.focus(); }
+async function apiFetch(path, body){
+  const url=API+path;
+  try{ return await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); }
+  catch(e){ await new Promise(r=>setTimeout(r,5000)); return await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); }
+}
 async function doLogin(){
-  const emailOrPhone=$('li_emailOrPhone').value.trim();
+  const raw=$('li_emailOrPhone').value.trim();
   const password=$('li_password').value;
-  if(!emailOrPhone||!password){ msg($('li_msg'),'Fill both fields.',false); return; }
+  const btn=$('btnLogin'); const box=$('li_msg');
+  if(!raw||!password){ msgBox(box,'Fill both fields.',false); return; }
+  const emailOrPhone=isEmail(raw)?raw.toLowerCase():normalizePhone(raw);
+  btn.disabled=true; btn.textContent='Signing In...'; clearMsg(box);
   try{
-    const r=await fetch(API+'/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({emailOrPhone,password})});
-    const j=await r.json();
-    if(j.ok){
-      sessionStorage.setItem('su_token',j.token);
-      sessionStorage.setItem('su_user',j.user.phone);
+    const r=await apiFetch('/api/auth/login',{emailOrPhone,password});
+    const j=await r.json().catch(()=>({}));
+    if(j.ok && j.token && j.user){
+      localStorage.setItem('su_token',j.token); sessionStorage.setItem('su_token',j.token);
       localStorage.setItem('su_profile',JSON.stringify(j.user));
+      sessionStorage.setItem('su_user',j.user.email||j.user.phone||raw);
+      localStorage.setItem('su_user',j.user.email||j.user.phone||raw);
       location.href=new URLSearchParams(location.search).get('next')||'account.html';
-    }else msg($('li_msg'),j.error||'Login failed.',false);
-  }catch(e){ msg($('li_msg'),'Network error.',false); }
+    }else{ msgBox(box,j.error||'Login failed. Check email/password.',false); }
+  }catch(e){ msgBox(box,'⏳ Network error — server is waking up (Render free tier sleeps 30s). Please wait 30 seconds and click Sign In again.',false); }
+  finally{ btn.disabled=false; btn.textContent='Sign In'; }
 }
-
 async function doRegister(){
-  const name=$('rg_name').value.trim();
-  const email=$('rg_email').value.trim();
-  const phone=$('rg_phone').value.trim();
-  const password=$('rg_password').value;
-  if(!name||!email||!phone||!password){ msg($('rg_msg'),'Fill all fields.',false); return; }
+  const name=$('rg_name').value.trim(); const email=$('rg_email').value.trim().toLowerCase();
+  const rawPhone=$('rg_phone').value.trim(); const password=$('rg_password').value;
+  const btn=$('btnRegister'); const box=$('rg_msg');
+  if(!name||!email||!rawPhone||!password){ msgBox(box,'Fill all fields.',false); return; }
+  if(!isEmail(email)){ msgBox(box,'Enter a valid email.',false); return; }
+  if(password.length<6){ msgBox(box,'Password must be at least 6 chars.',false); return; }
+  const phone=normalizePhone(rawPhone); if(phone.length<10){ msgBox(box,'Invalid phone. Use +232 75... format.',false); return; }
+  const now=Date.now(); if(now-lastSendAt<SEND_COOLDOWN){ msgBox(box,'⏳ Wait '+Math.ceil((SEND_COOLDOWN-(now-lastSendAt))/1000)+'s before resending.',false); return; }
+  btn.disabled=true; btn.textContent='Sending...'; clearMsg(box);
   try{
-    const r=await fetch(API+'/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,phone,password})});
-    const j=await r.json();
-    if(j.ok){
-      pendingPhone=j.phone;
-      $('vr_email').textContent=email;
-      switchTab('verify');
-      clearCode();
-      msg($('vr_msg'),'Code sent! Check your inbox (and spam folder).',true);
-    }else msg($('rg_msg'),j.error||'Register failed.',false);
-  }catch(e){ msg($('rg_msg'),'Network error.',false); }
+    const r=await apiFetch('/api/auth/register',{name,email,phone,password});
+    const j=await r.json().catch(()=>({}));
+    if(j.ok){ pendingPhone=j.phone||phone; lastSendAt=Date.now(); $('vr_email').textContent=email; switchTab('verify'); clearCode(); msgBox($('vr_msg'),'Code sent! Check your inbox (and spam folder).',true); }
+    else{ msgBox(box,j.error||'Register failed.',false); }
+  }catch(e){ msgBox(box,'⏳ Network error — server waking up. Wait 30s and try again.',false); }
+  finally{ btn.disabled=false; btn.textContent='Send Verification Code'; }
 }
-
 async function doVerify(){
-  const code=getCode();
-  if(code.length!==6){ msg($('vr_msg'),'Enter all 6 digits.',false); return; }
+  const code=getCode(); const box=$('vr_msg'); const btn=$('btnVerify');
+  if(code.length!==6){ msgBox(box,'Enter all 6 digits.',false); return; }
+  if(!pendingPhone){ msgBox(box,'Session expired. Please register again.',false); switchTab('register'); return; }
+  btn.disabled=true; btn.textContent='Verifying...'; clearMsg(box);
   try{
-    const r=await fetch(API+'/api/auth/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:pendingPhone,code})});
-    const j=await r.json();
-    if(j.ok){
-      sessionStorage.setItem('su_token',j.token);
-      sessionStorage.setItem('su_user',j.user.phone);
+    const r=await apiFetch('/api/auth/verify',{phone:pendingPhone,code});
+    const j=await r.json().catch(()=>({}));
+    if(j.ok && j.token && j.user){
+      localStorage.setItem('su_token',j.token); sessionStorage.setItem('su_token',j.token);
       localStorage.setItem('su_profile',JSON.stringify(j.user));
+      sessionStorage.setItem('su_user',j.user.email||j.user.phone);
+      localStorage.setItem('su_user',j.user.email||j.user.phone);
       location.href=new URLSearchParams(location.search).get('next')||'account.html';
-    }else msg($('vr_msg'),j.error||'Verification failed.',false);
-  }catch(e){ msg($('vr_msg'),'Network error.',false); }
+    }else{ msgBox(box,j.error||'Verification failed. Wrong code?',false); }
+  }catch(e){ msgBox(box,'Network error. Please try again.',false); }
+  finally{ btn.disabled=false; btn.textContent='Verify & Sign In'; }
 }
-
 async function doResend(){
-  if(!pendingPhone) return;
+  if(!pendingPhone){ msgBox($('vr_msg'),'Please start registration again.',false); return; }
+  const now=Date.now(); if(now-lastSendAt<SEND_COOLDOWN){ msgBox($('vr_msg'),'⏳ Wait '+Math.ceil((SEND_COOLDOWN-(now-lastSendAt))/1000)+'s before resending.',false); return; }
   try{
-    const r=await fetch(API+'/api/auth/resend',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:pendingPhone})});
-    const j=await r.json();
-    msg($('vr_msg'),j.ok?'New code sent! Check your email.':('❌ '+j.error), j.ok);
-  }catch(e){}
+    const r=await apiFetch('/api/auth/resend',{phone:pendingPhone});
+    const j=await r.json().catch(()=>({}));
+    if(j.ok){ lastSendAt=Date.now(); msgBox($('vr_msg'),'New code sent! Check your email.',true); }
+    else{ msgBox($('vr_msg'),j.error||'Resend failed.',false); }
+  }catch(e){ msgBox($('vr_msg'),'Network error.',false); }
 }
-
-/* ===== PACK 15: PASSWORD RESET ===== */
 async function doForgot(){
-  const emailOrPhone=$('rs_emailOrPhone').value.trim();
-  if(!emailOrPhone){ msg($('rs_msg'),'Enter your email or phone.',false); return; }
+  const raw=$('rs_emailOrPhone').value.trim(); const box=$('rs_msg'); const btn=$('btnForgot');
+  if(!raw){ msgBox(box,'Enter your email or phone.',false); return; }
+  const emailOrPhone=isEmail(raw)?raw.toLowerCase():normalizePhone(raw);
+  btn.disabled=true; btn.textContent='Sending...'; clearMsg(box);
   try{
-    const r=await fetch(API+'/api/auth/forgot',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({emailOrPhone})});
-    const j=await r.json();
-    msg($('rs_msg'), j.ok ? 'If that account exists, a 6-digit reset code was sent to its email. Check inbox + spam.' : (j.error||'Failed'), j.ok);
-  }catch(e){ msg($('rs_msg'),'Network error.',false); }
+    const r=await apiFetch('/api/auth/forgot',{emailOrPhone});
+    const j=await r.json().catch(()=>({}));
+    msgBox(box, j.ok ? 'If that account exists, a 6-digit reset code was sent to its email. Check inbox + spam.' : (j.error||'Failed'), j.ok);
+  }catch(e){ msgBox(box,'Network error — server waking up. Try again in 30s.',false); }
+  finally{ btn.disabled=false; btn.textContent='Send Reset Code'; }
 }
-
 async function doReset(){
-  const emailOrPhone=$('rs_emailOrPhone').value.trim();
-  const code=$('rs_code').value.trim();
-  const newPassword=$('rs_newpass').value;
-  if(!emailOrPhone||!code||!newPassword){ msg($('rs_msg'),'Fill all three fields.',false); return; }
+  const raw=$('rs_emailOrPhone').value.trim(); const code=$('rs_code').value.trim(); const newPassword=$('rs_newpass').value;
+  const box=$('rs_msg'); const btn=$('btnReset');
+  if(!raw||!code||!newPassword){ msgBox(box,'Fill all three fields.',false); return; }
+  if(newPassword.length<6){ msgBox(box,'New password must be at least 6 chars.',false); return; }
+  const emailOrPhone=isEmail(raw)?raw.toLowerCase():normalizePhone(raw);
+  btn.disabled=true; btn.textContent='Saving...'; clearMsg(box);
   try{
-    const r=await fetch(API+'/api/auth/reset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({emailOrPhone,code,newPassword})});
-    const j=await r.json();
-    if(j.ok){ msg($('rs_msg'),'✅ '+j.note,true); setTimeout(()=>switchTab('login'),1500); }
-    else msg($('rs_msg'),j.error||'Reset failed.',false);
-  }catch(e){ msg($('rs_msg'),'Network error.',false); }
+    const r=await apiFetch('/api/auth/reset',{emailOrPhone,code,newPassword});
+    const j=await r.json().catch(()=>({}));
+    if(j.ok){ msgBox(box,'✅ '+ (j.note||'Password reset! You can now sign in.'),true); setTimeout(()=>switchTab('login'),1500); }
+    else{ msgBox(box,j.error||'Reset failed.',false); }
+  }catch(e){ msgBox(box,'Network error.',false); }
+  finally{ btn.disabled=false; btn.textContent='Set New Password'; }
 }
-
-if(sessionStorage.getItem('su_token')){
-  setTimeout(()=>location.href=new URLSearchParams(location.search).get('next')||'account.html',100);
-}
+$('li_password')?.addEventListener('keydown',e=>{ if(e.key==='Enter') doLogin(); });
+$('li_emailOrPhone')?.addEventListener('keydown',e=>{ if(e.key==='Enter') doLogin(); });
+$('rg_password')?.addEventListener('keydown',e=>{ if(e.key==='Enter') doRegister(); });
+$('rs_newpass')?.addEventListener('keydown',e=>{ if(e.key==='Enter') doReset(); });
 </script>
 </body>
 </html>
