@@ -37,6 +37,7 @@
   .st{font-weight:700}
   .st.solved{color:var(--green)}.st.failed{color:#e74c3c}.st.processing,.st.sent-to-server{color:var(--blue)}.st.queued{color:#b8860b}
   .empty{padding:20px;text-align:center;color:#5b7186}
+  .err-box{background:#ffeaea;border:1px solid #ffb3b3;color:#8a0000;padding:12px;border-radius:10px;margin-bottom:12px;font-size:13px;display:none}
   footer{background:var(--navy);color:#cfe3f5;text-align:center;padding:18px;font-size:13px}
 </style>
 </head>
@@ -52,6 +53,7 @@
 </header>
 
 <main>
+  <div id="debugBox" class="err-box"></div>
   <div class="profile">
     <div class="avatar" id="pAvatar">?</div>
     <div class="who">
@@ -84,44 +86,118 @@
 <footer>IT CAN ONLY BE GOD ✦ LEARN BEFORE YOU EARN — sierraunlock.com</footer>
 
 <script>
-const API='https://sierraunlock-tech-1-4um3.onrender.com';
-const $=id=>document.getElementById(id);
-const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const tok=sessionStorage.getItem('su_token');
-if(!tok){ location.href='auth.html?next=account.html'; }
+const API = 'https://sierraunlock-tech-1-4um3.onrender.com';
+const $ = id => document.getElementById(id);
+const esc = s => String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-async function loadMe(){
+function showDebug(msg){ 
+  const b = $('debugBox'); 
+  b.style.display = 'block'; 
+  b.textContent = msg; 
+  console.log('DEBUG:', msg); 
+}
+
+// Check both storages
+const tok = localStorage.getItem('su_token') || sessionStorage.getItem('su_token');
+if(!tok){ 
+  showDebug('No token found! Redirecting to login...');
+  setTimeout(()=>{ location.href = 'auth.html?next=account.html'; }, 1000);
+}
+
+async function loadAccount(){
+  if(!tok) return;
+  
   try{
-    const r=await fetch(API+'/api/auth/me',{headers:{'x-user-token':tok}});
-    const j=await r.json();
-    if(!j.ok){ sessionStorage.clear(); location.href='auth.html'; return; }
-    const u=j.user, w=j.wallet, o=j.orders||[];
-    $('pName').textContent=u.name;
-    $('pAvatar').textContent=(u.name[0]||'?').toUpperCase();
-    $('pMeta').innerHTML=esc(u.email)+' · +'+esc(u.phone);
-    $('sBal').textContent='$'+Number(w.balance||0).toFixed(2);
-    $('sOrders').textContent=o.length;
-    $('sSince').textContent=(u.createdAt||'').slice(0,10);
-    $('addFundsBtn').href='wallet.html?phone='+encodeURIComponent(String(u.phone||'').replace(/\D/g,''));
-    if(!o.length){ $('ordersBox').innerHTML='<div class="empty">No orders yet. <a href="live-services.html" style="color:var(--blue);font-weight:700">Browse catalog →</a></div>'; return; }
-    $('ordersBox').innerHTML='<table><thead><tr><th>Job</th><th>Service</th><th>Date</th><th>Status</th><th></th></tr></thead><tbody>'+
-      o.map(job=>`<tr>
-        <td>${esc(job.id)}</td>
-        <td>${esc(job.serviceName||job.service||'—')}</td>
-        <td>${esc((job.created||'').slice(0,16).replace('T',' '))}</td>
-        <td class="st ${esc(job.status)}">${esc(job.status)}</td>
-        <td><a href="track.html?id=${encodeURIComponent(job.id)}" style="color:var(--blue);font-weight:700">Track →</a></td>
-      </tr>`).join('')+
-      '</tbody></table>';
-  }catch(e){ $('ordersBox').innerHTML='<div class="empty">Failed to load.</div>'; }
+    showDebug('Contacting API... (Render may take 30s to wake up)');
+    
+    // Fetch user profile
+    const r = await fetch(API + '/api/auth/me', { 
+      headers: { 'x-session-token': tok } 
+    });
+    
+    if(!r.ok) throw new Error('API returned HTTP ' + r.status);
+    
+    const j = await r.json();
+    if(!j.ok) throw new Error(j.error || 'Invalid response');
+    
+    const u = j.user;
+    
+    // Update UI
+    $('pName').textContent = u.name || 'User';
+    $('pAvatar').textContent = (u.name ? u.name[0] : '?').toUpperCase();
+    $('pMeta').innerHTML = esc(u.email || '') + ' · +' + esc(u.phone || '');
+    $('sBal').textContent = '$' + Number(u.balance || 0).toFixed(2);
+    $('sOrders').textContent = u.totalOrders || 0;
+    $('sSince').textContent = (u.createdAt || '').slice(0, 10);
+    
+    if(u.phone) {
+      $('addFundsBtn').href = 'wallet.html?phone=' + encodeURIComponent(String(u.phone).replace(/\D/g,''));
+    }
+    
+    // Hide debug box on success
+    $('debugBox').style.display = 'none';
+    
+    // Fetch orders
+    try {
+      const rOrders = await fetch(API + '/api/user/orders', { 
+        headers: { 'x-session-token': tok } 
+      });
+      
+      if(rOrders.ok) {
+        const jOrders = await rOrders.json();
+        const orders = jOrders.orders || [];
+        $('sOrders').textContent = orders.length;
+        
+        if(!orders.length){ 
+          $('ordersBox').innerHTML = '<div class="empty">No orders yet. <a href="live-services.html" style="color:var(--blue);font-weight:700">Browse catalog →</a></div>'; 
+        } else {
+          $('ordersBox').innerHTML = '<table><thead><tr><th>Job ID</th><th>Service</th><th>Date</th><th>Status</th><th>Action</th></tr></thead><tbody>' +
+            orders.map(job => `<tr>
+              <td>${esc(job.id)}</td>
+              <td>${esc(job.serviceName || job.service || '—')}</td>
+              <td>${esc((job.created || '').slice(0, 16).replace('T', ' '))}</td>
+              <td class="st ${esc(job.status)}">${esc(job.status)}</td>
+              <td><a href="track.html?id=${encodeURIComponent(job.id)}" style="color:var(--blue);font-weight:700">Track →</a></td>
+            </tr>`).join('') +
+            '</tbody></table>';
+        }
+      }
+    } catch(e) {
+      console.warn('Orders fetch failed:', e);
+    }
+    
+  } catch(e){
+    showDebug('Load failed: ' + e.message + ' | Wait 30s and refresh if Render is waking up.');
+    
+    // Fallback to localStorage so page isn't completely blank
+    try {
+      const p = JSON.parse(localStorage.getItem('su_profile') || '{}');
+      if(p.name){ 
+        $('pName').textContent = p.name; 
+        $('pAvatar').textContent = (p.name[0] || '?').toUpperCase(); 
+        $('pMeta').innerHTML = esc(p.email || '') + ' · +' + esc(p.phone || ''); 
+      }
+    } catch(e2) {}
+    
+    $('ordersBox').innerHTML = '<div class="empty">Failed to load orders. Error: ' + esc(e.message) + '</div>';
+  }
 }
 
 async function doLogout(){
-  try{ await fetch(API+'/api/auth/logout',{method:'POST',headers:{'x-user-token':tok}}); }catch(e){}
-  sessionStorage.removeItem('su_token'); sessionStorage.removeItem('su_user'); localStorage.removeItem('su_profile');
-  location.href='index.html';
+  try{ 
+    await fetch(API + '/api/auth/logout', { 
+      method: 'POST', 
+      headers: { 'x-session-token': tok } 
+    }); 
+  } catch(e){}
+  
+  localStorage.clear(); 
+  sessionStorage.clear(); 
+  location.href = 'index.html';
 }
-loadMe();
+
+// Start loading
+loadAccount();
 </script>
 </body>
 </html>
