@@ -572,6 +572,90 @@ app.post('/api/admin/customers/:id/unblock',strict,(req,res)=>{
   res.json({ ok:true }); 
 });
 
+/* =====================================================================
+   CDR WEBHOOK - FINAL FIXED (No 404, Correct Refund Logic)
+   ===================================================================== */
+const handleCdr = (req, res) => {
+  console.log('[CDR WEBHOOK] Method:', req.method, 'Query:', JSON.stringify(req.query).slice(0, 200), 'Body:', JSON.stringify(req.body).slice(0, 200));
+  const p = req.method === 'GET' ? req.query : (req.body || {});
+  const qKey = req.query.key || req.query.cdrkey || req.query.replykey || req.query.CDRKEY || '';
+  const bKey = p.replykey || p.replyKey || p.key || p.cdrkey || p.CDRKEY || '';
+  const hKey = req.get('x-cdr-key') || req.get('x-api-key') || '';
+  const key = String(qKey || bKey || hKey || '').trim();
+  const expected = String(process.env.CDR_REPLY_KEY || 'SU-CDR-7f3a9c2e8b1d').trim();
+  console.log('[CDR] Key check - Got:', key, 'Expected:', expected, 'Match:', key === expected);
+
+  if (req.method === 'GET' && Object.keys(p).length <= 1) {
+    return res.json({ ok: true, message: 'CDR webhook alive', key_ok: key === expected, time: new Date().toISOString() });
+  }
+  if (!expected) { console.log('[CDR ERROR] CDR_REPLY_KEY not configured'); return res.status(503).send('CDR not configured'); }
+  if (key !== expected) { console.log('[CDR ERROR] Bad key - got:', key); return res.status(401).send('bad key'); }
+
+  const oid = String(p.orderid || p.orderId || p.order_id || p.ORDERID || p.referenceid || p.REFERENCEID || p.reference || p.transactionid || p.id || '').trim();
+  console.log('[CDR] Order ID:', oid);
+  if (!oid) { console.log('[CDR ERROR] No order ID in payload'); return res.status(400).send('no order id'); }
+
+  const db = load();
+  const job = db.jobs.find(j => j.upstreamOrderId && String(j.upstreamOrderId).trim() === oid) ||
+              db.jobs.find(j => j.upstreamProviderOrderId && String(j.upstreamProviderOrderId).trim() === oid) ||
+              db.jobs.find(j => j.id === String(p.jobid || p.jobId || p.JOBID || ''));
+  if (!job) { console.log('[CDR ERROR] Unknown order:', oid); return res.status(404).send('unknown order ' + oid); }
+  console.log('[CDR] Found job:', job.id, 'Current status:', job.status);
+
+  const st = String(p.status || p.orderstatus || p.orderStatus || p.ORDERSTATUS || '').toLowerCase();
+  const codeRaw = String(p.code || p.unlock_code || p.unlockCode || p.reply || p.result || p.response || p.info || p.INFO || p.message || p.MESSAGE || '').trim();
+  console.log('[CDR] Status:', st, 'Code length:', codeRaw.length);
+
+  const isRejected = st.includes('reject') || st.includes('fail') || st.includes('cancel') || codeRaw.toLowerCase().includes('not eligible');
+  const isSolved = st.includes('success') || st.includes('solved') || st.includes('complet') || st === '4' || (codeRaw && codeRaw.length > 10 && !codeRaw.toLowerCase().includes('not eligible'));
+
+  if (isRejected) {
+    console.log('[CDR] Marking as FAILED');
+    job.status = 'failed';
+    job.cdrCode = codeRaw || 'Rejected / Not Eligible';
+    
+    // ✅ FIX: Check if it WAS paid BEFORE changing the status
+    if (job.payment_method === 'wallet' && job.payment_status === 'paid') {
+      job.payment_status = 'refunded'; 
+      job.refunded_at = new Date().toISOString();
+      job.refund_reason = 'Auto-refund: CDR webhook failed';
+      
+      const ph = normalizePhone(job.phone);
+      const w = db.wallets[ph];
+      if (w) {
+        const already = w.tx.some(t => t.ref && t.ref.includes(job.id) && t.type === 'credit' && t.ref.includes('AUTO-REFUND'));
+        if (!already) {
+          const price = (svcCache.data || []).find(s => String(s.id) === String(job.serviceId))?.priceUsd || 0;
+          if (price > 0) {
+            w.balance = Math.round((w.balance + price) * 100) / 100;
+            w.tx.unshift({ type: 'credit', amount: price, ref: 'AUTO-REFUND-CDR ' + job.id + ' ' + job.cdrCode, date: new Date().toISOString() });
+            console.log('[CDR] Auto-refunded $' + price + ' to wallet ' + ph);
+          }
+        }
+      }
+    } else {
+      job.payment_status = 'refunded'; 
+    }
+  } else if (isSolved) {
+    console.log('[CDR] Marking as SOLVED'); 
+    job.status = 'solved'; 
+    if (codeRaw) job.cdrCode = codeRaw;
+  } else if (st.includes('process') || st.includes('pending') || st.includes('progress')) {
+    console.log('[CDR] Still processing'); 
+    job.status = 'processing';
+  }
+  
+  job.upstream = p; 
+  job.cdrAt = new Date().toISOString(); 
+  save(db);
+  console.log('[CDR SUCCESS] Order', job.id, '-> Status:', job.status, 'Code:', (job.cdrCode || '').slice(0, 100));
+  res.send('OK');
+};
+
+// ✅ SIMPLIFIED ROUTE DEFINITION TO PREVENT 404
+app.get('/api/webhook/cdr', handleCdr);
+app.post('/api/webhook/cdr', handleCdr);
+
 // FastUnlockers Integration
 const FU={ base:(process.env.UNLOCK_API_URL||'').replace(/\/+$/,''), key:process.env.UNLOCK_API_KEY||'', username:process.env.UNLOCK_API_USERNAME||'', endpoint:process.env.UNLOCK_API_ENDPOINT||'/api/dhru' };
 function fuReady(){ return!!(FU.base&&FU.key&&FU.username); }
