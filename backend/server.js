@@ -598,7 +598,7 @@ const handleCdr = (req, res) => {
   if (!expected) { console.log('[CDR ERROR] CDR_REPLY_KEY not configured'); return res.status(503).send('CDR not configured'); }
   if (key !== expected) { console.log('[CDR ERROR] Bad key - got:', key); return res.status(401).send('bad key'); }
 
-  const oid = String(p.orderid || p.orderId || p.order_id || p.ORDERID || p.referenceid || p.REFERENCEID || p.reference || p.transactionid || p.id || '').trim();
+  const oid = String(p.orderid || p.orderId || p.order_id || p.ORDERID || p.referenceid || p.REFERENCEID || p.reference || p.transactionid || p.jobid || p.jobId || p.JOBID || p.id || '').trim();
   console.log('[CDR] Order ID:', oid);
   if (!oid) { console.log('[CDR ERROR] No order ID in payload'); return res.status(400).send('no order id'); }
 
