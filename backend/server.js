@@ -1,11 +1,12 @@
 /* =====================================================================
-   SIERRAUNLOCK • BACKEND API — server.js (v3.44.8 • FINAL PRODUCTION FIXED)
-   FIX v3.44.8:
+   SIERRAUNLOCK • BACKEND API — server.js (v3.44.9 • FINAL PRODUCTION)
+   FIX v3.44.9:
+   • FIX: Prevent bcrypt crash if user.password is undefined (older accounts)
    • FIX: Cron 30s → 5 min to prevent Render free Exit 1 crash (RAM overload)
    • FIX: Auto-skip dead jobs after 5x "No Result Found"
    • FIX: Added full try-catch so cron never crashes server
    • FIX: Reduced pending batch 15 → 5 + 1.5s delay to lower RAM
-   • KEEP: All v3.44.7 features (Auth, CDR, Wallet, DHRU 4-ID, etc.)
+   • KEEP: All features intact (Auth, Wallet, CDR, DHRU 4-ID, Track, etc.)
    ===================================================================== */
 
 require('dotenv').config();
@@ -31,13 +32,15 @@ const load = () => {
   catch (e) { return { jobs: [], wallets: {}, topups: [], users: {}, sessions: {}, rate: DEFAULT_RATE }; }
 };
 const save = (d) => {
-  d.jobs = (d.jobs || []).slice(0, 500);
-  d.wallets = d.wallets || {};
-  d.topups = (d.topups || []).slice(0, 500);
-  d.users = d.users || {};
-  d.sessions = d.sessions || {};
-  fs.writeFileSync(DATA, JSON.stringify(d, null, 2));
-  ghPushSoon();
+  try {
+    d.jobs = (d.jobs || []).slice(0, 500);
+    d.wallets = d.wallets || {};
+    d.topups = (d.topups || []).slice(0, 500);
+    d.users = d.users || {};
+    d.sessions = d.sessions || {};
+    fs.writeFileSync(DATA, JSON.stringify(d, null, 2));
+    ghPushSoon();
+  } catch (e) { console.log('[SAVE ERR]', e.message); }
 };
 
 const GH = { token: process.env.GITHUB_TOKEN || '', repo: process.env.GITHUB_DATA_REPO || '' };
@@ -79,7 +82,7 @@ async function ghPush() {
       if (g.ok) { const gj = await g.json(); ghLastSha = gj.sha || ''; r = await doPut(ghLastSha); }
     }
     if (r.ok) { const j = await r.json(); if (j && j.content && j.content.sha) ghLastSha = j.content.sha; }
-  } catch (e) {}
+  } catch (e) { console.log('[GH PUSH ERR]', e.message); }
 }
 
 function ghPushSoon() {
@@ -126,15 +129,14 @@ app.use(cors({
 
 app.use(express.json({ limit: '100kb' }));
 app.use(morgan('dev'));
-app.use(rateLimit({ windowMs: 60 * 1000, max: 60 }));
-const strict = rateLimit({ windowMs: 60 * 1000, max: 6 });
+app.use(rateLimit({ windowMs: 60 * 1000, max: 120 }));
+const strict = rateLimit({ windowMs: 60 * 1000, max: 30 });
 
 const adminOk = (req) => {
   const token = req.get('x-admin-token') || (req.get('authorization') || '').replace(/^Bearer\s+/i, '');
   return !!process.env.ADMIN_TOKEN && token === process.env.ADMIN_TOKEN;
 };
 
-const verificationCodes = new Map();
 const resetCodes = new Map();
 const TRUSTED_PHONES = (process.env.OM_TRUSTED_PHONES || '').split(',').map(s => s.replace(/\D/g, '')).filter(Boolean);
 
@@ -181,8 +183,8 @@ const adminRefundSchema = Joi.object({ id: Joi.string().trim().min(3).max(40).re
 /* =====================================================================
    HEALTH & BASIC ENDPOINTS
    ===================================================================== */
-app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.44.8', docs: '/api/health' }));
-app.get('/api/health', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.44.8', mode: fuReady() ? 'connected-to-fastunlockers' : 'manual-mode', vault: ghReady() ? 'github' : 'local-only', catalogs: ['imei', 'file', 'server'], rate: load().rate, time: new Date().toISOString(), cdr: process.env.CDR_REPLY_KEY ? 'configured' : 'not set' }));
+app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.44.9', docs: '/api/health' }));
+app.get('/api/health', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.44.9', mode: fuReady() ? 'connected-to-fastunlockers' : 'manual-mode', vault: ghReady() ? 'github' : 'local-only', catalogs: ['imei', 'file', 'server'], rate: load().rate, time: new Date().toISOString(), cdr: process.env.CDR_REPLY_KEY ? 'configured' : 'not set' }));
 app.get('/api/rates', (req, res) => res.json({ ok: true, slePerUsd: load().rate }));
 
 app.get('/api/my-ip', strict, async (req, res) => {
@@ -211,7 +213,6 @@ app.post('/api/auth/register', strict, async (req, res) => {
   const user = { id: phoneNorm, phone: phoneNorm, name: value.name, email: value.email || '', password: hashedPassword, createdAt: new Date().toISOString(), blocked: false };
   
   db.users[phoneNorm] = user;
-  save(db);
   const sessionToken = crypto.randomBytes(32).toString('hex');
   db.sessions[sessionToken] = { phone: phoneNorm, createdAt: new Date().toISOString() };
   save(db);
@@ -242,11 +243,22 @@ app.post('/api/auth/login', strict, async (req, res) => {
     if (found) { user = found; userKey = found.phone; }
   }
 
-  if (!user) return res.status(404).json({ ok: false, error: 'User not found.' });
+  // ✅ CRASH FIX: Prevent bcrypt crash if user.password is undefined
+  if (!user || !user.password) {
+    return res.status(401).json({ ok: false, error: 'Invalid email or password. Please register or reset your password.' });
+  }
   if (user.blocked) return res.status(403).json({ ok: false, error: 'Your account is blocked.' });
-  
-  const validPassword = await bcrypt.compare(value.password, user.password);
-  if (!validPassword) return res.status(401).json({ ok: false, error: 'Invalid password.' });
+
+  let validPassword = false;
+  try {
+    validPassword = await bcrypt.compare(value.password, user.password);
+  } catch (e) {
+    console.error('[AUTH] Password compare error:', e.message);
+  }
+
+  if (!validPassword) {
+    return res.status(401).json({ ok: false, error: 'Invalid email or password.' });
+  }
 
   const sessionToken = crypto.randomBytes(32).toString('hex');
   db.sessions[sessionToken] = { phone: userKey, createdAt: new Date().toISOString() };
@@ -324,7 +336,7 @@ app.post('/api/unlock', strict, async (req, res) => {
 });
 
 app.post('/api/job-status', strict, (req, res) => { const { error, value } = jobStatusSchema.validate(req.body || {}); if (error) return res.status(400).json({ ok: false, error: 'Invalid job id.' }); const job = load().jobs.find(j => j.id === value.id); if (!job) return res.status(404).json({ ok: false, error: 'Job not found.' }); res.json({ ok: true, job }); });
-app.post('/api/admin/rate', strict, (req, res) => { if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' }); const { error, value } = adminRateSchema.validate(req.body || {}); if (error) return res.status(400).json({ ok: false, error: 'Invalid rate.' }); const db = load(); db.rate = value.slePerUsd; save(db); svcCache.ts = 0; res.json({ ok: true, slePerUsd: value.slePerUsd }); });
+app.post('/api/admin/rate', strict, (req, res) => { if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' }); const { error, value } = adminRateSchema.validate(req.body || {}); if (error) return res.status(400).json({ ok: false, error: 'Invalid rate.' }); const db = load(); db.rate = value.slePerUsd; save(db); res.json({ ok: true, slePerUsd: value.slePerUsd }); });
 app.post('/api/admin/job', strict, (req, res) => { if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' }); const { error, value } = adminJobSchema.validate(req.body || {}); if (error) return res.status(400).json({ ok: false, error: 'Invalid payload.' }); const db = load(); const job = db.jobs.find(j => j.id === value.id); if (!job) return res.status(404).json({ ok: false, error: 'Job not found.' }); job.status = value.status; if (value.serviceId !== undefined) job.serviceId = value.serviceId; if (value.imei !== undefined) job.imei = value.imei; save(db); res.json({ ok: true, job }); });
 app.get('/api/admin/jobs', strict, (req, res) => { if (!adminOk(req)) return res.status(401).json({ ok: false, error: 'Bad token.' }); res.json({ ok: true, jobs: load().jobs }); });
 
@@ -666,14 +678,14 @@ app.get('/api/services', async (req, res) => {
   if (!services) return res.status(502).json({ ok: false, error: 'Upstream services unreachable' });
   const fixed = services.map(s => ({ ...s, type: normalizeServiceTypeFix(s), category: normalizeServiceTypeFix(s) }));
   const pub = fixed.map(s => ({ id: s.id, name: s.name, group: s.group, type: s.type, category: s.type, priceUsd: s.priceUsd, priceSle: s.priceSle, time: s.time, info: s.info }));
-  res.json({ ok: true, cached: (Date.now() - svcCache.ts) < 600000, count: pub.length, services: pub, version: '3.44.8' });
+  res.json({ ok: true, cached: (Date.now() - svcCache.ts) < 600000, count: pub.length, services: pub, version: '3.44.9' });
 });
 app.get('/api/live-services', async (req, res) => {
   if (!fuReady()) return res.json({ ok: false, mode: 'manual', services: [] });
   const services = await fetchCatalog();
   if (!services) return res.status(502).json({ ok: false, error: 'Upstream services unreachable' });
   const fixed = services.map(s => ({ ...s, type: normalizeServiceTypeFix(s), category: normalizeServiceTypeFix(s) }));
-  res.json({ ok: true, count: fixed.length, services: fixed, version: '3.44.8' });
+  res.json({ ok: true, count: fixed.length, services: fixed, version: '3.44.9' });
 });
 app.get('/api/catalog', async (req, res) => {
   if (!fuReady()) return res.json({ ok: false, mode: 'manual', services: [] });
@@ -681,7 +693,7 @@ app.get('/api/catalog', async (req, res) => {
   if (!services) return res.status(502).json({ ok: false, error: 'Upstream services unreachable' });
   const fixed = services.map(s => ({ ...s, type: normalizeServiceTypeFix(s), category: normalizeServiceTypeFix(s) }));
   const imei = fixed.filter(s => s.type === 'imei'); const file = fixed.filter(s => s.type === 'file'); const server = fixed.filter(s => s.type === 'server');
-  res.json({ ok: true, version: '3.44.8', total: fixed.length, catalogs: { imei: { count: imei.length, services: imei }, file: { count: file.length, services: file }, server: { count: server.length, services: server } }, groups: [...new Set(fixed.map(s => s.group))], all: fixed });
+  res.json({ ok: true, version: '3.44.9', total: fixed.length, catalogs: { imei: { count: imei.length, services: imei }, file: { count: file.length, services: file }, server: { count: server.length, services: server } }, groups: [...new Set(fixed.map(s => s.group))], all: fixed });
 });
 app.get('/api/v1/services', async (req, res) => {
   const services = await fetchCatalog();
@@ -750,7 +762,7 @@ app.get('/api/track/:id', async (req, res) => {
     try {
       const live = await statusUpstream(job);
       if (live && live.normalized) {
-        console.log('[TRACK LIVE v3.44.8]', job.id, 'upstream', job.upstreamOrderId, 'mapped:', live.normalized.status);
+        console.log('[TRACK LIVE v3.44.9]', job.id, 'upstream', job.upstreamOrderId, 'mapped:', live.normalized.status);
         if (live.normalized.status === 'solved') { job.status = 'solved'; if (live.normalized.code) job.cdrCode = live.normalized.code; job.upstream = live.json; job.solvedAt = new Date().toISOString(); save(db); }
         else if (live.normalized.status === 'failed') { job.status = 'failed'; job.cdrCode = live.normalized.code || 'Rejected / Not Eligible'; job.upstream = live.json; job.failedAt = new Date().toISOString(); save(db); }
       }
@@ -767,8 +779,11 @@ app.get('/api/track/:id', async (req, res) => {
 });
 
 /* =====================================================================
-   CRON JOB — v3.44.8 SAFE MODE (5 MINUTES, BATCH 5, AUTO-FAIL DEAD JOBS)
+   CRON JOB — v3.44.9 SAFE MODE (5 MINUTES, BATCH 5, AUTO-FAIL DEAD JOBS)
    ===================================================================== */
+const CRON_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const MAX_FAILS = 5;
+
 setInterval(async () => {
   if (!fuReady()) return;
   try {
@@ -791,7 +806,7 @@ setInterval(async () => {
         // Auto-skip dead jobs after 5 failed attempts
         if (!live || !live.normalized) {
           job.cronFails += 1;
-          if (job.cronFails >= 5) {
+          if (job.cronFails >= MAX_FAILS) {
             job.status = 'failed';
             job.cdrCode = 'Failed: Upstream returned no result after 5 attempts';
             job.failedAt = new Date().toISOString();
@@ -832,11 +847,11 @@ setInterval(async () => {
       }
     }
     save(db);
-    console.log(`[CRON 5m] synced ${pending.length} jobs — v3.44.8 safe mode`);
+    console.log(`[CRON 5m] synced ${pending.length} jobs — v3.44.9 safe mode`);
   } catch (e) {
     console.error('[CRON FATAL]', e.message);
   }
-}, 5 * 60 * 1000); // 5 minutes
+}, CRON_INTERVAL);
 
 /* =====================================================================
    UPSTREAM TEST & ERROR HANDLERS
@@ -847,7 +862,7 @@ app.use((err, req, res, next) => { console.error('[ERR]', err.message, err.stack
 
 app.listen(PORT, () => {
   console.log(`\n========================================`);
-  console.log(`SIERRAUNLOCK API v3.44.8`);
+  console.log(`SIERRAUNLOCK API v3.44.9`);
   console.log(`Port: ${PORT}`);
   console.log(`Mode: ${fuReady() ? 'CONNECTED' : 'MANUAL'}`);
   console.log(`Vault: ${ghReady() ? 'GitHub (' + GH.repo + ')' : 'LOCAL ONLY'}`);
