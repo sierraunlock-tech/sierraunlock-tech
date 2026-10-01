@@ -3,6 +3,8 @@
    - NO email verification (backend doesn't have it)
    - Direct register -> instant login
    - Forgot uses /api/auth/forgot + /api/auth/reset-password
+   - Redirects to account.html (matches your actual file)
+   - Saves token to BOTH localStorage and sessionStorage
    ===================================================================== */
 'use strict';
 (function () {
@@ -52,9 +54,10 @@
           const data = await res.json();
           if(res.ok && data.token){
             localStorage.setItem('su_token',data.token);
+            sessionStorage.setItem('su_token',data.token); // ✅ FIX: Added for account.html compatibility
             localStorage.setItem('su_profile',JSON.stringify(data.user));
             showOk('Welcome back '+data.user.name+'! Redirecting...');
-            setTimeout(()=>{ location.href='my-account.html'; },800);
+            setTimeout(()=>{ location.href='account.html'; },800);
           }else{ showError(data.error||'Login failed'); }
         }catch(err){ showError('Network error — Render is waking up, wait 30s and try again'); }
         finally{ signInBtn.disabled=false; signInBtn.textContent='Sign In'; }
@@ -79,9 +82,10 @@
           const data = await res.json();
           if(res.ok && data.token){
             localStorage.setItem('su_token',data.token);
+            sessionStorage.setItem('su_token',data.token); // ✅ FIX: Added for account.html compatibility
             localStorage.setItem('su_profile',JSON.stringify(data.user));
             showOk('Account created! Redirecting...');
-            setTimeout(()=>{ location.href='my-account.html'; },800);
+            setTimeout(()=>{ location.href='account.html'; },800);
           }else{ showError(data.error||'Register failed'); }
         }catch(e){ showError('Network error — wait 30s and try again'); }
         finally{ sendCodeBtn.disabled=false; sendCodeBtn.textContent='Create Account'; }
