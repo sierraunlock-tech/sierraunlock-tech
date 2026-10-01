@@ -605,7 +605,7 @@ const handleCdr = (req, res) => {
   const db = load();
   const job = db.jobs.find(j => j.upstreamOrderId && String(j.upstreamOrderId).trim() === oid) ||
               db.jobs.find(j => j.upstreamProviderOrderId && String(j.upstreamProviderOrderId).trim() === oid) ||
-              db.jobs.find(j => j.id === String(p.jobid || p.jobId || p.JOBID || ''));
+              db.jobs.find(j => j.id === String(p.jobid || p.jobId || p.JOBID || oid || ''));
   if (!job) { console.log('[CDR ERROR] Unknown order:', oid); return res.status(404).send('unknown order ' + oid); }
   console.log('[CDR] Found job:', job.id, 'Current status:', job.status);
 
