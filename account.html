@@ -84,44 +84,74 @@
 <footer>IT CAN ONLY BE GOD ✦ LEARN BEFORE YOU EARN — sierraunlock.com</footer>
 
 <script>
-const API='https://sierraunlock-tech-1-4um3.onrender.com';
-const $=id=>document.getElementById(id);
-const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const tok=sessionStorage.getItem('su_token');
-if(!tok){ location.href='auth.html?next=account.html'; }
+const API = 'https://sierraunlock-tech-1-4um3.onrender.com';
+const $ = id => document.getElementById(id);
+const esc = s => String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-async function loadMe(){
+// ✅ FIX 1: Check localStorage first, then sessionStorage
+const tok = localStorage.getItem('su_token') || sessionStorage.getItem('su_token');
+if(!tok){ location.href = 'auth.html?next=account.html'; }
+
+async function loadAccount(){
   try{
-    const r=await fetch(API+'/api/auth/me',{headers:{'x-user-token':tok}});
-    const j=await r.json();
-    if(!j.ok){ sessionStorage.clear(); location.href='auth.html'; return; }
-    const u=j.user, w=j.wallet, o=j.orders||[];
-    $('pName').textContent=u.name;
-    $('pAvatar').textContent=(u.name[0]||'?').toUpperCase();
-    $('pMeta').innerHTML=esc(u.email)+' · +'+esc(u.phone);
-    $('sBal').textContent='$'+Number(w.balance||0).toFixed(2);
-    $('sOrders').textContent=o.length;
-    $('sSince').textContent=(u.createdAt||'').slice(0,10);
-    $('addFundsBtn').href='wallet.html?phone='+encodeURIComponent(String(u.phone||'').replace(/\D/g,''));
-    if(!o.length){ $('ordersBox').innerHTML='<div class="empty">No orders yet. <a href="live-services.html" style="color:var(--blue);font-weight:700">Browse catalog →</a></div>'; return; }
-    $('ordersBox').innerHTML='<table><thead><tr><th>Job</th><th>Service</th><th>Date</th><th>Status</th><th></th></tr></thead><tbody>'+
-      o.map(job=>`<tr>
-        <td>${esc(job.id)}</td>
-        <td>${esc(job.serviceName||job.service||'—')}</td>
-        <td>${esc((job.created||'').slice(0,16).replace('T',' '))}</td>
-        <td class="st ${esc(job.status)}">${esc(job.status)}</td>
-        <td><a href="track.html?id=${encodeURIComponent(job.id)}" style="color:var(--blue);font-weight:700">Track →</a></td>
-      </tr>`).join('')+
-      '</tbody></table>';
-  }catch(e){ $('ordersBox').innerHTML='<div class="empty">Failed to load.</div>'; }
+    // ✅ FIX 2: Use 'x-session-token' (NOT 'x-user-token')
+    const r = await fetch(API + '/api/auth/me', { headers: { 'x-session-token': tok } });
+    const j = await r.json();
+    
+    if(!j.ok){ 
+      localStorage.removeItem('su_token'); 
+      sessionStorage.removeItem('su_token');
+      location.href = 'auth.html'; 
+      return; 
+    }
+    
+    const u = j.user;
+    $('pName').textContent = u.name || 'User';
+    $('pAvatar').textContent = (u.name ? u.name[0] : '?').toUpperCase();
+    $('pMeta').innerHTML = esc(u.email) + ' · +' + esc(u.phone);
+    
+    // ✅ FIX 3: Read balance and totalOrders directly from j.user
+    $('sBal').textContent = '$' + Number(u.balance || 0).toFixed(2);
+    $('sOrders').textContent = u.totalOrders || 0;
+    $('sSince').textContent = (u.createdAt || '').slice(0, 10);
+    $('addFundsBtn').href = 'wallet.html?phone=' + encodeURIComponent(String(u.phone||'').replace(/\D/g,''));
+    
+    // ✅ FIX 4: Fetch the actual order history array from the new endpoint
+    const rOrders = await fetch(API + '/api/user/orders', { headers: { 'x-session-token': tok } });
+    const jOrders = await rOrders.json();
+    
+    if(jOrders.ok && jOrders.orders && jOrders.orders.length > 0){
+      const orders = jOrders.orders;
+      $('ordersBox').innerHTML = '<table><thead><tr><th>Job ID</th><th>Service</th><th>Date</th><th>Status</th><th>Action</th></tr></thead><tbody>' +
+        orders.map(job => `<tr>
+          <td>${esc(job.id)}</td>
+          <td>${esc(job.serviceName || job.service || '—')}</td>
+          <td>${esc((job.created || '').slice(0, 16).replace('T', ' '))}</td>
+          <td class="st ${esc(job.status)}">${esc(job.status)}</td>
+          <td><a href="track.html?id=${encodeURIComponent(job.id)}" style="color:var(--blue);font-weight:700">Track →</a></td>
+        </tr>`).join('') +
+        '</tbody></table>';
+    } else {
+      $('ordersBox').innerHTML = '<div class="empty">No orders yet. <a href="live-services.html" style="color:var(--blue);font-weight:700">Browse catalog →</a></div>';
+    }
+  } catch(e){ 
+    console.error('Load error:', e);
+    $('ordersBox').innerHTML = '<div class="empty">Failed to load data. Please refresh.</div>'; 
+  }
 }
 
 async function doLogout(){
-  try{ await fetch(API+'/api/auth/logout',{method:'POST',headers:{'x-user-token':tok}}); }catch(e){}
-  sessionStorage.removeItem('su_token'); sessionStorage.removeItem('su_user'); localStorage.removeItem('su_profile');
-  location.href='index.html';
+  try{ 
+    await fetch(API + '/api/auth/logout', { method: 'POST', headers: { 'x-session-token': tok } }); 
+  } catch(e){}
+  localStorage.removeItem('su_token'); 
+  sessionStorage.removeItem('su_token'); 
+  localStorage.removeItem('su_profile'); 
+  sessionStorage.removeItem('su_user');
+  location.href = 'index.html';
 }
-loadMe();
+
+loadAccount();
 </script>
 </body>
 </html>
