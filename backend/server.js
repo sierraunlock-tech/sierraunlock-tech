@@ -1,12 +1,9 @@
 /* =====================================================================
-   SIERRAUNLOCK • BACKEND API — server.js (v3.44.9 • FINAL PRODUCTION)
-   FIX v3.44.9:
-   • FIX: Prevent bcrypt crash if user.password is undefined (older accounts)
-   • FIX: Cron 30s → 5 min to prevent Render free Exit 1 crash (RAM overload)
-   • FIX: Auto-skip dead jobs after 5x "No Result Found"
-   • FIX: Added full try-catch so cron never crashes server
-   • FIX: Reduced pending batch 15 → 5 + 1.5s delay to lower RAM
-   • KEEP: All features intact (Auth, Wallet, CDR, DHRU 4-ID, Track, etc.)
+   SIERRAUNLOCK • BACKEND API — server.js (v3.44.10 • PASSWORD FIX)
+   FIX v3.44.10:
+   • FIX: Support both "password" and "passwordHash" field names
+   • FIX: Prevent bcrypt crash if neither field exists
+   • KEEP: All v3.44.9 features (5min cron, auto-skip dead jobs, etc.)
    ===================================================================== */
 
 require('dotenv').config();
@@ -183,8 +180,8 @@ const adminRefundSchema = Joi.object({ id: Joi.string().trim().min(3).max(40).re
 /* =====================================================================
    HEALTH & BASIC ENDPOINTS
    ===================================================================== */
-app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.44.9', docs: '/api/health' }));
-app.get('/api/health', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.44.9', mode: fuReady() ? 'connected-to-fastunlockers' : 'manual-mode', vault: ghReady() ? 'github' : 'local-only', catalogs: ['imei', 'file', 'server'], rate: load().rate, time: new Date().toISOString(), cdr: process.env.CDR_REPLY_KEY ? 'configured' : 'not set' }));
+app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.44.10', docs: '/api/health' }));
+app.get('/api/health', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.44.10', mode: fuReady() ? 'connected-to-fastunlockers' : 'manual-mode', vault: ghReady() ? 'github' : 'local-only', catalogs: ['imei', 'file', 'server'], rate: load().rate, time: new Date().toISOString(), cdr: process.env.CDR_REPLY_KEY ? 'configured' : 'not set' }));
 app.get('/api/rates', (req, res) => res.json({ ok: true, slePerUsd: load().rate }));
 
 app.get('/api/my-ip', strict, async (req, res) => {
@@ -243,15 +240,18 @@ app.post('/api/auth/login', strict, async (req, res) => {
     if (found) { user = found; userKey = found.phone; }
   }
 
-  // ✅ CRASH FIX: Prevent bcrypt crash if user.password is undefined
-  if (!user || !user.password) {
+  // ✅ FIX v3.44.10: Support both "password" and "passwordHash" field names
+  const userPassword = user?.password || user?.passwordHash;
+  
+  if (!user || !userPassword) {
+    console.log('[AUTH] User not found or no password:', userKey);
     return res.status(401).json({ ok: false, error: 'Invalid email or password. Please register or reset your password.' });
   }
   if (user.blocked) return res.status(403).json({ ok: false, error: 'Your account is blocked.' });
 
   let validPassword = false;
   try {
-    validPassword = await bcrypt.compare(value.password, user.password);
+    validPassword = await bcrypt.compare(value.password, userPassword);
   } catch (e) {
     console.error('[AUTH] Password compare error:', e.message);
   }
@@ -678,14 +678,14 @@ app.get('/api/services', async (req, res) => {
   if (!services) return res.status(502).json({ ok: false, error: 'Upstream services unreachable' });
   const fixed = services.map(s => ({ ...s, type: normalizeServiceTypeFix(s), category: normalizeServiceTypeFix(s) }));
   const pub = fixed.map(s => ({ id: s.id, name: s.name, group: s.group, type: s.type, category: s.type, priceUsd: s.priceUsd, priceSle: s.priceSle, time: s.time, info: s.info }));
-  res.json({ ok: true, cached: (Date.now() - svcCache.ts) < 600000, count: pub.length, services: pub, version: '3.44.9' });
+  res.json({ ok: true, cached: (Date.now() - svcCache.ts) < 600000, count: pub.length, services: pub, version: '3.44.10' });
 });
 app.get('/api/live-services', async (req, res) => {
   if (!fuReady()) return res.json({ ok: false, mode: 'manual', services: [] });
   const services = await fetchCatalog();
   if (!services) return res.status(502).json({ ok: false, error: 'Upstream services unreachable' });
   const fixed = services.map(s => ({ ...s, type: normalizeServiceTypeFix(s), category: normalizeServiceTypeFix(s) }));
-  res.json({ ok: true, count: fixed.length, services: fixed, version: '3.44.9' });
+  res.json({ ok: true, count: fixed.length, services: fixed, version: '3.44.10' });
 });
 app.get('/api/catalog', async (req, res) => {
   if (!fuReady()) return res.json({ ok: false, mode: 'manual', services: [] });
@@ -693,7 +693,7 @@ app.get('/api/catalog', async (req, res) => {
   if (!services) return res.status(502).json({ ok: false, error: 'Upstream services unreachable' });
   const fixed = services.map(s => ({ ...s, type: normalizeServiceTypeFix(s), category: normalizeServiceTypeFix(s) }));
   const imei = fixed.filter(s => s.type === 'imei'); const file = fixed.filter(s => s.type === 'file'); const server = fixed.filter(s => s.type === 'server');
-  res.json({ ok: true, version: '3.44.9', total: fixed.length, catalogs: { imei: { count: imei.length, services: imei }, file: { count: file.length, services: file }, server: { count: server.length, services: server } }, groups: [...new Set(fixed.map(s => s.group))], all: fixed });
+  res.json({ ok: true, version: '3.44.10', total: fixed.length, catalogs: { imei: { count: imei.length, services: imei }, file: { count: file.length, services: file }, server: { count: server.length, services: server } }, groups: [...new Set(fixed.map(s => s.group))], all: fixed });
 });
 app.get('/api/v1/services', async (req, res) => {
   const services = await fetchCatalog();
@@ -762,7 +762,7 @@ app.get('/api/track/:id', async (req, res) => {
     try {
       const live = await statusUpstream(job);
       if (live && live.normalized) {
-        console.log('[TRACK LIVE v3.44.9]', job.id, 'upstream', job.upstreamOrderId, 'mapped:', live.normalized.status);
+        console.log('[TRACK LIVE v3.44.10]', job.id, 'upstream', job.upstreamOrderId, 'mapped:', live.normalized.status);
         if (live.normalized.status === 'solved') { job.status = 'solved'; if (live.normalized.code) job.cdrCode = live.normalized.code; job.upstream = live.json; job.solvedAt = new Date().toISOString(); save(db); }
         else if (live.normalized.status === 'failed') { job.status = 'failed'; job.cdrCode = live.normalized.code || 'Rejected / Not Eligible'; job.upstream = live.json; job.failedAt = new Date().toISOString(); save(db); }
       }
@@ -779,7 +779,7 @@ app.get('/api/track/:id', async (req, res) => {
 });
 
 /* =====================================================================
-   CRON JOB — v3.44.9 SAFE MODE (5 MINUTES, BATCH 5, AUTO-FAIL DEAD JOBS)
+   CRON JOB — v3.44.10 SAFE MODE (5 MINUTES, BATCH 5, AUTO-FAIL DEAD JOBS)
    ===================================================================== */
 const CRON_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const MAX_FAILS = 5;
@@ -789,7 +789,6 @@ setInterval(async () => {
   try {
     const db = load();
     const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
-    // Reduced batch size to 5 to prevent RAM overload on Render free tier
     const pending = db.jobs.filter(j => 
       j.upstreamOrderId && 
       ['sent-to-server', 'processing'].includes(j.status) &&
@@ -803,7 +802,6 @@ setInterval(async () => {
         if (!job.cronFails) job.cronFails = 0;
         const live = await statusUpstream(job);
         
-        // Auto-skip dead jobs after 5 failed attempts
         if (!live || !live.normalized) {
           job.cronFails += 1;
           if (job.cronFails >= MAX_FAILS) {
@@ -812,7 +810,7 @@ setInterval(async () => {
             job.failedAt = new Date().toISOString();
             console.log(`[CRON] Auto-failed dead job ${job.id} after 5 attempts`);
           }
-          await new Promise(w => setTimeout(w, 1500)); // 1.5s delay to prevent RAM spike
+          await new Promise(w => setTimeout(w, 1500));
           continue;
         }
 
@@ -825,7 +823,6 @@ setInterval(async () => {
           job.upstream = live.json; job.failedAt = new Date().toISOString();
           delete job.cronFails;
           
-          // Auto-refund wallet orders
           if (job.payment_method === 'wallet' && job.payment_status === 'paid') {
             const ph = String(job.phone || '').replace(/\D/g, ''); const w = db.wallets[ph];
             if (w && !w.tx.some(t => t.ref && t.ref.includes(job.id) && t.type === 'credit' && t.ref.includes('AUTO-REFUND'))) {
@@ -838,16 +835,16 @@ setInterval(async () => {
           }
         } else if (live.normalized.status === 'processing') {
           job.status = 'processing';
-          job.cronFails = 0; // Reset fails if legitimately processing
+          job.cronFails = 0;
         }
-        await new Promise(w => setTimeout(w, 1500)); // 1.5s delay between jobs
+        await new Promise(w => setTimeout(w, 1500));
       } catch (e) {
         console.error(`[CRON ERROR] Job ${job.id}:`, e.message);
         job.cronFails = (job.cronFails || 0) + 1;
       }
     }
     save(db);
-    console.log(`[CRON 5m] synced ${pending.length} jobs — v3.44.9 safe mode`);
+    console.log(`[CRON 5m] synced ${pending.length} jobs — v3.44.10 safe mode`);
   } catch (e) {
     console.error('[CRON FATAL]', e.message);
   }
@@ -862,11 +859,12 @@ app.use((err, req, res, next) => { console.error('[ERR]', err.message, err.stack
 
 app.listen(PORT, () => {
   console.log(`\n========================================`);
-  console.log(`SIERRAUNLOCK API v3.44.9`);
+  console.log(`SIERRAUNLOCK API v3.44.10`);
   console.log(`Port: ${PORT}`);
   console.log(`Mode: ${fuReady() ? 'CONNECTED' : 'MANUAL'}`);
   console.log(`Vault: ${ghReady() ? 'GitHub (' + GH.repo + ')' : 'LOCAL ONLY'}`);
   console.log(`CDR: ${process.env.CDR_REPLY_KEY ? 'configured' : 'not set'}`);
   console.log(`CRON: 5 min safe mode (RAM protected)`);
+  console.log(`FIX: Backward compatible password field (password + passwordHash)`);
   console.log(`========================================\n`);
 });
