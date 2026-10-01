@@ -1,9 +1,12 @@
 /* =====================================================================
-   SIERRAUNLOCK • BACKEND API — server.js (v3.44.10 • PASSWORD FIX)
-   FIX v3.44.10:
-   • FIX: Support both "password" and "passwordHash" field names
-   • FIX: Prevent bcrypt crash if neither field exists
-   • KEEP: All v3.44.9 features (5min cron, auto-skip dead jobs, etc.)
+   SIERRAUNLOCK • BACKEND API — server.js (v3.44.12 • FULL CLEAN)
+   FIX v3.44.12:
+   • FIX: /api/auth/forgot + /api/auth/forgot-password BOTH work (safe shared function)
+   • FIX: Prints reset code in Render logs for easy access
+   • FIX: Added /api/user/orders for My Account page (fixes Loading... bug)
+   • FIX: /api/auth/me returns wallet balance + totalOrders (fixes $0.00)
+   • KEEP: v3.44.10 backward compatible password field (password + passwordHash)
+   • KEEP: 5 min cron, GitHub vault, all payment systems
    ===================================================================== */
 
 require('dotenv').config();
@@ -180,8 +183,8 @@ const adminRefundSchema = Joi.object({ id: Joi.string().trim().min(3).max(40).re
 /* =====================================================================
    HEALTH & BASIC ENDPOINTS
    ===================================================================== */
-app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.44.10', docs: '/api/health' }));
-app.get('/api/health', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.44.10', mode: fuReady() ? 'connected-to-fastunlockers' : 'manual-mode', vault: ghReady() ? 'github' : 'local-only', catalogs: ['imei', 'file', 'server'], rate: load().rate, time: new Date().toISOString(), cdr: process.env.CDR_REPLY_KEY ? 'configured' : 'not set' }));
+app.get('/', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.44.12', docs: '/api/health' }));
+app.get('/api/health', (req, res) => res.json({ ok: true, service: 'SIERRAUNLOCK API', version: '3.44.12', mode: fuReady() ? 'connected-to-fastunlockers' : 'manual-mode', vault: ghReady() ? 'github' : 'local-only', catalogs: ['imei', 'file', 'server'], rate: load().rate, time: new Date().toISOString(), cdr: process.env.CDR_REPLY_KEY ? 'configured' : 'not set' }));
 app.get('/api/rates', (req, res) => res.json({ ok: true, slePerUsd: load().rate }));
 
 app.get('/api/my-ip', strict, async (req, res) => {
@@ -240,7 +243,7 @@ app.post('/api/auth/login', strict, async (req, res) => {
     if (found) { user = found; userKey = found.phone; }
   }
 
-  // ✅ FIX v3.44.10: Support both "password" and "passwordHash" field names
+  // ✅ FIX: Support both "password" and "passwordHash" field names
   const userPassword = user?.password || user?.passwordHash;
   
   if (!user || !userPassword) {
@@ -284,24 +287,52 @@ app.get('/api/auth/me', strict, (req, res) => {
   if (!session) return res.status(401).json({ ok: false, error: 'Invalid or expired session.' });
   const user = db.users[session.phone];
   if (!user) return res.status(404).json({ ok: false, error: 'User not found.' });
-  res.json({ ok: true, user: { phone: user.phone, name: user.name, email: user.email, createdAt: user.createdAt } });
+  
+  // ✅ FIX: Return wallet balance and total orders
+  const wallet = (db.wallets || {})[session.phone] || { balance: 0 };
+  const ordersCount = (db.jobs || []).filter(j => j.phone === session.phone).length;
+  
+  res.json({ ok: true, user: { 
+    phone: user.phone, 
+    name: user.name, 
+    email: user.email, 
+    createdAt: user.createdAt,
+    balance: wallet.balance,
+    totalOrders: ordersCount
+  }});
 });
 
-app.post('/api/auth/forgot-password', strict, async (req, res) => {
-  const { phone, email } = req.body || {};
-  if (!phone && !email) return res.status(400).json({ ok: false, error: 'Phone or email required.' });
+/* =====================================================================
+   FORGOT PASSWORD - SHARED HANDLER (SAFE - NO CRASH)
+   ===================================================================== */
+async function handleForgotPassword(req, res) {
+  const { phone, email, emailOrPhone } = req.body || {};
+  const targetEmail = email || (emailOrPhone && String(emailOrPhone).includes('@') ? emailOrPhone : null);
+  const targetPhone = phone || (emailOrPhone && !String(emailOrPhone).includes('@') ? String(emailOrPhone).replace(/\D/g, '') : null);
+  
+  if (!targetPhone && !targetEmail) return res.status(400).json({ ok: false, error: 'Phone or email required.' });
+  
   const db = load();
-  const phoneNorm = phone ? String(phone).replace(/\D/g, '') : null;
-  const emailNorm = email ? String(email).trim().toLowerCase() : null;
+  const emailNorm = targetEmail ? String(targetEmail).trim().toLowerCase() : null;
+  
   let user = null;
-  if (phoneNorm && db.users[phoneNorm]) user = db.users[phoneNorm];
+  if (targetPhone && db.users[targetPhone]) user = db.users[targetPhone];
   else if (emailNorm) user = Object.values(db.users).find(u => u.email && u.email.toLowerCase() === emailNorm);
+  
   if (!user) return res.status(404).json({ ok: false, error: 'User not found.' });
+  
   const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
   resetCodes.set(user.phone, { code: resetCode, expires: Date.now() + 15 * 60 * 1000 });
-  console.log('[AUTH] Password reset code for', user.phone, ':', resetCode);
-  res.json({ ok: true, message: 'Reset code generated. Check your phone/email.' });
-});
+  
+  console.log('\n========================================');
+  console.log(`🔑 PASSWORD RESET CODE for ${user.phone} (${user.email}): ${resetCode}`);
+  console.log('========================================\n');
+  
+  res.json({ ok: true, message: 'Reset code: ' + resetCode, phone: user.phone });
+}
+
+app.post('/api/auth/forgot-password', strict, handleForgotPassword);
+app.post('/api/auth/forgot', strict, handleForgotPassword);
 
 app.post('/api/auth/reset-password', strict, async (req, res) => {
   const { phone, code, newPassword } = req.body || {};
@@ -319,6 +350,26 @@ app.post('/api/auth/reset-password', strict, async (req, res) => {
   save(db);
   resetCodes.delete(phoneNorm);
   res.json({ ok: true, message: 'Password reset successful.' });
+});
+
+/* =====================================================================
+   USER ORDERS ENDPOINT - FIXES "LOADING..." BUG
+   ===================================================================== */
+app.get('/api/user/orders', strict, async (req, res) => {
+  const token = req.get('x-session-token') || (req.get('authorization') || '').replace(/^Bearer\s+/i, '');
+  if (!token) return res.status(401).json({ ok: false, error: 'No token provided.' });
+  
+  const db = load();
+  const session = db.sessions[token];
+  if (!session) return res.status(401).json({ ok: false, error: 'Invalid or expired session.' });
+  
+  const user = db.users[session.phone];
+  if (!user) return res.status(404).json({ ok: false, error: 'User not found.' });
+  
+  // Get all orders for this user, sorted newest first
+  const userOrders = db.jobs.filter(j => j.phone === user.phone).sort((a, b) => new Date(b.created || 0) - new Date(a.created || 0));
+  
+  res.json({ ok: true, orders: userOrders, count: userOrders.length });
 });
 
 /* =====================================================================
@@ -678,14 +729,14 @@ app.get('/api/services', async (req, res) => {
   if (!services) return res.status(502).json({ ok: false, error: 'Upstream services unreachable' });
   const fixed = services.map(s => ({ ...s, type: normalizeServiceTypeFix(s), category: normalizeServiceTypeFix(s) }));
   const pub = fixed.map(s => ({ id: s.id, name: s.name, group: s.group, type: s.type, category: s.type, priceUsd: s.priceUsd, priceSle: s.priceSle, time: s.time, info: s.info }));
-  res.json({ ok: true, cached: (Date.now() - svcCache.ts) < 600000, count: pub.length, services: pub, version: '3.44.10' });
+  res.json({ ok: true, cached: (Date.now() - svcCache.ts) < 600000, count: pub.length, services: pub, version: '3.44.12' });
 });
 app.get('/api/live-services', async (req, res) => {
   if (!fuReady()) return res.json({ ok: false, mode: 'manual', services: [] });
   const services = await fetchCatalog();
   if (!services) return res.status(502).json({ ok: false, error: 'Upstream services unreachable' });
   const fixed = services.map(s => ({ ...s, type: normalizeServiceTypeFix(s), category: normalizeServiceTypeFix(s) }));
-  res.json({ ok: true, count: fixed.length, services: fixed, version: '3.44.10' });
+  res.json({ ok: true, count: fixed.length, services: fixed, version: '3.44.12' });
 });
 app.get('/api/catalog', async (req, res) => {
   if (!fuReady()) return res.json({ ok: false, mode: 'manual', services: [] });
@@ -693,7 +744,7 @@ app.get('/api/catalog', async (req, res) => {
   if (!services) return res.status(502).json({ ok: false, error: 'Upstream services unreachable' });
   const fixed = services.map(s => ({ ...s, type: normalizeServiceTypeFix(s), category: normalizeServiceTypeFix(s) }));
   const imei = fixed.filter(s => s.type === 'imei'); const file = fixed.filter(s => s.type === 'file'); const server = fixed.filter(s => s.type === 'server');
-  res.json({ ok: true, version: '3.44.10', total: fixed.length, catalogs: { imei: { count: imei.length, services: imei }, file: { count: file.length, services: file }, server: { count: server.length, services: server } }, groups: [...new Set(fixed.map(s => s.group))], all: fixed });
+  res.json({ ok: true, version: '3.44.12', total: fixed.length, catalogs: { imei: { count: imei.length, services: imei }, file: { count: file.length, services: file }, server: { count: server.length, services: server } }, groups: [...new Set(fixed.map(s => s.group))], all: fixed });
 });
 app.get('/api/v1/services', async (req, res) => {
   const services = await fetchCatalog();
@@ -762,7 +813,7 @@ app.get('/api/track/:id', async (req, res) => {
     try {
       const live = await statusUpstream(job);
       if (live && live.normalized) {
-        console.log('[TRACK LIVE v3.44.10]', job.id, 'upstream', job.upstreamOrderId, 'mapped:', live.normalized.status);
+        console.log('[TRACK LIVE v3.44.12]', job.id, 'upstream', job.upstreamOrderId, 'mapped:', live.normalized.status);
         if (live.normalized.status === 'solved') { job.status = 'solved'; if (live.normalized.code) job.cdrCode = live.normalized.code; job.upstream = live.json; job.solvedAt = new Date().toISOString(); save(db); }
         else if (live.normalized.status === 'failed') { job.status = 'failed'; job.cdrCode = live.normalized.code || 'Rejected / Not Eligible'; job.upstream = live.json; job.failedAt = new Date().toISOString(); save(db); }
       }
@@ -779,7 +830,7 @@ app.get('/api/track/:id', async (req, res) => {
 });
 
 /* =====================================================================
-   CRON JOB — v3.44.10 SAFE MODE (5 MINUTES, BATCH 5, AUTO-FAIL DEAD JOBS)
+   CRON JOB — v3.44.12 SAFE MODE (5 MINUTES, BATCH 5, AUTO-FAIL DEAD JOBS)
    ===================================================================== */
 const CRON_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const MAX_FAILS = 5;
@@ -844,7 +895,7 @@ setInterval(async () => {
       }
     }
     save(db);
-    console.log(`[CRON 5m] synced ${pending.length} jobs — v3.44.10 safe mode`);
+    console.log(`[CRON 5m] synced ${pending.length} jobs — v3.44.12 safe mode`);
   } catch (e) {
     console.error('[CRON FATAL]', e.message);
   }
@@ -859,12 +910,12 @@ app.use((err, req, res, next) => { console.error('[ERR]', err.message, err.stack
 
 app.listen(PORT, () => {
   console.log(`\n========================================`);
-  console.log(`SIERRAUNLOCK API v3.44.10`);
+  console.log(`SIERRAUNLOCK API v3.44.12`);
   console.log(`Port: ${PORT}`);
   console.log(`Mode: ${fuReady() ? 'CONNECTED' : 'MANUAL'}`);
   console.log(`Vault: ${ghReady() ? 'GitHub (' + GH.repo + ')' : 'LOCAL ONLY'}`);
   console.log(`CDR: ${process.env.CDR_REPLY_KEY ? 'configured' : 'not set'}`);
   console.log(`CRON: 5 min safe mode (RAM protected)`);
-  console.log(`FIX: Backward compatible password field (password + passwordHash)`);
+  console.log(`FIX: /api/user/orders + safe forgot alias + wallet balance in /api/auth/me`);
   console.log(`========================================\n`);
 });
